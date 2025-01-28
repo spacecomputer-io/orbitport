@@ -1,8 +1,6 @@
 GOPACKAGES=$(shell go list ./internal/... && go list ./cmd/...)
 DOCKER_IMAGE?=stargate
 DOCKER_CONTAINER_NAME?=stargate-gateway
-CLIENT_ID?=your-client-id
-CLIENT_SECRET?=your-client-secret
 
 dependencies:
 	go mod download
@@ -35,8 +33,7 @@ clean-docker:
 	@docker rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null
 
 run-docker: clean-docker build-docker
-	@docker run -p 8080:8080 -e GOLOG_LOG_LEVEL=debug \
-		-e STARGATE_APTOS_ORBITAL_CLIENT_ID=${CLIENT_ID} -e STARGATE_APTOS_ORBITAL_CLIENT_SECRET=${CLIENT_SECRET} \
+	@docker run -p 8080:8080 -e GOLOG_LOG_LEVEL=debug -v ./.env:/.env \
 		--name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE}
 
 default: build
