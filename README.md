@@ -7,8 +7,6 @@ The Gateway to space computing services.
 ### Prerequisites
 
 - [Go](https://golang.org/dl/)
-- (For dev) [golangci-lint](https://golangci-lint.run/welcome/install/)
-    - `brew install golangci-lint` on macOS
 - [Make](https://www.gnu.org/software/make/)
 - [Docker](https://docs.docker.com/get-docker/)
 
