@@ -1,6 +1,7 @@
 package config
 
 import (
+	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
 
@@ -20,6 +21,7 @@ type Config struct {
 }
 
 func ReadFromEnv() *Config {
+	_ = godotenv.Load()
 	viper.SetEnvPrefix("STARGATE") // Will read env vars like STARGATE_VARNAME
 	viper.AutomaticEnv()           // Read in environment variables that match
 

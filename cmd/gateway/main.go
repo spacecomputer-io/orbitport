@@ -30,7 +30,9 @@ func main() {
 }
 
 func initRouter(randService randomness_common.Service) *gin.Engine {
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	r.SetTrustedProxies(nil)
 
 	pingLogger := utils.GetLogger("stargate:ping:api")
 
