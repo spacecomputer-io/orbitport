@@ -14,22 +14,25 @@ The Gateway to space computing services.
 
 ### Usage
 
-Build the gateway binary:
-
-```bash
-make build
-```
-
 Create an `.env` similar to `.env.example`, and fill the required vars for client id and secret.
 
-Run the gateway:
+#### Build and Run Binary
 
 ```bash
 GOLOG_LOG_LEVEL=debug make run
 ```
 
-Set debug level to `info` or `error` to reduce verbosity.
-Or use the following format to set different levels for different subsystems:
+#### Run in Docker
+
+```bash
+make CLIENT_ID=your_client_id CLIENT_SECRET=your_client_secret docker-run
+```
+
+#### Set Debug Level
+
+Set debug level to `GOLOG_LOG_LEVEL=info` or `error` to reduce verbosity.
+
+Use the following format to set different levels for different subsystems:
 
 ```
 GOLOG_LOG_LEVEL=error,subsystem1=info,subsystem2=debug

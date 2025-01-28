@@ -23,7 +23,7 @@ func main() {
 	}
 	logger.Debug("Randomness service initialized")
 	r := initRouter(randService)
-	logger.Debug("HTTP router is ready")
+	logger.Infof("HTTP router is ready, starting server on port %d", cfg.Port)
 	if err := r.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {
 		panic(err)
 	}
