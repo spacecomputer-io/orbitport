@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	randomness_common "github.com/spacecoinxyz/stargate/internal/randomness/common"
+	"github.com/spacecoinxyz/stargate/internal/utils"
 	"golang.org/x/time/rate"
 )
 
@@ -105,6 +107,7 @@ func WithRateLimit(rateLimit float64, rateBurst int) ClientOption {
 
 // AptosClient is a client for the Aptos Orbital API.
 type AptosClient struct {
+	logger          *utils.Logger
 	opts            *ClientOptions
 	limiter         *rate.Limiter
 	accessToken     string
@@ -120,7 +123,11 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 	}
 
 	limiter := rate.NewLimiter(rate.Limit(o.rateLimit), o.rateBurst)
+
+	logger := utils.GetLogger("stargate:randomness:aptosorbital")
+
 	return &AptosClient{
+		logger:  logger,
 		opts:    o,
 		limiter: limiter,
 	}, nil
@@ -128,8 +135,9 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 
 // GetTrueRandomnessSeed retrieves a true randomness seed from the Aptos Orbital API.
 // TODO: handle response data properly.
-func (c *AptosClient) GetTrueRandomnessSeed(noSig, numChunk int) (interface{}, error) {
+func (c *AptosClient) GetTrueRandomnessSeed(noSig, numChunk int) (randomness_common.RandomSeed, error) {
 	if !c.limiter.Allow() {
+		c.logger.Warn("rate limit exceeded")
 		// TODO: think about how to handle rate limit exceeded.
 		// currently the rate limiting is applied to the entire service
 		// as we don't distinguish between different callers
@@ -144,7 +152,7 @@ func (c *AptosClient) GetTrueRandomnessSeed(noSig, numChunk int) (interface{}, e
 	urlStr := fmt.Sprintf("%s/services/v1/trng_seed?no_sig=%d&num_chunk=%d", c.opts.apiURL, noSig, numChunk)
 	result, err := c.makeRequest("GET", urlStr, headers, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to make trng_seed request: %v", err)
 	}
 
 	return result, nil
@@ -154,11 +162,13 @@ func (c *AptosClient) GetTrueRandomnessSeed(noSig, numChunk int) (interface{}, e
 func (c *AptosClient) getHeaders() (map[string]string, error) {
 	token, expiration := c.getAccessToken()
 
-	if token == "" || time.Now().Unix() >= expiration {
+	if len(token) == 0 || time.Now().Unix() >= expiration {
+		c.logger.Debug("access token nil or expired, re-authenticating...")
 		t, err := c.authenticate()
 		if err != nil {
 			return nil, err
 		}
+		c.logger.Debug("authenticated successfully")
 		token = t
 	}
 
@@ -187,6 +197,8 @@ func (c *AptosClient) makeRequest(method, urlStr string, headers map[string]stri
 		}
 	}
 
+	c.logger.Debugf("making %s request to %s", method, urlStr)
+
 	req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
@@ -201,19 +213,19 @@ func (c *AptosClient) makeRequest(method, urlStr string, headers map[string]stri
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to reach the server: %v", err)
+		return nil, fmt.Errorf("failed to reach end-point: %v", err)
 	}
 	defer resp.Body.Close()
 
 	// TODO: handle response status codes properly.
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > http.StatusAccepted {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("request failed: %s", body)
+		return nil, fmt.Errorf("failed request (%d): %s", resp.StatusCode, body)
 	}
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
 
 	return result, nil
@@ -261,6 +273,8 @@ func (c *AptosClient) authenticate() (string, error) {
 	tokenExpiration := time.Now().Unix() + int64(expiresIn) - 60
 
 	c.updateToken(accessToken, tokenExpiration)
+
+	c.logger.Infof("access token updated with expiration %d", tokenExpiration)
 
 	return accessToken, nil
 }
