@@ -21,4 +21,7 @@ build: dependencies
 lint: dependencies
 	@golangci-lint run ./...
 
+run: build
+	@./bin/gateway
+
 default: build
