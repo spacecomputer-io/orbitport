@@ -43,5 +43,5 @@ func setDefaults() {
 	viper.SetDefault("APTOS_ORBITAL_AUTH_URL", "https://auth.aptosorbital.com/oauth2/token")
 	viper.SetDefault("APTOS_ORBITAL_CLIENT_ID", "")
 	viper.SetDefault("APTOS_ORBITAL_CLIENT_SECRET", "")
-	viper.SetDefault("APTOS_ORBITAL_RATE_LIMIT", 0.1)
+	viper.SetDefault("APTOS_ORBITAL_RATE_LIMIT", 0)
 }

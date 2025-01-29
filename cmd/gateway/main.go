@@ -46,7 +46,7 @@ func initRouter(randService randomness_common.Service) *gin.Engine {
 
 	randLogger := utils.GetLogger("stargate:randomness:api")
 
-	r.GET("/v1/rand", func(c *gin.Context) {
+	r.GET("/v1/rand_seed", func(c *gin.Context) {
 		randLogger.Debug("Received request for random seed")
 		seed, err := randService.GetRandomSeed()
 		if err != nil {
