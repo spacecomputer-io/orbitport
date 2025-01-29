@@ -1,8 +1,10 @@
 # Stargate
 
-The Gateway to space computing services.
+Stargate is a Gateway to space computing services.
 
 ## Getting Started
+
+See the [docs](docs/README.md) for more information.
 
 ### Prerequisites
 
@@ -14,17 +16,19 @@ The Gateway to space computing services.
 
 Create an `.env` similar to `.env.example`, and fill the required vars for client id and secret.
 
-#### Build and Run Binary
+#### Run
 
 ```bash
 GOLOG_LOG_LEVEL=debug make run
 ```
+**NOTE:** `make run` will also run `make build`.
 
 #### Run in Docker
 
 ```bash
-make CLIENT_ID=your_client_id CLIENT_SECRET=your_client_secret docker-run
+make run-docker
 ```
+**NOTE:** `make run-docker` will also run `make build-docker`.
 
 #### Set Debug Level
 
