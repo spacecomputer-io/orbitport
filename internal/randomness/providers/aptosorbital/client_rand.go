@@ -6,13 +6,16 @@ import (
 	randomness_common "github.com/spacecoinxyz/stargate/internal/randomness/common"
 )
 
-// trngSeedResponse represents the response for the trng_seed endpoint.
-type trngSeedResponse struct {
+// trngSeedResponse is a wrapper for the response of the trng_seed endpoint, which is an array of trngSeed.
+type trngSeedResponse = []trngSeed
+
+// trngSeed represents the response for the trng_seed endpoint.
+type trngSeed struct {
 	Chunk     string `json:"chunk"`
 	Signature string `json:"signature"`
 }
 
-func (r *trngSeedResponse) toRandomSeed() randomness_common.RandomSeed {
+func (r *trngSeed) toCommonRandomSeed() randomness_common.RandomSeed {
 	return randomness_common.RandomSeed{
 		Value: r.Chunk,
 		Sig:   r.Signature,
@@ -42,7 +45,9 @@ func (c *AptosClient) GetTrueRandomnessSeed(noSig bool, numChunk uint) (*randomn
 	if err != nil {
 		return nil, fmt.Errorf("failed to make trng_seed request: %v", err)
 	}
-	result := resp.toRandomSeed()
-
+	if resp == nil || len(*resp) == 0 {
+		return nil, nil
+	}
+	result := (*resp)[0].toCommonRandomSeed()
 	return &result, nil
 }

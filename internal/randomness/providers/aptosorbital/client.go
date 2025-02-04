@@ -117,8 +117,14 @@ func makeRequest[R any](c *AptosClient, method, urlStr string, headers map[strin
 		return nil, fmt.Errorf("failed request (%d): %s", resp.StatusCode, body)
 	}
 
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+	c.logger.Debugf("aptos response body: %s", body)
+
 	var result R
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
 
