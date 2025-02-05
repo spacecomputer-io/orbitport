@@ -35,8 +35,8 @@ GET /services/v1/trng_seed?no_sig=0&num_chunk=1
 ```    
 
 ```json
-{
+[{
     "chunk": "a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890",
     "signature": "3046022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890"
-}
+}]
 ```
