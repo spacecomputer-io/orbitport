@@ -12,6 +12,10 @@ test: dependencies
 race: dependencies
 	@go test -race $(GOPACKAGES)
 
+coverage: dependencies
+	@go test -cover -coverprofile cover.out $(GOPACKAGES)
+# 	@go tool cover -html=cover.out
+
 fmt: dependencies
 	@go fmt ./...
 

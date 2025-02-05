@@ -74,14 +74,17 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 	mockAuth := newMockServer(`{"access_token": "11111111111111", "expires_in": 3600, "token_type": "Bearer"}`)
 	mockApi := newMockServer(`[{"chunk": "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", "signature": "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa"}]`)
 
-	go mockAuth.run(":3050")
-	go mockApi.run(":3051")
+	authPort := 3050
+	apiPort := 3051
+
+	go mockAuth.ListenAndServe(fmt.Sprintf(":%d", authPort))
+	go mockApi.ListenAndServe(fmt.Sprintf(":%d", apiPort))
 
 	client, err := NewClient(
 		WithClientID("client_id"),
 		WithClientSecret("client_secret"),
-		WithAuthURL("http://localhost:3050"),
-		WithApiURL("http://localhost:3051"),
+		WithAuthURL(fmt.Sprintf("http://localhost:%d", authPort)),
+		WithApiURL(fmt.Sprintf("http://localhost:%d", apiPort)),
 		WithRateLimit(1, 2),
 	)
 	require.NoError(t, err)
@@ -103,11 +106,14 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 	})
 
 	t.Run("failed authentication", func(t *testing.T) {
+		// creating a new client (clean credentials).
+		// the authentication server will return an error
+		// so the client will fail to authenticate.
 		client, err := NewClient(
 			WithClientID("client_id"),
 			WithClientSecret("client_secret"),
-			WithAuthURL("http://localhost:3050"),
-			WithApiURL("http://localhost:3051"),
+			WithAuthURL(fmt.Sprintf("http://localhost:%d", authPort)),
+			WithApiURL(fmt.Sprintf("http://localhost:%d", apiPort)),
 			WithRateLimit(1, 2),
 		)
 		require.NoError(t, err)
@@ -129,7 +135,7 @@ type mockServer struct {
 	lock      sync.Mutex
 }
 
-func (m *mockServer) run(addr string) {
+func (m *mockServer) ListenAndServe(addr string) {
 	_ = http.ListenAndServe(addr, m)
 }
 
