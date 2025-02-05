@@ -8,6 +8,8 @@ import (
 type Config struct {
 	// Port is the port the gateway listens on.
 	Port uint16
+	// MetricsPort is the port the metrics server listens on.
+	MetricsPort uint16
 	// AptosOrbitalApiUrl is the URL of the Aptos Orbital API.
 	AptosOrbitalApiUrl string
 	// AptosOrbitalAuthUrl is the URL of the Aptos Orbital oauth2 token endpoint.
@@ -29,6 +31,7 @@ func ReadFromEnv() *Config {
 
 	return &Config{
 		Port:                     viper.GetUint16("PORT"),
+		MetricsPort:              viper.GetUint16("METRICS_PORT"),
 		AptosOrbitalApiUrl:       viper.GetString("APTOS_ORBITAL_API_URL"),
 		AptosOrbitalAuthUrl:      viper.GetString("APTOS_ORBITAL_AUTH_URL"),
 		AptosOrbitalClientId:     viper.GetString("APTOS_ORBITAL_CLIENT_ID"),
@@ -39,6 +42,7 @@ func ReadFromEnv() *Config {
 
 func setDefaults() {
 	viper.SetDefault("PORT", 8080)
+	viper.SetDefault("METRICS_PORT", 8081)
 	viper.SetDefault("APTOS_ORBITAL_API_URL", "https://api.aptosorbital.com")
 	viper.SetDefault("APTOS_ORBITAL_AUTH_URL", "https://auth.aptosorbital.com/oauth2/token")
 	viper.SetDefault("APTOS_ORBITAL_CLIENT_ID", "")

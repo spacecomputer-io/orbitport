@@ -20,6 +20,7 @@ func (c *AptosClient) authenticate() (string, error) {
 
 	req, err := http.NewRequest("POST", c.opts.authURL, bytes.NewBufferString(data.Encode()))
 	if err != nil {
+		authStatusCollector.Set(authStatusBadRequest)
 		return "", fmt.Errorf("failed to create OAuth request: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -27,26 +28,31 @@ func (c *AptosClient) authenticate() (string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		authStatusCollector.Set(authStatusBadEndpoint)
 		return "", fmt.Errorf("failed to reach OAuth endpoint: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("authentication failed: %s", body)
+		authStatusCollector.Set(authStatusFailedResponse)
+		return "", fmt.Errorf("authentication failed with code %d: %s", resp.StatusCode, body)
 	}
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		authStatusCollector.Set(authStatusBadResponse)
 		return "", fmt.Errorf("failed to decode OAuth response: %v", err)
 	}
 
 	accessToken, ok := result["access_token"].(string)
 	if !ok {
+		authStatusCollector.Set(authStatusBadResponse)
 		return "", fmt.Errorf("access token not found in response")
 	}
 	expiresIn, ok := result["expires_in"].(float64)
 	if !ok {
+		authStatusCollector.Set(authStatusBadResponse)
 		return "", fmt.Errorf("token expiration not found in response")
 	}
 	tokenExpiration := time.Now().Unix() + int64(expiresIn) - 60
@@ -65,6 +71,9 @@ func (c *AptosClient) updateToken(accessToken string, expiration int64) {
 
 	c.accessToken = accessToken
 	c.tokenExpiration = expiration
+
+	authExpireCollector.Set(float64(expiration))
+	authStatusCollector.Set(authStatusAuthenticated)
 }
 
 // getAccessToken retrieves the access token and its expiration time.

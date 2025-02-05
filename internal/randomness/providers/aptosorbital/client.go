@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spacecoinxyz/stargate/internal/utils"
 	"golang.org/x/time/rate"
 )
@@ -87,7 +88,11 @@ func makeRequest[R any](c *AptosClient, method, urlStr string, headers map[strin
 		}
 	}
 
+	requestTotal.WithLabelValues("sent").Inc()
 	c.logger.Debugf("making %s request to %s", method, urlStr)
+
+	timer := prometheus.NewTimer(requestDuration)
+	defer timer.ObserveDuration()
 
 	req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
 	if err != nil {
@@ -103,6 +108,7 @@ func makeRequest[R any](c *AptosClient, method, urlStr string, headers map[strin
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		requestTotal.WithLabelValues("failed").Inc()
 		return nil, fmt.Errorf("failed to reach end-point: %v", err)
 	}
 	defer resp.Body.Close()
@@ -110,23 +116,29 @@ func makeRequest[R any](c *AptosClient, method, urlStr string, headers map[strin
 	// TODO: handle response status codes properly.
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > http.StatusAccepted {
 		if resp.StatusCode == http.StatusBadRequest {
+			requestTotal.WithLabelValues("daily_limit_exceeded").Inc()
 			// assuming we sent the right parameters, the error indicates the daily rate limit exceeded
 			return nil, ErrDailyRateLimitExceeded
 		}
+		requestTotal.WithLabelValues(fmt.Sprintf("failed_%d", resp.StatusCode)).Inc()
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed request (%d): %s", resp.StatusCode, body)
 	}
 
 	body, err = io.ReadAll(resp.Body)
 	if err != nil {
+		requestTotal.WithLabelValues("failed_read_res").Inc()
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
 	c.logger.Debugf("aptos response body: %s", body)
 
 	var result R
 	if err := json.Unmarshal(body, &result); err != nil {
+		requestTotal.WithLabelValues("failed_decode_res").Inc()
 		return nil, fmt.Errorf("failed to decode response: %v", err)
 	}
+
+	requestTotal.WithLabelValues("success").Inc()
 
 	return &result, nil
 }

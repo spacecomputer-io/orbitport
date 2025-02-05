@@ -5,8 +5,10 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/spacecoinxyz/stargate/internal/config"
+	"github.com/spacecoinxyz/stargate/internal/monitoring"
 	"github.com/spacecoinxyz/stargate/internal/randomness"
 	randomness_common "github.com/spacecoinxyz/stargate/internal/randomness/common"
 	"github.com/spacecoinxyz/stargate/internal/randomness/providers/aptosorbital"
@@ -15,18 +17,35 @@ import (
 
 func main() {
 	logger := utils.GetLogger("stargate")
+
+	if err := startGateway(logger); err != nil {
+		logger.Panic(err)
+	}
+}
+
+func startGateway(logger *utils.Logger) error {
+	gatewayHealthStatus.Set(healthStatusStarting)
+	defer gatewayHealthStatus.Set(healthStatusDown)
+
 	cfg := config.ReadFromEnv()
 	logger.Debug("Configuration loaded")
+	go func(port uint16) {
+		logger.Infof("Starting metrics server on port %d", port)
+		_ = monitoring.StartServer(port)
+	}(cfg.MetricsPort)
+
 	randService, err := initRandomnessService(cfg)
 	if err != nil {
-		logger.Panic(err)
+		return fmt.Errorf("failed to initialize randomness service: %w", err)
 	}
 	logger.Debug("Randomness service initialized")
 	r := initRouter(randService)
 	logger.Infof("HTTP router is ready, starting server on port %d", cfg.Port)
+	gatewayHealthStatus.Set(healthStatusReady)
 	if err := r.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {
-		panic(err)
+		return fmt.Errorf("failed to run HTTP server: %w", err)
 	}
+	return nil
 }
 
 func initRouter(randService randomness_common.Service) *gin.Engine {
@@ -48,13 +67,21 @@ func initRouter(randService randomness_common.Service) *gin.Engine {
 
 	r.GET("/v1/rand_seed", func(c *gin.Context) {
 		randLogger.Debug("Received request for random seed")
+
+		timer := prometheus.NewTimer(randRequestDuration)
+		defer timer.ObserveDuration()
+
+		randRequestTotal.WithLabelValues("recieved").Inc()
+
 		seed, err := randService.GetRandomSeed()
 		if err != nil {
 			randLogger.Errorf("Failed to get random seed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{})
+			randRequestTotal.WithLabelValues("failed").Inc()
 			return
 		}
 		randLogger.Debug("Random seed retrieved")
+		randRequestTotal.WithLabelValues("ok").Inc()
 		c.JSON(http.StatusOK, gin.H{
 			"seed": seed,
 		})
