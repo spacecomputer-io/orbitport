@@ -24,8 +24,8 @@ type Config struct {
 
 func ReadFromEnv() *Config {
 	_ = godotenv.Load()
-	viper.SetEnvPrefix("STARGATE") // Will read env vars like STARGATE_VARNAME
-	viper.AutomaticEnv()           // Read in environment variables that match
+	viper.SetEnvPrefix("ORBITPORT") // Will read env vars like ORBITPORT_VARNAME
+	viper.AutomaticEnv()            // Read in environment variables that match
 
 	setDefaults()
 
