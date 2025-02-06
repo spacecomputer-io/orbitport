@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/spacecoinxyz/stargate/internal/utils"
+	"github.com/spacecoinxyz/orbitport/internal/utils"
 	"golang.org/x/time/rate"
 )
 
@@ -39,7 +39,7 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 
 	limiter := rate.NewLimiter(rate.Limit(o.rateLimit), o.rateBurst)
 
-	logger := utils.GetLogger("stargate:randomness:aptosorbital")
+	logger := utils.GetLogger("orbitport:randomness:aptosorbital")
 
 	return &AptosClient{
 		logger:  logger,

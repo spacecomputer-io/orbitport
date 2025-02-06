@@ -1,9 +1,9 @@
 package randomness
 
 import (
-	randomness_common "github.com/spacecoinxyz/stargate/internal/randomness/common"
-	"github.com/spacecoinxyz/stargate/internal/randomness/providers/aptosorbital"
-	provider_local "github.com/spacecoinxyz/stargate/internal/randomness/providers/local"
+	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
+	"github.com/spacecoinxyz/orbitport/internal/randomness/providers/aptosorbital"
+	provider_local "github.com/spacecoinxyz/orbitport/internal/randomness/providers/local"
 )
 
 // randomnessService implements the randomness service.

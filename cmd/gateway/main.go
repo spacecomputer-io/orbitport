@@ -7,16 +7,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/spacecoinxyz/stargate/internal/config"
-	"github.com/spacecoinxyz/stargate/internal/monitoring"
-	"github.com/spacecoinxyz/stargate/internal/randomness"
-	randomness_common "github.com/spacecoinxyz/stargate/internal/randomness/common"
-	"github.com/spacecoinxyz/stargate/internal/randomness/providers/aptosorbital"
-	"github.com/spacecoinxyz/stargate/internal/utils"
+	"github.com/spacecoinxyz/orbitport/internal/config"
+	"github.com/spacecoinxyz/orbitport/internal/monitoring"
+	"github.com/spacecoinxyz/orbitport/internal/randomness"
+	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
+	"github.com/spacecoinxyz/orbitport/internal/randomness/providers/aptosorbital"
+	"github.com/spacecoinxyz/orbitport/internal/utils"
 )
 
 func main() {
-	logger := utils.GetLogger("stargate")
+	logger := utils.GetLogger("orbitport")
 
 	if err := startGateway(logger); err != nil {
 		logger.Panic(err)
@@ -54,7 +54,7 @@ func initRouter(randService randomness_common.Service) *gin.Engine {
 	// TODO: enable to configure trusted proxies
 	_ = r.SetTrustedProxies(nil)
 
-	pingLogger := utils.GetLogger("stargate:ping:api")
+	pingLogger := utils.GetLogger("orbitport:ping:api")
 
 	r.GET("/ping", func(c *gin.Context) {
 		pingLogger.Debug("Received ping request")
@@ -63,7 +63,7 @@ func initRouter(randService randomness_common.Service) *gin.Engine {
 		})
 	})
 
-	randLogger := utils.GetLogger("stargate:randomness:api")
+	randLogger := utils.GetLogger("orbitport:randomness:api")
 
 	r.GET("/v1/rand_seed", func(c *gin.Context) {
 		randLogger.Debug("Received request for random seed")

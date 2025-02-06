@@ -3,7 +3,7 @@ package aptosorbital
 import (
 	"fmt"
 
-	randomness_common "github.com/spacecoinxyz/stargate/internal/randomness/common"
+	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
 )
 
 // trngSeedResponse is a wrapper for the response of the trng_seed endpoint, which is an array of trngSeed.

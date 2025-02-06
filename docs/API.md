@@ -1,4 +1,4 @@
-# Stargate API Spec
+# OrbitPort API Spec
 
 The gateway exposes the following end-points:
 

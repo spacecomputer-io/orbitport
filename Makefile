@@ -1,6 +1,6 @@
 GOPACKAGES=$(shell go list ./internal/... && go list ./cmd/...)
-DOCKER_IMAGE?=stargate
-DOCKER_CONTAINER_NAME?=stargate-gateway
+DOCKER_IMAGE?=orbitport
+DOCKER_CONTAINER_NAME?=orbitport
 GOLOG_LOG_LEVEL?=debug
 
 dependencies:

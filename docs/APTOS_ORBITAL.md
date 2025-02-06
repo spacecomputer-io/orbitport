@@ -1,4 +1,4 @@
-# stargate / Aptos Orbital
+# OrbitPort / Aptos Orbital
 
 This document contains information on the integration with `Aptos Orbital` services.
 

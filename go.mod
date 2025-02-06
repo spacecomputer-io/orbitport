@@ -1,4 +1,4 @@
-module github.com/spacecoinxyz/stargate
+module github.com/spacecoinxyz/orbitport
 
 go 1.23.4
 

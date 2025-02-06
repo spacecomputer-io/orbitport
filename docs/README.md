@@ -1,6 +1,6 @@
-# stargate docs
+# orbitport docs
 
-This folder contains documentation for `stargate`.
+This folder contains documentation for `orbitport`.
 
 ## Documents
 

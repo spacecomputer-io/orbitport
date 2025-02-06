@@ -1,6 +1,6 @@
-# Stargate
+# OrbitPort
 
-Stargate is a Gateway to space computing services.
+OrbitPort is a Gateway to space computing services.
 
 ## Getting Started
 
