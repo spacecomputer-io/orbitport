@@ -32,7 +32,7 @@ run: build
 	@./bin/gateway
 
 build-docker:
-	@docker build -t ${DOCKER_IMAGE} -f docker/Dockerfile .
+	@docker build -t ${DOCKER_IMAGE} .
 
 clean-docker:
 	@docker rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null
