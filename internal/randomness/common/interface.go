@@ -5,6 +5,7 @@ package randomness_common
 type RandomSeed struct {
 	Value string `json:"value"`
 	Sig   string `json:"sig"`
+	Src   string `json:"src"`
 }
 
 // Service represents the randomness service.

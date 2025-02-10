@@ -2,13 +2,31 @@ package provider_local
 
 import (
 	gocryptorand "crypto/rand"
+
+	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
 )
 
-// GenerateRandomBytes returns securely generated random bytes.
+const (
+	RandSeedSrc = "local/go_crypto_rand"
+)
+
+func GenerateRandomSeed(n int) (*randomness_common.RandomSeed, error) {
+	rseed, err := generateRandomBytes(n)
+	if err != nil {
+		return nil, err
+	}
+	return &randomness_common.RandomSeed{
+		Value: string(rseed),
+		Sig:   "",
+		Src:   RandSeedSrc,
+	}, nil
+}
+
+// generateRandomBytes returns securely generated random bytes.
 // It will return an error if the system's secure random
 // number generator fails to function correctly, in which
 // case the caller should not continue.
-func GenerateRandomBytes(n int) ([]byte, error) {
+func generateRandomBytes(n int) ([]byte, error) {
 	b := make([]byte, n)
 	_, err := gocryptorand.Read(b)
 	if err != nil {

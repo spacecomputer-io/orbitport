@@ -18,6 +18,7 @@ TBD
 **Response**
 - `value` (string): A 32 byte chunk of random data as a hexadecimal string.
 - `sig` (string): The signature provided by the satellite.
+- `src` (string): The source of the random data.
 
 **Errors**
 
@@ -27,6 +28,7 @@ TBD
 ```json
 {
     "value": "a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890",
-    "sig": "3046022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890"
+    "sig": "3046022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890",
+    "src": "space/aptos_orbital"
 }
 ```

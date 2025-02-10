@@ -94,6 +94,7 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Value)
 		require.Equal(t, "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Sig)
+		require.Equal(t, RandSeedSrc, seed.Src)
 	})
 
 	t.Run("rate limit exceeded", func(t *testing.T) {

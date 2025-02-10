@@ -25,14 +25,11 @@ func (s *randomnessService) GetRandomSeed() (*randomness_common.RandomSeed, erro
 		// if limit exceeded, generate random seed locally
 		// TODO: think about this some more, will be changed once the aggregation is implemented
 		if err == aptosorbital.ErrRateLimitExceeded {
-			rand, errLocal := provider_local.GenerateRandomBytes(32)
+			localSeed, errLocal := provider_local.GenerateRandomSeed(32)
 			if errLocal != nil {
 				return nil, err
 			}
-			return &randomness_common.RandomSeed{
-				Value: string(rand),
-				Sig:   "",
-			}, nil
+			return localSeed, nil
 		}
 		return nil, err
 	}
