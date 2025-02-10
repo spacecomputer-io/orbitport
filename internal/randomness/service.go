@@ -1,6 +1,8 @@
 package randomness
 
 import (
+	"context"
+
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
 	"github.com/spacecoinxyz/orbitport/internal/randomness/providers/aptosorbital"
 	provider_local "github.com/spacecoinxyz/orbitport/internal/randomness/providers/local"
@@ -19,8 +21,8 @@ func NewService(aptosClient *aptosorbital.AptosClient) randomness_common.Service
 }
 
 // GetRandomSeed retrieves a true randomness seed from the Aptos Orbital API.
-func (s *randomnessService) GetRandomSeed() (*randomness_common.RandomSeed, error) {
-	seed, err := s.aptosClient.GetTrueRandomnessSeed(false, 1)
+func (s *randomnessService) GetRandomSeed(ctx context.Context) (*randomness_common.RandomSeed, error) {
+	seed, err := s.aptosClient.GetTrueRandomnessSeed(ctx, false, 1)
 	if err != nil {
 		// if limit exceeded, generate random seed locally
 		// TODO: think about this some more, will be changed once the aggregation is implemented

@@ -1,5 +1,7 @@
 package randomness_common
 
+import "context"
+
 // RandomSeed represents a seed for randomness.
 // TODO: work with bytes arrays instead of strings.
 type RandomSeed struct {
@@ -11,5 +13,5 @@ type RandomSeed struct {
 // Service represents the randomness service.
 type Service interface {
 	// GetRandomSeed retrieves a true randomness seed from the Aptos Orbital API.
-	GetRandomSeed() (*RandomSeed, error)
+	GetRandomSeed(context.Context) (*RandomSeed, error)
 }

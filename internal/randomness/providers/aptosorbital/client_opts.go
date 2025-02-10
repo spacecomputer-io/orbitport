@@ -1,6 +1,9 @@
 package aptosorbital
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 const (
 	API_URL  = "https://api.aptosorbital.com"
@@ -15,6 +18,7 @@ type ClientOptions struct {
 	clientSecret string
 	rateLimit    float64
 	rateBurst    int
+	timeout      time.Duration
 }
 
 // apply applies the given options to the ClientOptions with defaults.
@@ -45,11 +49,22 @@ func (o *ClientOptions) defaults() error {
 	if o.rateBurst == 0 {
 		o.rateBurst = 1
 	}
+	if o.timeout == 0 {
+		o.timeout = 5 * time.Second
+	}
 	return nil
 }
 
 // ClientOption is a function that sets a configuration option.
 type ClientOption func(*ClientOptions)
+
+// WithTimeout sets the timeout for the client.
+// The default value is 5 seconds.
+func WithTimeout(timeout time.Duration) ClientOption {
+	return func(o *ClientOptions) {
+		o.timeout = timeout
+	}
+}
 
 // WithApiURL sets the API URL for the client.
 // The default value is "https://api.aptosorbital.com".

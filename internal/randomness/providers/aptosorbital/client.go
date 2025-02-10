@@ -2,6 +2,7 @@ package aptosorbital
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,6 +19,7 @@ import (
 var (
 	ErrDailyRateLimitExceeded = fmt.Errorf("aptos orbial daily rate limit exceeded")
 	ErrRateLimitExceeded      = fmt.Errorf("rate limit exceeded")
+	ErrRequestTimeout         = fmt.Errorf("request timed out")
 )
 
 // AptosClient is a client for the Aptos Orbital API.
@@ -49,12 +51,12 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 }
 
 // getHeaders retrieves the headers for making a request.
-func (c *AptosClient) getHeaders() (map[string]string, error) {
+func (c *AptosClient) getHeaders(ctx context.Context) (map[string]string, error) {
 	token, expiration := c.getAccessToken()
 
 	if len(token) == 0 || time.Now().Unix() >= expiration {
 		c.logger.Debug("access token nil or expired, re-authenticating...")
-		t, err := c.authenticate()
+		t, err := c.authenticate(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -70,7 +72,7 @@ func (c *AptosClient) getHeaders() (map[string]string, error) {
 // makeRequest makes a request according to the given parameters.
 // This is a generic function that takes a type R which represents the Response.
 // TODO: manage request data properly.
-func makeRequest[R any](c *AptosClient, method, urlStr string, headers map[string]string, data interface{}, params map[string]string) (*R, error) {
+func makeRequest[R any](ctx context.Context, c *AptosClient, method, urlStr string, headers map[string]string, data interface{}, params map[string]string) (*R, error) {
 	if params != nil {
 		query := url.Values{}
 		for key, value := range params {
@@ -94,7 +96,7 @@ func makeRequest[R any](c *AptosClient, method, urlStr string, headers map[strin
 	timer := prometheus.NewTimer(requestDuration)
 	defer timer.ObserveDuration()
 
-	req, err := http.NewRequest(method, urlStr, bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, method, urlStr, bytes.NewBuffer(body))
 	if err != nil {
 		return nil, err
 	}
@@ -105,12 +107,22 @@ func makeRequest[R any](c *AptosClient, method, urlStr string, headers map[strin
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: c.opts.timeout,
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		requestTotal.WithLabelValues("failed").Inc()
 		return nil, fmt.Errorf("failed to reach end-point: %v", err)
 	}
+
+	// check if the request timed out
+	select {
+	case <-ctx.Done():
+		return nil, ErrRequestTimeout
+	default:
+	}
+
 	defer resp.Body.Close()
 
 	// TODO: handle response status codes properly.

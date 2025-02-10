@@ -73,7 +73,7 @@ func initRouter(randService randomness_common.Service) *gin.Engine {
 
 		randRequestTotal.WithLabelValues("recieved").Inc()
 
-		seed, err := randService.GetRandomSeed()
+		seed, err := randService.GetRandomSeed(c.Request.Context())
 		if err != nil {
 			randLogger.Errorf("Failed to get random seed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{})

@@ -1,6 +1,7 @@
 package aptosorbital
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -90,7 +91,7 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("happy path", func(t *testing.T) {
-		seed, err := client.GetTrueRandomnessSeed(false, 1)
+		seed, err := client.GetTrueRandomnessSeed(context.Background(), false, 1)
 		require.NoError(t, err)
 		require.Equal(t, "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Value)
 		require.Equal(t, "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Sig)
@@ -98,10 +99,10 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 	})
 
 	t.Run("rate limit exceeded", func(t *testing.T) {
-		_, _ = client.GetTrueRandomnessSeed(false, 1)
-		_, _ = client.GetTrueRandomnessSeed(false, 1)
-		_, _ = client.GetTrueRandomnessSeed(false, 1)
-		_, err := client.GetTrueRandomnessSeed(false, 1)
+		_, _ = client.GetTrueRandomnessSeed(context.Background(), false, 1)
+		_, _ = client.GetTrueRandomnessSeed(context.Background(), false, 1)
+		_, _ = client.GetTrueRandomnessSeed(context.Background(), false, 1)
+		_, err := client.GetTrueRandomnessSeed(context.Background(), false, 1)
 		require.Error(t, err)
 		require.Equal(t, ErrRateLimitExceeded, err)
 	})
@@ -119,9 +120,28 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		_, err = client.GetTrueRandomnessSeed(false, 1)
+		_, err = client.GetTrueRandomnessSeed(context.Background(), false, 1)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "authentication failed")
+	})
+
+	t.Run("dead ctx", func(t *testing.T) {
+		// creating a new client (clean credentials).
+		// the authentication server will return an error
+		// so the client will fail to authenticate.
+		client, err := NewClient(
+			WithClientID("client_id"),
+			WithClientSecret("client_secret"),
+			WithAuthURL(fmt.Sprintf("http://localhost:%d", authPort)),
+			WithApiURL(fmt.Sprintf("http://localhost:%d", apiPort)),
+			WithRateLimit(1, 2),
+		)
+		require.NoError(t, err)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		_, err = client.GetTrueRandomnessSeed(ctx, false, 1)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "context canceled")
 	})
 }
 

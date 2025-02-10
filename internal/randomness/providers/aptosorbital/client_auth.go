@@ -2,6 +2,7 @@ package aptosorbital
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,14 +12,14 @@ import (
 )
 
 // authenticate retrieves an access token from the OAuth2 endpoint.
-func (c *AptosClient) authenticate() (string, error) {
+func (c *AptosClient) authenticate(ctx context.Context) (string, error) {
 	data := url.Values{}
 	data.Set("grant_type", "client_credentials")
 	data.Set("client_id", c.opts.clientID)
 	data.Set("client_secret", c.opts.clientSecret)
 	data.Set("scope", "services/read")
 
-	req, err := http.NewRequest("POST", c.opts.authURL, bytes.NewBufferString(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", c.opts.authURL, bytes.NewBufferString(data.Encode()))
 	if err != nil {
 		authStatusCollector.Set(authStatusBadRequest)
 		return "", fmt.Errorf("failed to create OAuth request: %v", err)
