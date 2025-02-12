@@ -2,7 +2,9 @@ package randomness
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/spacecoinxyz/orbitport/internal/config"
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
 	"github.com/spacecoinxyz/orbitport/internal/randomness/providers/aptosorbital"
 	provider_local "github.com/spacecoinxyz/orbitport/internal/randomness/providers/local"
@@ -14,10 +16,24 @@ type randomnessService struct {
 }
 
 // NewService creates a new randomness service.
-func NewService(aptosClient *aptosorbital.AptosClient) randomness_common.Service {
+func NewWithClient(aptosClient *aptosorbital.AptosClient) randomness_common.Service {
 	return &randomnessService{
 		aptosClient: aptosClient,
 	}
+}
+
+func New(cfg config.Config) (randomness_common.Service, error) {
+	aptosClient, err := aptosorbital.NewClient(
+		aptosorbital.WithApiURL(cfg.AptosOrbitalApiUrl),
+		aptosorbital.WithAuthURL(cfg.AptosOrbitalAuthUrl),
+		aptosorbital.WithClientID(cfg.AptosOrbitalClientId),
+		aptosorbital.WithClientSecret(cfg.AptosOrbitalClientSecret),
+		aptosorbital.WithRateLimit(float64(cfg.AptosOrbitalRateLimit), 2),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Aptos Orbital client: %w", err)
+	}
+	return NewWithClient(aptosClient), nil
 }
 
 // GetRandomSeed retrieves a true randomness seed from the Aptos Orbital API.

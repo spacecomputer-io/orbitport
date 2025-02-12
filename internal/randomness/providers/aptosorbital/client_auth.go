@@ -26,6 +26,8 @@ func (c *AptosClient) authenticate(ctx context.Context) (string, error) {
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
+	c.logger.Debugf("authenticating with OAuth endpoint %s", c.opts.authURL)
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -37,7 +39,7 @@ func (c *AptosClient) authenticate(ctx context.Context) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		authStatusCollector.Set(authStatusFailedResponse)
-		return "", fmt.Errorf("authentication failed with code %d: %s", resp.StatusCode, body)
+		return "", fmt.Errorf("failed with code %d: %s", resp.StatusCode, body)
 	}
 
 	var result map[string]interface{}

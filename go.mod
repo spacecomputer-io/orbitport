@@ -3,7 +3,9 @@ module github.com/spacecoinxyz/orbitport
 go 1.23.4
 
 require (
+	github.com/auth0/go-jwt-middleware/v2 v2.2.0
 	github.com/gin-gonic/gin v1.10.0
+	github.com/gwatts/gin-adapter v1.0.0
 	github.com/ipfs/go-log v1.0.5
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.20.5
@@ -62,9 +64,11 @@ require (
 	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
 	golang.org/x/net v0.26.0 // indirect
+	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
+	gopkg.in/go-jose/go-jose.v2 v2.6.3 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

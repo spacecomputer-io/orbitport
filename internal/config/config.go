@@ -6,6 +6,7 @@ import (
 )
 
 type Config struct {
+	Proxies []string
 	// Port is the port the gateway listens on.
 	Port uint16
 	// MetricsPort is the port the metrics server listens on.
@@ -20,6 +21,12 @@ type Config struct {
 	AptosOrbitalClientSecret string
 	// AptosOrbitalRateLimit is the rate limit for the Aptos Orbital API.
 	AptosOrbitalRateLimit float64
+	// StaticAuthToken is a static auth token for the gateway, used mostly in tests.
+	StaticAuthToken string
+	// Auth0Domain is the domain of the Auth0 instance.
+	Auth0Domain string
+	// Auth0Audience is the audience of the Auth0 instance.
+	Auth0Audience string
 }
 
 func ReadFromEnv() *Config {
@@ -30,6 +37,7 @@ func ReadFromEnv() *Config {
 	setDefaults()
 
 	return &Config{
+		Proxies:                  viper.GetStringSlice("PROXIES"),
 		Port:                     viper.GetUint16("PORT"),
 		MetricsPort:              viper.GetUint16("METRICS_PORT"),
 		AptosOrbitalApiUrl:       viper.GetString("APTOS_ORBITAL_API_URL"),
@@ -37,10 +45,14 @@ func ReadFromEnv() *Config {
 		AptosOrbitalClientId:     viper.GetString("APTOS_ORBITAL_CLIENT_ID"),
 		AptosOrbitalClientSecret: viper.GetString("APTOS_ORBITAL_CLIENT_SECRET"),
 		AptosOrbitalRateLimit:    viper.GetFloat64("APTOS_ORBITAL_RATE_LIMIT"),
+		StaticAuthToken:          viper.GetString("STATIC_AUTH_TOKEN"),
+		Auth0Domain:              viper.GetString("AUTH0_DOMAIN"),
+		Auth0Audience:            viper.GetString("AUTH0_AUDIENCE"),
 	}
 }
 
 func setDefaults() {
+	viper.SetDefault("PROXIES", []string{})
 	viper.SetDefault("PORT", 8080)
 	viper.SetDefault("METRICS_PORT", 8081)
 	viper.SetDefault("APTOS_ORBITAL_API_URL", "https://api.aptosorbital.com")
@@ -48,4 +60,7 @@ func setDefaults() {
 	viper.SetDefault("APTOS_ORBITAL_CLIENT_ID", "")
 	viper.SetDefault("APTOS_ORBITAL_CLIENT_SECRET", "")
 	viper.SetDefault("APTOS_ORBITAL_RATE_LIMIT", 0)
+	viper.SetDefault("STATIC_AUTH_TOKEN", "")
+	viper.SetDefault("AUTH0_DOMAIN", "")
+	viper.SetDefault("AUTH0_AUDIENCE", "")
 }

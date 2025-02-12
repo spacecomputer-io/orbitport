@@ -58,7 +58,7 @@ func (c *AptosClient) getHeaders(ctx context.Context) (map[string]string, error)
 		c.logger.Debug("access token nil or expired, re-authenticating...")
 		t, err := c.authenticate(ctx)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("aptos authentication failed: %v", err)
 		}
 		c.logger.Debug("authenticated successfully")
 		token = t

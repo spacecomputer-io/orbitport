@@ -17,28 +17,8 @@ var (
 			Help:      "Status of the gateway health",
 		},
 	)
-	randRequestDuration = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
-			Namespace: "sg",
-			Subsystem: "rand",
-			Name:      "req_duration",
-			Help:      "Duration of rand requests as they pass through the gateway",
-			Buckets:   prometheus.DefBuckets,
-		},
-	)
-	randRequestTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "sg",
-			Subsystem: "rand",
-			Name:      "req_total",
-			Help:      "Total number of rand requests to the gateway",
-		},
-		[]string{"status"},
-	)
 )
 
 func init() {
 	prometheus.MustRegister(gatewayHealthStatus)
-	prometheus.MustRegister(randRequestDuration)
-	prometheus.MustRegister(randRequestTotal)
 }

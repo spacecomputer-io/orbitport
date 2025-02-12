@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"sync"
 	"testing"
 
+	"github.com/spacecoinxyz/orbitport/internal/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -72,8 +71,8 @@ func TestExampleTRNGResponse(t *testing.T) {
 }
 
 func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
-	mockAuth := newMockServer(`{"access_token": "11111111111111", "expires_in": 3600, "token_type": "Bearer"}`)
-	mockApi := newMockServer(`[{"chunk": "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", "signature": "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa"}]`)
+	mockAuth := testutils.NewMockServer(true, `{"access_token": "11111111111111", "expires_in": 3600, "token_type": "Bearer"}`)
+	mockApi := testutils.NewMockServer(true, `[{"chunk": "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", "signature": "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa"}]`)
 
 	authPort := 3050
 	apiPort := 3051
@@ -108,13 +107,15 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 	})
 
 	t.Run("failed authentication", func(t *testing.T) {
+		mockAuth := testutils.NewMockServer(false, "")
+		go mockAuth.ListenAndServe(fmt.Sprintf(":%d", authPort-1))
 		// creating a new client (clean credentials).
 		// the authentication server will return an error
 		// so the client will fail to authenticate.
 		client, err := NewClient(
 			WithClientID("client_id"),
 			WithClientSecret("client_secret"),
-			WithAuthURL(fmt.Sprintf("http://localhost:%d", authPort)),
+			WithAuthURL(fmt.Sprintf("http://localhost:%d", authPort-1)),
 			WithApiURL(fmt.Sprintf("http://localhost:%d", apiPort)),
 			WithRateLimit(1, 2),
 		)
@@ -143,31 +144,4 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "context canceled")
 	})
-}
-
-func newMockServer(responses ...string) *mockServer {
-	return &mockServer{
-		responses: responses,
-	}
-}
-
-type mockServer struct {
-	responses []string
-	lock      sync.Mutex
-}
-
-func (m *mockServer) ListenAndServe(addr string) {
-	_ = http.ListenAndServe(addr, m)
-}
-
-func (m *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
-	if len(m.responses) == 0 {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	fmt.Fprint(w, m.responses[0])
-	m.responses = m.responses[1:]
 }
