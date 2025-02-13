@@ -4,7 +4,7 @@ package providers
 type RandSource int
 
 // DefaultSources is the default list of sources to use (only Aptos Orbital source is used by default)
-var DefaultSources = []RandSource{RandSourceAptosOrbital}
+var DefaultSources = []RandSource{RandSourceAptosOrbital, RandSourceLocalDrivedFromSpaceSeed}
 
 const (
 	RandSourceUnknown RandSource = iota

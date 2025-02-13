@@ -72,7 +72,7 @@ func randRoute(randService randomness_common.Service) gin.HandlerFunc {
 
 		RandRequestTotal.WithLabelValues("recieved").Inc()
 
-		srcs := c.QueryArray("sources")
+		srcs := c.QueryArray("src")
 
 		seed, err := randService.GetRandomSeed(c.Request.Context(), providers.RandSourceFromStrings(srcs)...)
 		if err != nil {

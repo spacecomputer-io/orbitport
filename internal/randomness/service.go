@@ -59,9 +59,10 @@ func New(cfg config.Config) (randomness_common.Service, error) {
 // Start starts the randomness service background routines:
 // 1. update the master seed every masterSeedInterval
 func (s *randomnessService) Start(ctx context.Context) error {
-	ticker := time.NewTicker(s.masterSeedInterval)
-
 	s.threadControl.GoCtx(ctx, func(ctx context.Context) {
+		ticker := time.NewTicker(s.masterSeedInterval)
+		defer ticker.Stop()
+
 		for {
 			select {
 			case <-ticker.C:
