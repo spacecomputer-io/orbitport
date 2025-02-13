@@ -9,6 +9,7 @@ import (
 	"github.com/spacecoinxyz/orbitport/internal/api/auth"
 	"github.com/spacecoinxyz/orbitport/internal/config"
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
+	"github.com/spacecoinxyz/orbitport/internal/randomness/providers"
 	"github.com/spacecoinxyz/orbitport/internal/utils"
 )
 
@@ -71,7 +72,9 @@ func randRoute(randService randomness_common.Service) gin.HandlerFunc {
 
 		RandRequestTotal.WithLabelValues("recieved").Inc()
 
-		seed, err := randService.GetRandomSeed(c.Request.Context())
+		srcs := c.QueryArray("sources")
+
+		seed, err := randService.GetRandomSeed(c.Request.Context(), providers.RandSourceFromStrings(srcs)...)
 		if err != nil {
 			randRouteLogger.Errorf("Failed to get random seed: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{})
@@ -80,6 +83,7 @@ func randRoute(randService randomness_common.Service) gin.HandlerFunc {
 		}
 		randRouteLogger.Debug("Random seed retrieved")
 		RandRequestTotal.WithLabelValues("ok").Inc()
+
 		c.JSON(http.StatusOK, seed)
 	}
 }

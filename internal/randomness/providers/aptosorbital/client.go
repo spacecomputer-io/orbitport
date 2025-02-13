@@ -19,7 +19,6 @@ import (
 var (
 	ErrDailyRateLimitExceeded = fmt.Errorf("aptos orbial daily rate limit exceeded")
 	ErrRateLimitExceeded      = fmt.Errorf("rate limit exceeded")
-	ErrRequestTimeout         = fmt.Errorf("request timed out")
 )
 
 // AptosClient is a client for the Aptos Orbital API.
@@ -114,13 +113,6 @@ func makeRequest[R any](ctx context.Context, c *AptosClient, method, urlStr stri
 	if err != nil {
 		requestTotal.WithLabelValues("failed").Inc()
 		return nil, fmt.Errorf("failed to reach end-point: %v", err)
-	}
-
-	// check if the request timed out
-	select {
-	case <-ctx.Done():
-		return nil, ErrRequestTimeout
-	default:
 	}
 
 	defer resp.Body.Close()

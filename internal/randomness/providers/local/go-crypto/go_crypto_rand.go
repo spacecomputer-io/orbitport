@@ -1,13 +1,10 @@
-package provider_local
+package go_crypto
 
 import (
 	gocryptorand "crypto/rand"
 
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-)
-
-const (
-	RandSeedSrc = "local/go_crypto_rand"
+	"github.com/spacecoinxyz/orbitport/internal/randomness/providers"
 )
 
 func GenerateRandomSeed(n int) (*randomness_common.RandomSeed, error) {
@@ -18,7 +15,7 @@ func GenerateRandomSeed(n int) (*randomness_common.RandomSeed, error) {
 	return &randomness_common.RandomSeed{
 		Value: string(rseed),
 		Sig:   "",
-		Src:   RandSeedSrc,
+		Src:   providers.RandSourceLocalGoCrypto,
 	}, nil
 }
 

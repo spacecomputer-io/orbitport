@@ -13,6 +13,10 @@ import (
 
 // authenticate retrieves an access token from the OAuth2 endpoint.
 func (c *AptosClient) authenticate(ctx context.Context) (string, error) {
+	// acquire the lock to prevent multiple authentication requests at the same time
+	c.authLock.Lock()
+	defer c.authLock.Unlock()
+
 	data := url.Values{}
 	data.Set("grant_type", "client_credentials")
 	data.Set("client_id", c.opts.clientID)
@@ -69,9 +73,6 @@ func (c *AptosClient) authenticate(ctx context.Context) (string, error) {
 
 // updateToken updates the access token and its expiration time.
 func (c *AptosClient) updateToken(accessToken string, expiration int64) {
-	c.authLock.Lock()
-	defer c.authLock.Unlock()
-
 	c.accessToken = accessToken
 	c.tokenExpiration = expiration
 

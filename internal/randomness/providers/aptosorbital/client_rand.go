@@ -5,10 +5,7 @@ import (
 	"fmt"
 
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-)
-
-const (
-	RandSeedSrc = "space/aptos_orbital"
+	"github.com/spacecoinxyz/orbitport/internal/randomness/providers"
 )
 
 // trngSeedResponse is a wrapper for the response of the trng_seed endpoint, which is an array of trngSeed.
@@ -24,7 +21,7 @@ func (r *trngSeed) toCommonRandomSeed() randomness_common.RandomSeed {
 	return randomness_common.RandomSeed{
 		Value: r.Chunk,
 		Sig:   r.Signature,
-		Src:   RandSeedSrc,
+		Src:   providers.RandSourceAptosOrbital,
 	}
 }
 

@@ -1,6 +1,8 @@
 package config
 
 import (
+	"time"
+
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
 )
@@ -27,6 +29,8 @@ type Config struct {
 	Auth0Domain string
 	// Auth0Audience is the audience of the Auth0 instance.
 	Auth0Audience string
+	// MasterSeedInterval is the period for fetching the new master seed.
+	MasterSeedInterval time.Duration
 }
 
 func ReadFromEnv() *Config {
@@ -48,6 +52,7 @@ func ReadFromEnv() *Config {
 		StaticAuthToken:          viper.GetString("STATIC_AUTH_TOKEN"),
 		Auth0Domain:              viper.GetString("AUTH0_DOMAIN"),
 		Auth0Audience:            viper.GetString("AUTH0_AUDIENCE"),
+		MasterSeedInterval:       viper.GetDuration("MASTER_SEED_INTERVAL"),
 	}
 }
 
@@ -63,4 +68,5 @@ func setDefaults() {
 	viper.SetDefault("STATIC_AUTH_TOKEN", "")
 	viper.SetDefault("AUTH0_DOMAIN", "")
 	viper.SetDefault("AUTH0_AUDIENCE", "")
+	viper.SetDefault("MASTER_SEED_INTERVAL", 0) // disabled
 }
