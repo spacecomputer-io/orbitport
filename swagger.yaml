@@ -11,7 +11,9 @@ paths:
         - in: query
           name: src
           schema:
-            type: string
+            type: array
+            items:
+              type: string
           description: The provider to use. At the moment only `space/aptos_orbital` (default) is supported and we fallback to `local/space_seed`.
       responses:
         '200':
