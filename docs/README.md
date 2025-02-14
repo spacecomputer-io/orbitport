@@ -15,7 +15,7 @@ the focus at the moment is on **space randomness** provided by **Aptos Orbital**
 
 ### API
 
-The API is described in the [openapi spec](../swagger.yml) at the root folder.
+The API is described in the [openapi spec](../swagger.yaml) at the root folder.
 You can use [Swagger Editor](https://editor.swagger.io/) to visualize and generate client code.
 
 ## Architecture
