@@ -11,7 +11,7 @@ import (
 func StartServer(port uint16) error {
 	mux := http.NewServeMux()
 
-	mux.Handle("/metrics", promhttp.HandlerFor(
+	mux.Handle("/", promhttp.HandlerFor(
 		prometheus.DefaultGatherer,
 		promhttp.HandlerOpts{
 			// Opt into OpenMetrics to support exemplars.
