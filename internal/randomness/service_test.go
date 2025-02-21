@@ -7,11 +7,12 @@ import (
 	"time"
 
 	"github.com/spacecoinxyz/orbitport/internal/config"
-	"github.com/spacecoinxyz/orbitport/internal/randomness/providers"
 	"github.com/spacecoinxyz/orbitport/internal/testutils"
 	"github.com/spacecoinxyz/orbitport/internal/utils"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
+	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
 )
 
 func NewRandomnessServiceSuite() *RandomnessServiceSuite {
@@ -64,14 +65,14 @@ func (s *RandomnessServiceSuite) TestSources() {
 	defer randService.Close()
 
 	s.Run("aptos", func() {
-		seed, err := randService.GetRandomSeed(ctx, providers.RandSourceAptosOrbital)
+		seed, err := randService.GetRandomSeed(ctx, randomness_common.RandSourceAptosOrbital)
 		require.NoError(s.T(), err)
-		require.Equal(s.T(), seed.Src, providers.RandSourceAptosOrbital)
+		require.Equal(s.T(), seed.Src, randomness_common.RandSourceAptosOrbital)
 	})
 
 	s.Run("error: local cached - no master seed", func() {
 		randService.(*randomnessService).masterSeed.Set(nil)
-		_, err := randService.GetRandomSeed(ctx, providers.RandSourceLocalDrivedFromSpaceSeed)
+		_, err := randService.GetRandomSeed(ctx, randomness_common.RandSourceLocalDrivedFromSpaceSeed)
 		require.ErrorIs(s.T(), err, ErrNoMasterSeedSet)
 	})
 
@@ -79,17 +80,17 @@ func (s *RandomnessServiceSuite) TestSources() {
 		// let the master seed routine run the first time
 		<-time.After(s.cfg.MasterSeedInterval)
 
-		seed, err := randService.GetRandomSeed(ctx, providers.RandSourceLocalDrivedFromSpaceSeed)
+		seed, err := randService.GetRandomSeed(ctx, randomness_common.RandSourceLocalDrivedFromSpaceSeed)
 		require.NoError(s.T(), err)
-		require.Equal(s.T(), seed.Src, providers.RandSourceLocalDrivedFromSpaceSeed)
+		require.Equal(s.T(), seed.Src, randomness_common.RandSourceLocalDrivedFromSpaceSeed)
 		require.Equal(s.T(), seed.Value, "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa")
 		require.Equal(s.T(), seed.Sig, "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa")
 	})
 
 	s.Run("local go_crypto", func() {
-		seed, err := randService.GetRandomSeed(ctx, providers.RandSourceLocalGoCrypto)
+		seed, err := randService.GetRandomSeed(ctx, randomness_common.RandSourceLocalGoCrypto)
 		require.NoError(s.T(), err)
-		require.Equal(s.T(), seed.Src, providers.RandSourceLocalGoCrypto)
+		require.Equal(s.T(), seed.Src, randomness_common.RandSourceLocalGoCrypto)
 	})
 
 }

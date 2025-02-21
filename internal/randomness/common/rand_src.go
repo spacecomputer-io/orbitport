@@ -1,4 +1,4 @@
-package providers
+package randomness_common
 
 // RandSource indicates the source of randomness
 type RandSource int
@@ -22,6 +22,21 @@ var randSourceName = map[RandSource]string{
 
 func (r RandSource) String() string {
 	return randSourceName[r]
+}
+
+// MarshalJSON returns the JSON representation of the RandSource (string)
+func (r RandSource) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + r.String() + `"`), nil
+}
+
+// UnmarshalJSON sets the RandSource from a JSON string
+func (r *RandSource) UnmarshalJSON(data []byte) error {
+	if len(data) < 2 {
+		*r = RandSourceUnknown
+		return nil
+	}
+	*r = RandSourceFromString(string(data[1 : len(data)-1]))
+	return nil
 }
 
 // RandSourceFromString returns the RandSource from a string

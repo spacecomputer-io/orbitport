@@ -11,7 +11,6 @@ import (
 	"github.com/spacecoinxyz/orbitport/internal/config"
 	"github.com/spacecoinxyz/orbitport/internal/randomness"
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-	"github.com/spacecoinxyz/orbitport/internal/randomness/providers"
 	"github.com/spacecoinxyz/orbitport/internal/testutils"
 	"github.com/spacecoinxyz/orbitport/internal/utils"
 	"github.com/stretchr/testify/require"
@@ -59,7 +58,7 @@ func TestRouter(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Value)
 		require.Equal(t, "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Sig)
-		require.Equal(t, providers.RandSourceAptosOrbital, seed.Src)
+		require.Equal(t, randomness_common.RandSourceAptosOrbital, seed.Src)
 	})
 
 	t.Run("bad token", func(t *testing.T) {

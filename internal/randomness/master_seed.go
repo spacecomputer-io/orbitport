@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-	"github.com/spacecoinxyz/orbitport/internal/randomness/providers"
 )
 
 type masterSeed struct {
@@ -28,7 +27,7 @@ func (ms *masterSeed) SetSeed(seed *randomness_common.RandomSeed) {
 
 	if seed != nil {
 		// update the source of the seed
-		seed.Src = providers.RandSourceLocalDrivedFromSpaceSeed
+		seed.Src = randomness_common.RandSourceLocalDrivedFromSpaceSeed
 	}
 	ms.Seed = seed
 }

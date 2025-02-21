@@ -8,7 +8,6 @@ import (
 
 	"github.com/spacecoinxyz/orbitport/internal/config"
 	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-	"github.com/spacecoinxyz/orbitport/internal/randomness/providers"
 	"github.com/spacecoinxyz/orbitport/internal/randomness/providers/aptosorbital"
 	go_crypto "github.com/spacecoinxyz/orbitport/internal/randomness/providers/local/go-crypto"
 	"github.com/spacecoinxyz/orbitport/internal/utils"
@@ -72,7 +71,7 @@ func (s *randomnessService) Start(ctx context.Context) error {
 				}
 				if seed != nil {
 					// update the source of the seed
-					seed.Src = providers.RandSourceLocalDrivedFromSpaceSeed
+					seed.Src = randomness_common.RandSourceLocalDrivedFromSpaceSeed
 				}
 				s.masterSeed.Set(seed)
 			case <-ctx.Done():
@@ -91,9 +90,9 @@ func (s *randomnessService) Close() {
 
 // GetRandomSeed retrieves a true randomness seed from the Aptos Orbital API.
 // sources is a prioritized list of randomness sources to try.
-func (s *randomnessService) GetRandomSeed(ctx context.Context, sources ...providers.RandSource) (*randomness_common.RandomSeed, error) {
+func (s *randomnessService) GetRandomSeed(ctx context.Context, sources ...randomness_common.RandSource) (*randomness_common.RandomSeed, error) {
 	if len(sources) == 0 {
-		sources = providers.DefaultSources
+		sources = randomness_common.DefaultSources
 	}
 
 	s.logger.Debug("getting randomness seed", "sources", sources)
@@ -102,7 +101,7 @@ func (s *randomnessService) GetRandomSeed(ctx context.Context, sources ...provid
 	var err error
 	for _, src := range sources {
 		switch src {
-		case providers.RandSourceAptosOrbital:
+		case randomness_common.RandSourceAptosOrbital:
 			seed, err = s.aptosClient.GetTrueRandomnessSeed(ctx, false, 1)
 			if err != nil {
 				s.logger.Warn("failed to get randomness seed from Aptos Orbital", "err", err)
@@ -110,14 +109,14 @@ func (s *randomnessService) GetRandomSeed(ctx context.Context, sources ...provid
 				continue
 			}
 			return seed, nil
-		case providers.RandSourceLocalGoCrypto:
+		case randomness_common.RandSourceLocalGoCrypto:
 			seed, err = go_crypto.GenerateRandomSeed(32)
 			if err != nil {
 				s.logger.Warn("failed to get randomness seed from local go_crypto", "err", err)
 				return nil, err
 			}
 			return seed, nil
-		case providers.RandSourceLocalDrivedFromSpaceSeed:
+		case randomness_common.RandSourceLocalDrivedFromSpaceSeed:
 			seed := s.masterSeed.Get()
 			if seed == nil {
 				return nil, ErrNoMasterSeedSet
