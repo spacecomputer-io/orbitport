@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -23,6 +24,9 @@ func main() {
 
 // startGateway starts the gateway service.
 func startGateway(cfg config.Config) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	gatewayHealthStatus.Set(healthStatusStarting)
 	defer gatewayHealthStatus.Set(healthStatusDown)
 
@@ -38,7 +42,10 @@ func startGateway(cfg config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize randomness service: %w", err)
 	}
-	logger.Debug("Randomness service initialized")
+	if err = randService.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start randomness service: %w", err)
+	}
+	logger.Debug("Randomness service started")
 
 	gin.SetMode(gin.ReleaseMode)
 	r, err := gateway_api.NewRouter(cfg, gateway_api.Services{

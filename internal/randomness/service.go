@@ -65,7 +65,7 @@ func (s *randomnessService) Start(ctx context.Context) error {
 		for {
 			select {
 			case <-ticker.C:
-				seed, err := s.GetRandomSeed(ctx)
+				seed, err := s.GetRandomSeed(ctx, randomness_common.RandSourceAptosOrbital)
 				if err != nil {
 					return
 				}
@@ -73,6 +73,7 @@ func (s *randomnessService) Start(ctx context.Context) error {
 					// update the source of the seed
 					seed.Src = randomness_common.RandSourceLocalDrivedFromSpaceSeed
 				}
+				s.logger.Debug("updated master seed")
 				s.masterSeed.Set(seed)
 			case <-ctx.Done():
 				return

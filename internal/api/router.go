@@ -27,13 +27,7 @@ func NewRouter(cfg config.Config, services Services) (*gin.Engine, error) {
 		return nil, fmt.Errorf("failed to set trusted proxies: %w", err)
 	}
 
-	pingLogger := utils.GetLogger("orbitport:ping:api")
-	r.GET("/ping", func(c *gin.Context) {
-		pingLogger.Debug("Received ping request")
-		c.JSON(http.StatusOK, gin.H{
-			"message": "pong",
-		})
-	})
+	r.GET("/ping", pingRoute())
 
 	authLogger := utils.GetLogger("orbitport:auth")
 	// add Auth0 middleware if Auth0 domain is set, otherwise skip authentication
@@ -56,8 +50,21 @@ func NewRouter(cfg config.Config, services Services) (*gin.Engine, error) {
 		return nil, fmt.Errorf("randomness service is required")
 	}
 	r.GET("/v1/rand_seed", randRoute(randService))
+	// temp support for /api prefixed routes
+	r.GET("/api/v1/rand_seed", randRoute(randService))
 
 	return r, nil
+}
+
+func pingRoute() gin.HandlerFunc {
+	pingRouteLogger := utils.GetLogger("orbitport:ping:api")
+
+	return func(c *gin.Context) {
+		pingRouteLogger.Debug("Received ping request")
+		c.JSON(http.StatusOK, gin.H{
+			"message": "pong",
+		})
+	}
 }
 
 func randRoute(randService randomness_common.Service) gin.HandlerFunc {
