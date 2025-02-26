@@ -73,8 +73,9 @@ func (s *randomnessService) Start(ctx context.Context) error {
 					// update the source of the seed
 					seed.Src = randomness_common.RandSourceLocalDrivedFromSpaceSeed
 				}
-				s.logger.Debug("updated master seed")
 				s.masterSeed.Set(seed)
+				s.logger.Debug("updated master seed upon interval")
+				randomness_common.MasterSeedUpdatesTotal.Inc()
 			case <-ctx.Done():
 				return
 			}
@@ -108,6 +109,14 @@ func (s *randomnessService) GetRandomSeed(ctx context.Context, sources ...random
 				s.logger.Warn("failed to get randomness seed from Aptos Orbital", "err", err)
 				// we try to continue with other sources
 				continue
+			}
+			if s.masterSeed.Get() == nil {
+				// set the master seed if it's not set yet
+				masterSeed := *seed
+				masterSeed.Src = randomness_common.RandSourceLocalDrivedFromSpaceSeed
+				s.masterSeed.Set(&masterSeed)
+				s.logger.Debug("updated master seed from last Aptos Orbital seed")
+				randomness_common.MasterSeedUpdatesTotal.Inc()
 			}
 			return seed, nil
 		case randomness_common.RandSourceLocalGoCrypto:

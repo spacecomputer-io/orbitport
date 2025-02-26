@@ -68,5 +68,5 @@ func setDefaults() {
 	viper.SetDefault("STATIC_AUTH_TOKEN", "")
 	viper.SetDefault("AUTH0_DOMAIN", "")
 	viper.SetDefault("AUTH0_AUDIENCE", "")
-	viper.SetDefault("MASTER_SEED_INTERVAL", "10m")
+	viper.SetDefault("MASTER_SEED_INTERVAL", "1h")
 }
