@@ -69,10 +69,12 @@ func (s *randomnessService) Start(ctx context.Context) error {
 				if err != nil {
 					return
 				}
-				if seed != nil {
-					// update the source of the seed
-					seed.Src = randomness_common.RandSourceLocalDrivedFromSpaceSeed
+				if seed == nil {
+					s.logger.Warn("empty seed from Aptos Orbital")
+					continue
 				}
+				// update the source of the seed
+				seed.Src = randomness_common.RandSourceLocalDrivedFromSpaceSeed
 				s.masterSeed.Set(seed)
 				s.logger.Debug("updated master seed upon interval")
 				randomness_common.MasterSeedUpdatesTotal.Inc()
