@@ -8,10 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/spacecoinxyz/orbitport/internal/api/auth"
 	"github.com/spacecoinxyz/orbitport/internal/utils"
 	"golang.org/x/time/rate"
 )
@@ -23,12 +22,10 @@ var (
 
 // AptosClient is a client for the Aptos Orbital API.
 type AptosClient struct {
-	logger          *utils.Logger
-	opts            *ClientOptions
-	limiter         *rate.Limiter
-	accessToken     string
-	tokenExpiration int64
-	authLock        sync.RWMutex
+	logger     *utils.Logger
+	opts       *ClientOptions
+	limiter    *rate.Limiter
+	authClient *auth.AuthClient
 }
 
 // NewClient creates a new AptosClient with the given options.
@@ -43,28 +40,21 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 	logger := utils.GetLogger("orbitport:randomness:aptosorbital")
 
 	return &AptosClient{
-		logger:  logger,
-		opts:    o,
-		limiter: limiter,
+		logger:     logger,
+		opts:       o,
+		limiter:    limiter,
+		authClient: auth.NewAuthClient(o.clientID, o.clientSecret, o.authURL),
 	}, nil
 }
 
 // getHeaders retrieves the headers for making a request.
 func (c *AptosClient) getHeaders(ctx context.Context) (map[string]string, error) {
-	token, expiration := c.getAccessToken()
-
-	if len(token) == 0 || time.Now().Unix() >= expiration {
-		c.logger.Debug("access token nil or expired, re-authenticating...")
-		t, err := c.authenticate(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("aptos authentication failed: %v", err)
-		}
-		c.logger.Debug("authenticated successfully")
-		token = t
+	atoken, err := c.authClient.GetAccessToken(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("authentication failed: %v", err)
 	}
-
 	return map[string]string{
-		"Authorization": "Bearer " + token,
+		"Authorization": "Bearer " + atoken.Value,
 	}, nil
 }
 

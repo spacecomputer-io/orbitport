@@ -22,16 +22,20 @@ func TestRouter(t *testing.T) {
 
 	aptosAuthResp := `{"access_token": "11111111111111", "expires_in": 3600, "token_type": "Bearer"}`
 	mockAptosAuth := testutils.NewMockServer(true, aptosAuthResp)
-	go mockAptosAuth.ListenAndServe(":3050")
+	authPort, err := testutils.FreePort("tcp", 3000, 4000)
+	require.NoError(t, err)
+	go mockAptosAuth.ListenAndServe(fmt.Sprintf(":%d", authPort))
 	aptosApiResp := `[{"chunk": "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", "signature": "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa"}]`
 	mockAptosApi := testutils.NewMockServer(true, aptosApiResp)
-	go mockAptosApi.ListenAndServe(":3051")
+	apiPort, err := testutils.FreePort("tcp", 3000, 4000)
+	require.NoError(t, err)
+	go mockAptosApi.ListenAndServe(fmt.Sprintf(":%d", apiPort))
 
 	staticAuthToken := "static_auth_token"
 
 	cfg := config.Config{
-		AptosOrbitalAuthUrl:      "http://localhost:3050",
-		AptosOrbitalApiUrl:       "http://localhost:3051",
+		AptosOrbitalAuthUrl:      fmt.Sprintf("http://localhost:%d", authPort),
+		AptosOrbitalApiUrl:       fmt.Sprintf("http://localhost:%d", apiPort),
 		AptosOrbitalClientId:     "client_id",
 		AptosOrbitalClientSecret: "client_secret",
 		AptosOrbitalRateLimit:    1,

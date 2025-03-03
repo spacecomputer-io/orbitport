@@ -11,7 +11,7 @@ const (
 var (
 	gatewayHealthStatus = prometheus.NewGauge(
 		prometheus.GaugeOpts{
-			Namespace: "sg",
+			Namespace: "op",
 			Subsystem: "health",
 			Name:      "status",
 			Help:      "Status of the gateway health",
