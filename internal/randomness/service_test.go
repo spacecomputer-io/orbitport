@@ -47,6 +47,7 @@ func (s *RandomnessServiceSuite) SetupSuite() {
 		AptosOrbitalClientSecret: "client_secret",
 		AptosOrbitalRateLimit:    1,
 		MasterSeedInterval:       10 * time.Millisecond,
+		DefaultMasterSeed:        `{"src":"local/space_seed","value":"aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa","sig":"aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa"}`,
 	}
 }
 
@@ -63,6 +64,12 @@ func (s *RandomnessServiceSuite) TestSources() {
 
 	require.NoError(s.T(), randService.Start(ctx))
 	defer randService.Close()
+
+	s.Run("init with default master seed", func() {
+		if len(s.cfg.DefaultMasterSeed) > 0 {
+			require.NotNil(s.T(), randService.(*randomnessService).masterSeed.Get())
+		}
+	})
 
 	s.Run("aptos", func() {
 		seed, err := randService.GetRandomSeed(ctx, randomness_common.RandSourceAptosOrbital)
@@ -83,8 +90,10 @@ func (s *RandomnessServiceSuite) TestSources() {
 		seed, err := randService.GetRandomSeed(ctx, randomness_common.RandSourceLocalDrivedFromSpaceSeed)
 		require.NoError(s.T(), err)
 		require.Equal(s.T(), seed.Src, randomness_common.RandSourceLocalDrivedFromSpaceSeed)
-		require.Equal(s.T(), seed.Value, "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa")
-		require.Equal(s.T(), seed.Sig, "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa")
+		seed2, err2 := randService.GetRandomSeed(ctx, randomness_common.RandSourceLocalDrivedFromSpaceSeed)
+		require.NoError(s.T(), err2)
+		require.Equal(s.T(), seed2.Src, randomness_common.RandSourceLocalDrivedFromSpaceSeed)
+		require.NotEqual(s.T(), seed.Value, seed2.Value)
 	})
 
 	s.Run("local go_crypto", func() {

@@ -31,6 +31,8 @@ type Config struct {
 	Auth0Audience string
 	// MasterSeedInterval is the period for fetching the new master seed.
 	MasterSeedInterval time.Duration
+	// DefaultMasterSeed is the default master seed to use.
+	DefaultMasterSeed string
 }
 
 func ReadFromEnv() *Config {
@@ -53,6 +55,7 @@ func ReadFromEnv() *Config {
 		Auth0Domain:              viper.GetString("AUTH0_DOMAIN"),
 		Auth0Audience:            viper.GetString("AUTH0_AUDIENCE"),
 		MasterSeedInterval:       viper.GetDuration("MASTER_SEED_INTERVAL"),
+		DefaultMasterSeed:        viper.GetString("DEFAULT_MASTER_SEED"),
 	}
 }
 
@@ -69,4 +72,5 @@ func setDefaults() {
 	viper.SetDefault("AUTH0_DOMAIN", "")
 	viper.SetDefault("AUTH0_AUDIENCE", "")
 	viper.SetDefault("MASTER_SEED_INTERVAL", "1h")
+	viper.SetDefault("DEFAULT_MASTER_SEED", "")
 }
