@@ -47,7 +47,7 @@ func (s *RandomnessServiceSuite) SetupSuite() {
 		AptosOrbitalClientSecret: "client_secret",
 		AptosOrbitalRateLimit:    1,
 		MasterSeedInterval:       10 * time.Millisecond,
-		DefaultMasterSeed:        `{"src":"local/space_seed","value":"aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa","sig":"aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa"}`,
+		DefaultMasterSeed:        "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa",
 	}
 }
 

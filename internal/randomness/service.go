@@ -2,7 +2,6 @@ package randomness
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -32,7 +31,7 @@ type randomnessService struct {
 }
 
 // NewService creates a new randomness service.
-func NewWithClient(aptosClient *aptosorbital.AptosClient, masterSeedInterval time.Duration, defaultMasterSeed *randomness_common.RandomSeed) randomness_common.Service {
+func NewWithClient(aptosClient *aptosorbital.AptosClient, masterSeedInterval time.Duration, defaultMasterSeed string) randomness_common.Service {
 	service := &randomnessService{
 		logger:             utils.GetLogger("orbitport:rand:service"),
 		aptosClient:        aptosClient,
@@ -40,8 +39,11 @@ func NewWithClient(aptosClient *aptosorbital.AptosClient, masterSeedInterval tim
 		masterSeed:         utils.NewLocked[*localrand.MasterSeed](nil),
 		masterSeedInterval: masterSeedInterval,
 	}
-	if defaultMasterSeed != nil {
-		err := service.updateMasterSeed(context.Background(), defaultMasterSeed)
+	if len(defaultMasterSeed) > 0 {
+		err := service.updateMasterSeed(context.Background(), &randomness_common.RandomSeed{
+			Value: defaultMasterSeed,
+			Src:   randomness_common.RandSourceLocalDrivedFromSpaceSeed,
+		})
 		if err != nil {
 			service.logger.Warn("failed to set default master seed", "err", err)
 		}
@@ -61,15 +63,7 @@ func New(cfg config.Config) (randomness_common.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Aptos Orbital client: %w", err)
 	}
-	masterSeedRaw := cfg.DefaultMasterSeed
-	var defaultMasterSeed *randomness_common.RandomSeed
-	if len(masterSeedRaw) > 0 {
-		err := json.Unmarshal([]byte(masterSeedRaw), &defaultMasterSeed)
-		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal master seed: %w", err)
-		}
-	}
-	return NewWithClient(aptosClient, cfg.MasterSeedInterval, defaultMasterSeed), nil
+	return NewWithClient(aptosClient, cfg.MasterSeedInterval, cfg.DefaultMasterSeed), nil
 }
 
 // Start starts the randomness service background routines:
@@ -156,7 +150,7 @@ func (s *randomnessService) GetRandomSeed(ctx context.Context, sources ...random
 					s.masterSeed.Set(nil)
 					continue
 				}
-				s.logger.Warn("failed to get randomness seed from local space seed", "err", err)
+				s.logger.Warn("failed to get randomness seed from local space seed.", "err", err)
 				continue
 			}
 			if mseed.Index() > (localrand.MaxDervied*3)/4 {
@@ -165,6 +159,7 @@ func (s *randomnessService) GetRandomSeed(ctx context.Context, sources ...random
 					_ = s.updateMasterSeed(ctx, nil)
 				})
 			}
+			s.logger.Debug("got randomness seed from local space seed.", "index", mseed.Index())
 			return seed, nil
 		default:
 			s.logger.Debug("unknown randomness source, skipping", "source", src)
