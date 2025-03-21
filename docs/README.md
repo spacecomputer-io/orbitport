@@ -8,10 +8,9 @@ This folder contains documentation for `orbitport`.
 
 ## Overview
 
-The Gateway proxies requests to services while providing aggregation and fallback capabilities on top to streamline the integration of space computing services such as randomness generation or TEEs, served by multiple providers to ensure high availability and reliability.
+Orbitport is a gateway to orbital services such as `cTRNG` (aka cosmic True Random Number Generator) or `spaceTEE`, served by multiple providers to ensure high availability and reliability.
 
-**NOTE:** Altough the gateway is designed to be a simple and modular enough to be easily extended to support new services and providers,
-the focus at the moment is on **space randomness** provided by **Aptos Orbital**. 
+Orbitport provides a unified API to access services from multiple sources, with the ability to switch between them in case of failure. It also performs aggregation and fallbacks in order to streamline the flow of requests and to overcome high loads or downtimes of the underlying sources.
 
 ### API
 
@@ -49,16 +48,18 @@ We fallback to local sources in one of the following cases:
 
 #### Randomness Sources
 
-1. **Aptos Orbital** 
+1. **cosmic/aptos_orbital** 
 
 Space based randomness provided by `cEDGE` or `Crypto2` satellites.
 
-2. **Local (with random seed from space)**
+2. **local/cosmic_seed** (cosmic random seed)
 
 Randomness using a (space) `master seed` that we fetch continuously from Aptos Orbital. 
-Used as primary source for local randomness with go's `math/rand` pkg. Used as fallback if aptos orbital is not available.
+The seed is used to generate more random numbers locally, by using it as a seed for a bip32 master key and deriving keys from it.
 
-3. **Local (Golang crypto pkg)**
+**NOTE:** Seed rotation is expected every 1h.
+
+3. **local/go_crypto** (Golang crypto pkg)
 
 Local randomness provided by go's `crypto/rand` pkg. Used as last resort if no other source is available.
 

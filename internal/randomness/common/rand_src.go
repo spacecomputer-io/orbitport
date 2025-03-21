@@ -16,8 +16,8 @@ const (
 var randSourceName = map[RandSource]string{
 	RandSourceUnknown:                  "",
 	RandSourceLocalGoCrypto:            "local/go_crypto",
-	RandSourceAptosOrbital:             "space/aptos_orbital",
-	RandSourceLocalDrivedFromSpaceSeed: "local/space_seed",
+	RandSourceAptosOrbital:             "cosmic/aptos_orbital",
+	RandSourceLocalDrivedFromSpaceSeed: "local/cosmic_seed",
 }
 
 func (r RandSource) String() string {
