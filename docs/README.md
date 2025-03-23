@@ -8,9 +8,9 @@ This folder contains documentation for `orbitport`.
 
 ## Overview
 
-Orbitport is a gateway to orbital services such as `cTRNG` (aka cosmic True Random Number Generator) or `spaceTEE`, served by multiple providers to ensure high availability and reliability.
+Orbitport is a gateway to orbital services such as `cTRNG` (aka cosmic True Random Number Generation) or `spaceTEE`, served by multiple providers to ensure high availability and reliability.
 
-Orbitport provides a unified API to access services from multiple sources, with the ability to switch between them in case of failure. It also performs aggregation and fallbacks in order to streamline the flow of requests and to overcome high loads or downtimes of the underlying sources.
+Orbitport providesa unified API to access services from multiple sources, with the ability to switch between them in case of failure. It also performs aggregation and fallbacks in order to streamline the flow of requests and to overcome high loads or downtimes of the underlying sources.
 
 ### API
 
@@ -48,18 +48,24 @@ We fallback to local sources in one of the following cases:
 
 #### Randomness Sources
 
+The gateway supports several sources of randomness.
+
+The desired sources can be specified (by order) with `src` query parameter, e.g. `?src=cosmic/aptos_orbital&src=...&src=...`
+
+Default is `[cosmic/aptos_orbital,local/cosmic_seed]`, i.e. try to get cTRN or a TRN derived from cTRN
+
 1. **cosmic/aptos_orbital** 
 
 Space based randomness provided by `cEDGE` or `Crypto2` satellites.
 
 2. **local/cosmic_seed** (cosmic random seed)
 
-Randomness using a (space) `master seed` that we fetch continuously from Aptos Orbital. 
+Randomness derived from a cTRN (aka `master seed`) that we fetch continuously. 
 The seed is used to generate more random numbers locally, by using it as a seed for a bip32 master key and deriving keys from it.
 
 **NOTE:** Seed rotation is expected every 1h.
 
 3. **local/go_crypto** (Golang crypto pkg)
 
-Local randomness provided by go's `crypto/rand` pkg. Used as last resort if no other source is available.
+Local randomness provided by go's `crypto/rand` pkg. Used (mostly in testing) as last resort if no other source is available.
 
