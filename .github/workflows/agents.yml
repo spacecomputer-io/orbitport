@@ -1,0 +1,47 @@
+name: Test & Build Agents 
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+
+  build-go:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Build
+      working-directory: ./agents
+      run: make build
+
+    - name: Test
+      working-directory: ./agents
+      run: make test
+
+    - name: Test Race
+      working-directory: ./agents
+      run: make race
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v7
+      with:
+        version: v2.0.2
+        working-directory: ./agents
+
+    - name: Protoc dry run
+      working-directory: ./agents
+      run: |
+        OUTPUT=$(make protoc-dry-run)
+        if [ -n "$OUTPUT" ]; then
+          echo "protoc --dry-run detected changes:"
+          echo "$OUTPUT"
+          exit 1
+        fi
