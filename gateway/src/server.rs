@@ -10,11 +10,12 @@ use warp::{
     reject::Reject,
 };
 
-use crate::common::{SRC_APTOS_ORBITAL, ServiceError, ServiceRequest};
 use crate::proto::auth::{
     TokenValidationRequest, TokenValidationResponse, auth_agent_client::AuthAgentClient,
 };
-use crate::service::ServiceManager;
+use crate::service::{ServiceError, ServiceRequest};
+use crate::service_manager::ServiceManager;
+use crate::trng::SRC_APTOS_ORBITAL;
 
 #[derive(Error, Debug)]
 pub enum GatewayError {

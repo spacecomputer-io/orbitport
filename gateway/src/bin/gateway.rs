@@ -2,7 +2,7 @@ use clap::Parser;
 use std::sync::Arc;
 use thiserror::Error;
 
-use orbitport::{ctx, gateway, logging, os_signals, service};
+use gateway::{ctx, logging, os_signals, server, service_manager};
 
 #[derive(Error, Debug)]
 pub enum OpRuntimeError {
@@ -44,11 +44,11 @@ async fn main() -> Result<(), OpRuntimeError> {
     let trng_agent = args.trng_agent.clone();
     tokio::select! {
         _ = tokio::spawn(async move {
-            let service_manager = service::ServiceManager::new(
+            let service_manager = service_manager::ServiceManager::new(
                 auth_agent.as_str(), trng_agent.as_str()
             ).await.unwrap();
 
-            gateway::start(args.http_port, Arc::new(service_manager)).await;
+            server::start(args.http_port, Arc::new(service_manager)).await;
 
             let time_elapsed = start.elapsed();
             tracing::info!(

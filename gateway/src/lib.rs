@@ -13,6 +13,7 @@ pub mod ctx;
 pub mod logging;
 pub mod os_signals;
 
-pub mod common;
-pub mod gateway;
+pub mod server;
 pub mod service;
+pub mod service_manager;
+pub mod trng;
