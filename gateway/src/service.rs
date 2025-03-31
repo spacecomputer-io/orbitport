@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// A trait representing a service that can handle service requests.
-pub trait Service {
+pub trait ServiceHandler {
     #[allow(async_fn_in_trait)]
     async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, ServiceError>;
 }

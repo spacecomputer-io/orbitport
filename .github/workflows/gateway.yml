@@ -20,14 +20,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
     - name: Format
-      working-directory: ./orbitport
+      working-directory: ./gateway
       run: cargo fmt -- --check
     - name: Clippy
-      working-directory: ./orbitport
+      working-directory: ./gateway
       run: cargo clippy -- -D warnings
     - name: Build
-      working-directory: ./orbitport
+      working-directory: ./gateway
       run: cargo build --verbose
     - name: Run tests
-      working-directory: ./orbitport
+      working-directory: ./gateway
       run: cargo test --verbose

@@ -1,6 +1,8 @@
+use std::sync::Arc;
 use tonic::transport::Channel;
 
-use crate::service::{Service, ServiceError, ServiceRequest, ServiceResponse};
+use crate::ctx;
+use crate::service::{ServiceError, ServiceHandler, ServiceRequest, ServiceResponse};
 
 use crate::trng::TrngService;
 
@@ -11,9 +13,20 @@ pub struct ServiceManager {
     trng_svc: TrngService,
 }
 
+unsafe impl Send for ServiceManager {}
+
 impl ServiceManager {
-    pub async fn new(auth_url: &str, trng_url: &str) -> Result<ServiceManager, ServiceError> {
-        let trng_svc = TrngService::new(trng_url).await?;
+    pub async fn new(
+        ctx: Arc<ctx::Context>,
+        auth_url: &str,
+        trng_url: &str,
+    ) -> Result<ServiceManager, ServiceError> {
+        let trng_svc = TrngService::new(ctx.clone(), trng_url, None, None)
+            .await
+            .map_err(|e| {
+                tracing::error!("Failed to create TRNG service: {}", e);
+                ServiceError::ServiceConnectionError(e.to_string())
+            })?;
         let auth_client = AuthAgentClient::connect(auth_url.to_string())
             .await
             .map_err(|e| {

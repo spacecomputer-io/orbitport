@@ -15,7 +15,7 @@ use crate::proto::auth::{
 };
 use crate::service::{ServiceError, ServiceRequest};
 use crate::service_manager::ServiceManager;
-use crate::trng::SRC_APTOS_ORBITAL;
+use crate::trng::{SRC_APTOS_ORBITAL, SRC_DERIVED_TRNG};
 
 #[derive(Error, Debug)]
 pub enum GatewayError {
@@ -141,14 +141,14 @@ async fn handle_get(
         service
     );
     let src = if let Some(s) = query.src {
-        s.clone()
+        vec![s.clone()]
     } else {
-        SRC_APTOS_ORBITAL.to_string()
+        vec![SRC_APTOS_ORBITAL.to_string(), SRC_DERIVED_TRNG.to_string()]
     };
     let svc_req = ServiceRequest {
         req_id,
         service,
-        src: vec![src],
+        src,
         args: None,
     };
     handle_service_req(svc_req, service_manager.clone()).await

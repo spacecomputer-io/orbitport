@@ -35,6 +35,7 @@ async fn main() -> Result<(), OpRuntimeError> {
     let start = std::time::Instant::now();
 
     let ctx = Arc::new(ctx::Context::new());
+    let ctx_cloned = ctx.clone();
 
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
@@ -45,10 +46,12 @@ async fn main() -> Result<(), OpRuntimeError> {
     tokio::select! {
         _ = tokio::spawn(async move {
             let service_manager = service_manager::ServiceManager::new(
-                auth_agent.as_str(), trng_agent.as_str()
+                ctx_cloned, auth_agent.as_str(), trng_agent.as_str()
             ).await.unwrap();
 
-            server::start(args.http_port, Arc::new(service_manager)).await;
+            let service_manager = Arc::new(service_manager);
+            // Start the server
+            server::start(args.http_port, service_manager.clone()).await;
 
             let time_elapsed = start.elapsed();
             tracing::info!(
