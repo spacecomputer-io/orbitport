@@ -15,6 +15,9 @@ type mockerConfig struct {
 	Service string
 	// The port to listen on. (default 8000)
 	Port uint16
+	// The profile to use. (default "happy")
+	// Possible values: "happy", "offline"
+	Profile Profile
 }
 
 func readFromEnv() *mockerConfig {
@@ -27,12 +30,14 @@ func readFromEnv() *mockerConfig {
 	return &mockerConfig{
 		Service: viper.GetString("SERVICE"),
 		Port:    viper.GetUint16("PORT"),
+		Profile: stringToProfile(viper.GetString("PROFILE")),
 	}
 }
 
 func setDefaults() {
 	viper.SetDefault("SERVICE", "aptosorbital_api")
 	viper.SetDefault("PORT", 8000)
+	viper.SetDefault("PROFILE", string(PROFILE_HAPPY_PATH))
 }
 
 type HttpServer interface {
@@ -43,12 +48,32 @@ func main() {
 	cfg := readFromEnv()
 	switch cfg.Service {
 	case "aptosorbital_api":
-		server := NewMockAptosOrbitalAPI()
+		server := NewMockAptosOrbitalAPI(cfg.Profile)
 		server.ListenAndServe(fmt.Sprintf(":%d", cfg.Port))
 	case "aptosorbital_auth":
-		server := NewMockAptosOrbitalAuth()
+		server := NewMockAptosOrbitalAuth(cfg.Profile)
 		server.ListenAndServe(fmt.Sprintf(":%d", cfg.Port))
 	default:
 		panic("Unknown service: " + cfg.Service)
+	}
+}
+
+type Profile string
+
+const (
+	// HAPPY_PATH is the happy path profile.
+	PROFILE_HAPPY_PATH Profile = "happy"
+	// PROFILE_OFFLINE is the offline profile.
+	PROFILE_OFFLINE Profile = "offline"
+)
+
+func stringToProfile(s string) Profile {
+	switch s {
+	case "happy", "load":
+		return PROFILE_HAPPY_PATH
+	case "offline":
+		return PROFILE_OFFLINE
+	default:
+		return PROFILE_HAPPY_PATH
 	}
 }

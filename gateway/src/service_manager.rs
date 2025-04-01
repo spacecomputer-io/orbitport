@@ -20,8 +20,10 @@ impl ServiceManager {
         ctx: Arc<ctx::Context>,
         auth_url: &str,
         trng_url: &str,
+        master_seed_interval: Option<u64>,
+        master_seed: Option<String>,
     ) -> Result<ServiceManager, ServiceError> {
-        let trng_svc = TrngService::new(ctx.clone(), trng_url, None, None)
+        let trng_svc = TrngService::new(ctx.clone(), trng_url, master_seed_interval, master_seed)
             .await
             .map_err(|e| {
                 tracing::error!("Failed to create TRNG service: {}", e);

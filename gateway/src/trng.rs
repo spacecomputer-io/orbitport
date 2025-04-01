@@ -73,6 +73,7 @@ impl TrngService {
             Some(seed) => {
                 let master_seed = MasterSeed(seed);
                 let _ = master_seed.derive(0)?;
+                tracing::info!("Using master seed with {} bytes", master_seed.0.len());
                 Arc::new(RwLock::new(vec![master_seed]))
             }
             None => Arc::new(RwLock::new(vec![])),
@@ -170,16 +171,20 @@ impl TrngService {
 
 impl ServiceHandler for TrngService {
     async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, ServiceError> {
+        tracing::info!(
+            "Received request for service: {}, src: {:?}",
+            svc_req.service,
+            svc_req.src
+        );
         match get_trng(self.aptos_orbital_client.clone()).await {
             Ok(trng) => {
                 let response = to_service_response(svc_req.req_id, trng, SRC_APTOS_ORBITAL);
                 Ok(response)
             }
             Err(e) => {
+                tracing::warn!("Failed to get trng from aptos orbital: {}", e);
                 if svc_req.src.contains(&SRC_DERIVED_TRNG.to_string()) {
-                    tracing::warn!(
-                        "Failed to get trng from aptos orbital, falling back to derived trng"
-                    );
+                    tracing::info!("Fallback to derived trng");
                     let trng = self.fallback().await?;
                     let response = to_service_response(svc_req.req_id, trng, SRC_DERIVED_TRNG);
                     return Ok(response);

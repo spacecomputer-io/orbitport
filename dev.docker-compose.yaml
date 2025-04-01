@@ -33,6 +33,7 @@ services:
     environment:
       - OPMOCK_SERVICE=aptosorbital_api
       - OPMOCK_PORT=8001
+      - OPMOCK_PROFILE=${OPMOCK_PROFILE}
     depends_on:
       - aptos-orbital-auth
 
@@ -90,6 +91,7 @@ services:
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_AGENT=http://agent-auth:50000
       - ORBITPORT_TRNG_AGENT=http://agent-aptos-orbital:50001
+      - ORBITPORT_DEFAULT_MASTER_SEED=${ORBITPORT_DEFAULT_MASTER_SEED}
     depends_on:
       - agent-aptos-orbital
       - agent-auth

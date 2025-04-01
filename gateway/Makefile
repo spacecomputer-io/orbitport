@@ -4,6 +4,9 @@ DOCKER_CONTAINER_NAME?=gateway
 RUST_LOG?=debug
 
 test:
+	@cargo test -- --skip test_e2e
+
+test-unit:
 	@cargo test
 
 fmt:
@@ -12,8 +15,10 @@ fmt:
 fmt-check:
 	@cargo fmt -- --check
 
-lint:
+clippy:
 	@cargo clippy -- -D warnings
+
+lint: clippy
 
 build:
 	@cargo build --release

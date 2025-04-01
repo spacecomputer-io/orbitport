@@ -18,6 +18,10 @@ struct Args {
     auth_agent: String,
     #[clap(long, env = "ORBITPORT_TRNG_AGENT")]
     trng_agent: String,
+    #[clap(long, env = "ORBITPORT_DEFAULT_MASTER_SEED")]
+    default_master_seed: Option<String>,
+    #[clap(long, env = "ORBITPORT_MASTER_SEED_INTERVAL")]
+    master_seed_interval: Option<u64>,
 }
 
 impl Args {
@@ -46,7 +50,8 @@ async fn main() -> Result<(), OpRuntimeError> {
     tokio::select! {
         _ = tokio::spawn(async move {
             let service_manager = service_manager::ServiceManager::new(
-                ctx_cloned, auth_agent.as_str(), trng_agent.as_str()
+                ctx_cloned, auth_agent.as_str(), trng_agent.as_str(),
+                args.master_seed_interval, args.default_master_seed,
             ).await.unwrap();
 
             let service_manager = Arc::new(service_manager);

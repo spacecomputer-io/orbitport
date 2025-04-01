@@ -21,15 +21,17 @@ func generateLocalRandomBytes(n int) ([]byte, error) {
 	return b, nil
 }
 
-func NewMockAptosOrbitalAPI() HttpServer {
+func NewMockAptosOrbitalAPI(p Profile) HttpServer {
 	mux := http.NewServeMux()
 	return &aptosOrbitalAPIMockServer{
 		mux: mux,
+		p:   p,
 	}
 }
 
 type aptosOrbitalAPIMockServer struct {
 	mux *http.ServeMux
+	p   Profile
 }
 
 func (m *aptosOrbitalAPIMockServer) ListenAndServe(addr string) {
@@ -38,6 +40,11 @@ func (m *aptosOrbitalAPIMockServer) ListenAndServe(addr string) {
 }
 
 func (m *aptosOrbitalAPIMockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if m.p == PROFILE_OFFLINE {
+		fmt.Println("offline profile, returning 503")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	chunkBytes, err := generateLocalRandomBytes(32) // 32 bytes for the chunk
 	if err != nil {
 		fmt.Printf("failed to generate random chunk: %v", err)
@@ -61,6 +68,10 @@ func (m *aptosOrbitalAPIMockServer) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func NewMockAptosOrbitalAuth() HttpServer {
+func NewMockAptosOrbitalAuth(p Profile) HttpServer {
+	if p == PROFILE_OFFLINE {
+		fmt.Println("offline profile, server will return 500")
+		return testutils.NewMockServer(false)
+	}
 	return testutils.NewMockServer(true, `{"access_token": "11111111111111", "expires_in": 3600, "token_type": "Bearer"}`)
 }

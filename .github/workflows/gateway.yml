@@ -28,6 +28,6 @@ jobs:
     - name: Build
       working-directory: ./gateway
       run: cargo build --verbose
-    - name: Run tests
+    - name: Run unit tests
       working-directory: ./gateway
-      run: cargo test --verbose
+      run: cargo test -- --skip test_e2e

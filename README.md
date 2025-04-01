@@ -23,10 +23,22 @@ See the [docs](docs/README.md) for more information.
 
 Run with docker compose:
 ```bash
-docker-compose -f dev.docker-compose.yaml up
+make devenv-up
 ```
 
 This will start the gateway and all agents in docker containers, as well as mocked services.
+
+Run e2e tests on that environment:
+```bash
+make e2e-lazy
+make E2E_PROFILE=load e2e-lazy
+make E2E_PROFILE=offline e2e-lazy
+```
+
+Tear down with:
+```bash
+make devenv-down
+```
 
 ## Running with Docker
 
