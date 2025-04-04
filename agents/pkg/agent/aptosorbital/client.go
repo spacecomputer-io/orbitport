@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	ErrDailyRateLimitExceeded = fmt.Errorf("aptos orbial daily rate limit exceeded")
+	ErrDailyRateLimitExceeded = fmt.Errorf("aptos orbital daily rate limit exceeded")
 	ErrRateLimitExceeded      = fmt.Errorf("rate limit exceeded")
 )
 

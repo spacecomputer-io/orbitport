@@ -31,14 +31,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Start devenv
+        run: |
+          make devenv-up
+        continue-on-error: false
+
       - name: Run e2e test (happy path)
         run: |
-          make E2E_PROFILE=happy e2e
+          make E2E_PROFILE=happy e2e-lazy
 
       - name: Run e2e test (offline)
         run: |
-          make E2E_PROFILE=offline e2e
+          make E2E_PROFILE=offline e2e-lazy
 
       - name: Run e2e test (load)
         run: |
-          make E2E_PROFILE=load e2e
+          make E2E_PROFILE=load e2e-lazy
+
+      - name: Stop devenv
+        run: |
+          make devenv-down

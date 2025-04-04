@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/health/grpc_health_v1"
 
 	"github.com/spacecoinxyz/orbitport/agents/pkg/agent/aptosorbital"
 	"github.com/spacecoinxyz/orbitport/agents/pkg/agent/auth"
 	"github.com/spacecoinxyz/orbitport/agents/pkg/core"
+	"github.com/spacecoinxyz/orbitport/agents/pkg/core/health"
 	"github.com/spacecoinxyz/orbitport/agents/pkg/utils"
 	"github.com/spacecoinxyz/orbitport/agents/proto"
-	"google.golang.org/grpc"
 )
 
 func main() {
@@ -40,6 +44,12 @@ func main() {
 	default:
 		panic("unknown agent")
 	}
+
+	healthCheck := func(_ context.Context) (health.HealthState, error) {
+		return health.HealthStateHealthy, nil
+	}
+	healthServer := health.NewHealthServer(healthCheck)
+	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
 	go func() {
 		logger.Infof("Starting metrics server on port %d", cfg.MetricsPort)

@@ -6,9 +6,6 @@ RUST_LOG?=debug
 test:
 	@cargo test -- --skip test_e2e
 
-test-unit:
-	@cargo test
-
 fmt:
 	@cargo fmt
 
