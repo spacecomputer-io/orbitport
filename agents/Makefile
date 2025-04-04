@@ -1,9 +1,11 @@
 GOPACKAGES=$(shell go list ./...)
 DOCKER_IMAGE?=op-agent
+DOCKER_TAG?=latest
 DOCKER_CONTAINER_NAME?=agent
 GOLOG_LOG_LEVEL?=debug
 ENV_FILE?=.env
 MOCKER_DOCKER_IMAGE?=op-mocker
+CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl 
 
 deps:
 	@go mod download
@@ -44,17 +46,17 @@ run: build
 	@GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} ./bin/agent -e ${ENV_FILE}
 
 build-docker:
-	@docker build -t ${DOCKER_IMAGE} .
+	@${CONTAINER_TOOL} build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
 
 clean-docker:
-	@docker rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null
+	@${CONTAINER_TOOL} rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null
 
 run-docker: clean-docker build-docker
-	@docker run -p 8080:8080 -e GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} -v ./${ENV_FILE}:/.env \
-		--name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE}
+	@${CONTAINER_TOOL} run -p 8080:8080 -e GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} -v ./${ENV_FILE}:/.env \
+		--name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE}:${DOCKER_TAG}
 
 mocker-build-docker:
-	@docker build -t ${MOCKER_DOCKER_IMAGE} --build-arg BUILD_TARGET=mocker .
+	@${CONTAINER_TOOL} build -t ${MOCKER_DOCKER_IMAGE}:${DOCKER_TAG} --build-arg BUILD_TARGET=mocker .
 
 help:
 	@echo ""
