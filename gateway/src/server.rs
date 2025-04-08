@@ -55,9 +55,17 @@ async fn authorize(
             let response: TokenValidationResponse = auth_client
                 .validate_token(request)
                 .await
-                .map_err(|e| {
-                    tracing::error!("Failed to authorize JWT: {}", e);
-                    warp::reject::custom(GatewayError::AuthenticationFailed)
+                .map_err(|e| match e.code() {
+                    tonic::Code::Unavailable | tonic::Code::NotFound => {
+                        tracing::error!("Auth agent is unavailable: {}", e);
+                        warp::reject::custom(GatewayError::AuthAgentConnectionError(
+                            "unavailable".to_string(),
+                        ))
+                    }
+                    _ => {
+                        tracing::error!("Failed to authorize JWT: {}", e);
+                        warp::reject::custom(GatewayError::AuthenticationFailed)
+                    }
                 })?
                 .into_inner();
             if !response.ok {
