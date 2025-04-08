@@ -25,5 +25,5 @@ make ENV_FILE=.auth.env run
 Or in docker:
 
 ```sh
-make ENV_FILE=.auth.env run-docker
+make ENV_FILE=.auth.env docker-run
 ```

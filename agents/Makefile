@@ -45,17 +45,17 @@ build: deps
 run: build
 	@GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} ./bin/agent -e ${ENV_FILE}
 
-build-docker:
+docker-build:
 	@${CONTAINER_TOOL} build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
 
-clean-docker:
+docker-clean:
 	@${CONTAINER_TOOL} rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null
 
-run-docker: clean-docker build-docker
+docker-run: docker-clean docker-build
 	@${CONTAINER_TOOL} run -p 8080:8080 -e GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} -v ./${ENV_FILE}:/.env \
 		--name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE}:${DOCKER_TAG}
 
-mocker-build-docker:
+mocker-docker-build:
 	@${CONTAINER_TOOL} build -t ${MOCKER_DOCKER_IMAGE}:${DOCKER_TAG} --build-arg BUILD_TARGET=mocker .
 
 help:
@@ -74,9 +74,9 @@ help:
 	@echo "- lint: run linting on the codebase"
 	@echo "- build: build the project binary"
 	@echo "- run: build and run the project locally"
-	@echo "- build-docker: build the Docker image"
-	@echo "- clean-docker: remove the Docker container if it exists"
-	@echo "- run-docker: build and run the project in a Docker container"
+	@echo "- docker-build: build the Docker image"
+	@echo "- docker-clean: remove the Docker container if it exists"
+	@echo "- docker-run: build and run the project in a Docker container"
 	@echo ""
 
 default: help

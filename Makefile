@@ -1,5 +1,7 @@
 ENV_FILE?=".dev.env"
 E2E_PROFILE?=happy
+CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl
+DOCKER_TAG?=latest ## DOCKER_TAG=v*.*.*
 
 protoc:
 	@cd agents && make protoc
@@ -33,6 +35,10 @@ devenv-up: devenv-down
 devenv-down:
 	@docker-compose -f dev.docker-compose.yaml down
 
+docker-build:
+	@cd gateway && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
+	@cd gateway && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
+
 help:
 	@echo ""
 	@echo "Usage: make [vars] <cmd>"
@@ -47,11 +53,14 @@ help:
 	@echo "  e2e-lazy        Run end-to-end tests without setup"
 	@echo "  devenv-up       Start development environment"
 	@echo "  devenv-down     Stop development environment"
+	@echo "  docker-build    Build Docker images of the project"
 	@echo "  help            Show this help message"
 	@echo ""
 	@echo "Variables:"
 	@echo "  ENV_FILE        Path to the environment file (default: .dev.env)"
 	@echo "  E2E_PROFILE     Profile for end-to-end tests (default: happy)"
+	@echo "  DOCKER_TAG      Tag for the Docker image (default: latest)"
+	@echo "  CONTAINER_TOOL  Tool for managing containers, e.g. nerdctl (default: docker)"
 	@echo ""
 
 default: help
