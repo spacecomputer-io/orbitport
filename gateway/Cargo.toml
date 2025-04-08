@@ -24,6 +24,7 @@ error = "0.1.9"
 prost = "0.13.5"
 tonic = "0.13.0"
 dotenv = "0.15.0"
+tonic-health = "0.13.0"
 
 [build-dependencies]
 tonic-build = "0.13.0"

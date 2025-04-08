@@ -92,8 +92,5 @@ services:
       - ORBITPORT_AUTH_AGENT=http://agent-auth:50000
       - ORBITPORT_TRNG_AGENT=http://agent-aptos-orbital:50001
       - ORBITPORT_DEFAULT_MASTER_SEED=${ORBITPORT_DEFAULT_MASTER_SEED}
-    depends_on:
-      - agent-aptos-orbital
-      - agent-auth
     ports:
       - 8080:8080

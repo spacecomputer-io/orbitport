@@ -49,6 +49,11 @@ async fn main() -> Result<(), OpRuntimeError> {
     let trng_agent = args.trng_agent.clone();
     tokio::select! {
         _ = tokio::spawn(async move {
+            service_manager::wait_for_deps(
+                vec![auth_agent.clone(), trng_agent.clone()],
+                std::time::Duration::from_secs(60),
+            ).await.unwrap();
+
             let service_manager = service_manager::ServiceManager::new(
                 ctx_cloned, auth_agent.as_str(), trng_agent.as_str(),
                 args.master_seed_interval, args.default_master_seed,
