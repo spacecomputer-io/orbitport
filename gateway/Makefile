@@ -25,13 +25,13 @@ build:
 run: build
 	@./target/release/gateway
 
-build-docker:
+docker-build:
 	@${CONTAINER_TOOL} build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
 
-clean-docker:
+docker-clean:
 	@${CONTAINER_TOOL} rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null
 
-run-docker: clean-docker build-docker
+docker-run: docker-clean docker-build
 	@${CONTAINER_TOOL} run -p 8080:8080 -e RUST_LOG=${RUST_LOG} -v ./.env:/.env \
 		--name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE}:${DOCKER_TAG}
 
@@ -47,13 +47,14 @@ help:
 	@echo "  lint            Run linters"
 	@echo "  build           Build the project"
 	@echo "  run             Run the project"
-	@echo "  build-docker    Build Docker image"
-	@echo "  clean-docker    Clean up Docker container"
-	@echo "  run-docker      Run Docker container"
+	@echo "  docker-build    Build Docker image"
+	@echo "  docker-clean    Clean up Docker container"
+	@echo "  docker-run      Run Docker container"
 	@echo "  help            Show this help message"
 	@echo ""
 	@echo "Variables:"
 	@echo "  DOCKER_IMAGE        Name of the Docker image (default: op-gateway)"
+	@echo "  DOCKER_TAG          Tag for the Docker image (default: latest)"
 	@echo "  DOCKER_CONTAINER_NAME Name of the Docker container (default: gateway)"
 	@echo "  RUST_LOG            Log level for Rust (default: debug)"
 	@echo "  CONTAINER_TOOL      Tool for managing containers, e.g. nerdctl (default: docker)"
