@@ -71,10 +71,14 @@ impl TrngService {
             })?;
         let master_seeds = match master_seed {
             Some(seed) => {
-                let master_seed = MasterSeed(seed);
-                let _ = master_seed.derive(0)?;
-                tracing::info!("Using master seed with {} bytes", master_seed.0.len());
-                Arc::new(RwLock::new(vec![master_seed]))
+                let mut master_seeds = vec![];
+                if !seed.is_empty() {
+                    let master_seed = MasterSeed(seed);
+                    let _ = master_seed.derive(0)?;
+                    tracing::info!("Using master seed with {} bytes", master_seed.0.len());
+                    master_seeds.push(master_seed);
+                }
+                Arc::new(RwLock::new(master_seeds))
             }
             None => Arc::new(RwLock::new(vec![])),
         };
