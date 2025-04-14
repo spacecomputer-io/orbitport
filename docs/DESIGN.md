@@ -2,7 +2,7 @@
 
 ## Overview
 
-Orbitport is a gateway to orbital services such as `cTRNG` (cosmic True Random Number Generation) or `cTEE` (cosmic TEE), served by multiple providers to ensure high availability and reliability.
+Orbitport is a gateway to orbital services such as `cTRNG` (cosmic True Random Number Generator) or `cTEE` (cosmic TEE), served by multiple providers & satellites to ensure high availability and reliability.
 
 ### Key Goals
 
@@ -36,7 +36,7 @@ The beacon contains blocks of random data harvested from space, stored encrypted
 
 #### Verification
 
-Verification of the cTRNG is done against a signature provided by the satellite to ensure authenticity of the data. The public keys of all provider are stored in the `Cert Repository` in a DAG structure.
+Verification of the cTRNG is done against a signature provided by the satellite to ensure authenticity and integrity of the data. The public keys of all provider are stored in the `Cert Repository` in a DAG structure.
 
 ## Architecture
 
@@ -70,8 +70,14 @@ IPFS is a public network, where data is shared between nodes. To ensure privacy,
 
 ### Satellite Integration
 
-Integration with satellites is done through agents, which abstract the complexity and implementation of the underlying providers or their SDKs/APIs.
+There are 2 main points of integration with the satellites:
+- Read cTRNG data via satellite API/SDK.
+  - Agents are used abstract the complexity and implementation of the underlying provider.
+- Verify authenticity of the cTRNG
+  - Verify signature against the public key of the satellite.
+  - Verify that the public key is part of the certificate tree of the provider.
 
+Integration with satellites is done through agents, which abstract the complexity and implementation of the underlying providers or their SDKs/APIs.
 By having a decoupled agent for each provider, we can easily add new providers and manage the rate limits, auth, etc.
 
 ### Deployment
@@ -184,7 +190,7 @@ It run an event loop that invokes beacon builder to generate new blocks of rando
 
 ## Glossary
 
-- **cTRNG**: Cosmic True Random Number Generation, a source of randomness harvested from hardware on satellites.
+- **cTRNG**: Cosmic True Random Number Generator, a source of randomness harvested from hardware on satellites.
 - **cTEE**: Cosmic Trusted Execution Environment, a secure environment for running code in space.
 - **Orbitport**: A gateway to orbital services.
 - **Aptos Orbital**: A provider of orbital services.

@@ -21,7 +21,7 @@ Get access token from auth0:
 # export OP_AUTH_URL=dev-1usujmbby8627ni8.us.auth0.com
 curl --request POST --url "https://${OP_AUTH_URL}/oauth/token" \
   --header 'content-type: application/json' \
-  --data '{"client_id":"'"${OP_CLIENT_ID}"'","client_secret":"'"${OP_CLIENT_SECRET}"'","audience":"https://op.spacecoin.xyz/api","grant_type":"client_credentials"}' \
+  --data '{"client_id":"'"${OP_CLIENT_ID}"'","client_secret":"'"${OP_CLIENT_SECRET}"'","audience":"https://op.spacecomputer.io/api","grant_type":"client_credentials"}' \
  | jq -r '.access_token'
 ```
 
@@ -30,5 +30,5 @@ curl --request POST --url "https://${OP_AUTH_URL}/oauth/token" \
 **NOTE:** see openapi spec below for detailed information
 
 ```bash
-curl --request GET --url https://op.spacecoin.xyz/api/v1/rand_seed \
+curl --request GET --url https://op.spacecomputer.io/api/v1/rand_seed \
   --header "authorization: Bearer ${ACCESS_TOKEN}"

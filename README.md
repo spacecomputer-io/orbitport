@@ -19,7 +19,25 @@ See the [docs](docs/README.md) for more information.
 - [Make](https://www.gnu.org/software/make/)
 - [Docker](https://docs.docker.com/get-docker/)
 
-## Running Dev Mode with Docker
+## Usage (ops)
+
+### Build Docker Images
+
+Build the docker images for the agents and the gateway:
+
+**NOTE:** use `DOCKER_TAG` to set the tag for the images. `latest` by default.
+
+```bash
+make docker-build
+```
+
+If you want to use other build tool, use `CONTAINER_TOOL`:
+
+```bash
+make CONTAINER_TOOL=nerdctl docker-build
+```
+
+### Running Dev Mode with Docker
 
 Run with docker compose:
 ```bash
@@ -40,7 +58,7 @@ Tear down with:
 make devenv-down
 ```
 
-## Running with Docker
+### Running with Docker
 
 Fill the required vars in `.env`, follow `.example.env`.
 
@@ -51,7 +69,7 @@ docker-compose --env-file .env up
 
 This will start the gateway and all agents in docker containers.
 
-## API Usage
+## Usage (API)
 
 ### cTRNG
 
@@ -78,7 +96,6 @@ Get access token from auth0:
 ```bash
 curl --request POST --url "https://${OP_AUTH_URL}/oauth/token" \
   --header 'content-type: application/json' \
-  --data '{"client_id":"'"${OP_CLIENT_ID}"'","client_secret":"'"${OP_CLIENT_SECRET}"'","audience":"https://op.spacecoin.xyz/api","grant_type":"client_credentials"}' \
+  --data '{"client_id":"'"${OP_CLIENT_ID}"'","client_secret":"'"${OP_CLIENT_SECRET}"'","audience":"https://op.spacecomputer.io/api","grant_type":"client_credentials"}' \
  | jq -r '.access_token'
 ```
-
