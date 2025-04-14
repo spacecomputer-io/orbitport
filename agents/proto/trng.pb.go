@@ -138,7 +138,7 @@ const file_proto_trng_proto_rawDesc = "" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x10\n" +
 	"\x03sig\x18\x02 \x01(\tR\x03sig2C\n" +
 	"\x0fRandomnessAgent\x120\n" +
-	"\aGetTrng\x12\x11.trng.TrngRequest\x1a\x12.trng.TrngResponseB0Z.github.com/spacecomputerio/orbitport/agents/protob\x06proto3"
+	"\aGetTrng\x12\x11.trng.TrngRequest\x1a\x12.trng.TrngResponseB3Z1github.com/spacecomputerio/orbitport/agents/protob\x06proto3"
 
 var (
 	file_proto_trng_proto_rawDescOnce sync.Once

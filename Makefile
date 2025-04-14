@@ -5,7 +5,7 @@ DOCKER_TAG?=latest ## DOCKER_TAG=v*.*.*
 
 protoc:
 	@cd agents && make protoc
-	@cp agents/proto/*.proto orbitport/proto/
+	@cp agents/proto/*.proto gateway/proto/
 
 test:
 	@cd agents && make test

@@ -119,7 +119,7 @@ const file_proto_auth_proto_rawDesc = "" +
 	"\x17TokenValidationResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok2Y\n" +
 	"\tAuthAgent\x12L\n" +
-	"\rValidateToken\x12\x1c.auth.TokenValidationRequest\x1a\x1d.auth.TokenValidationResponseB0Z.github.com/spacecomputerio/orbitport/agents/protob\x06proto3"
+	"\rValidateToken\x12\x1c.auth.TokenValidationRequest\x1a\x1d.auth.TokenValidationResponseB3Z1github.com/spacecomputerio/orbitport/agents/protob\x06proto3"
 
 var (
 	file_proto_auth_proto_rawDescOnce sync.Once

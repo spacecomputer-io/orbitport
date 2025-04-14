@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/spacecoinxyz/orbitport/agents/proto";
+option go_package = "github.com/spacecomputerio/orbitport/agents/proto";
 
 package auth;
 
