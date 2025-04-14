@@ -7,7 +7,7 @@ import (
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
 	"github.com/gin-gonic/gin"
 	adapter "github.com/gwatts/gin-adapter"
-	"github.com/spacecoinxyz/orbitport/internal/utils"
+	"github.com/spacecomputerio/orbitport/internal/utils"
 )
 
 func StaticTokenMiddleware(expectedToken string) gin.HandlerFunc {

@@ -13,7 +13,7 @@ import (
 	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/gin-gonic/gin"
 	adapter "github.com/gwatts/gin-adapter"
-	"github.com/spacecoinxyz/orbitport/internal/utils"
+	"github.com/spacecomputerio/orbitport/internal/utils"
 )
 
 // CustomClaims contains custom data we want from the token.

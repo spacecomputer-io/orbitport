@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/spacecoinxyz/orbitport/internal/config"
-	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-	"github.com/spacecoinxyz/orbitport/internal/randomness/providers/aptosorbital"
-	localrand "github.com/spacecoinxyz/orbitport/internal/randomness/providers/local"
-	"github.com/spacecoinxyz/orbitport/internal/utils"
+	"github.com/spacecomputerio/orbitport/internal/config"
+	randomness_common "github.com/spacecomputerio/orbitport/internal/randomness/common"
+	"github.com/spacecomputerio/orbitport/internal/randomness/providers/aptosorbital"
+	localrand "github.com/spacecomputerio/orbitport/internal/randomness/providers/local"
+	"github.com/spacecomputerio/orbitport/internal/utils"
 )
 
 const SEED_SIZE = 64

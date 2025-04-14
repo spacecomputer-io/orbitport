@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
+	randomness_common "github.com/spacecomputerio/orbitport/internal/randomness/common"
 )
 
 // trngSeedResponse is a wrapper for the response of the trng_seed endpoint, which is an array of trngSeed.

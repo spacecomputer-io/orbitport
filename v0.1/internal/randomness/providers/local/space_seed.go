@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
+	randomness_common "github.com/spacecomputerio/orbitport/internal/randomness/common"
 	"github.com/tyler-smith/go-bip32"
 )
 

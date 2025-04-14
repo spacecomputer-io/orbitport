@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/spacecoinxyz/orbitport/internal/api/auth"
-	"github.com/spacecoinxyz/orbitport/internal/config"
-	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-	"github.com/spacecoinxyz/orbitport/internal/utils"
+	"github.com/spacecomputerio/orbitport/internal/api/auth"
+	"github.com/spacecomputerio/orbitport/internal/config"
+	randomness_common "github.com/spacecomputerio/orbitport/internal/randomness/common"
+	"github.com/spacecomputerio/orbitport/internal/utils"
 )
 
 type Services struct {

@@ -3,7 +3,7 @@ package localrand
 import (
 	gocryptorand "crypto/rand"
 
-	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
+	randomness_common "github.com/spacecomputerio/orbitport/internal/randomness/common"
 )
 
 func GenerateLocalRandomSeed(n int) (*randomness_common.RandomSeed, error) {

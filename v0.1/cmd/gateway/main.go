@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	"github.com/gin-gonic/gin"
-	gateway_api "github.com/spacecoinxyz/orbitport/internal/api"
-	"github.com/spacecoinxyz/orbitport/internal/config"
-	"github.com/spacecoinxyz/orbitport/internal/monitoring"
-	"github.com/spacecoinxyz/orbitport/internal/randomness"
-	"github.com/spacecoinxyz/orbitport/internal/utils"
+	gateway_api "github.com/spacecomputerio/orbitport/internal/api"
+	"github.com/spacecomputerio/orbitport/internal/config"
+	"github.com/spacecomputerio/orbitport/internal/monitoring"
+	"github.com/spacecomputerio/orbitport/internal/randomness"
+	"github.com/spacecomputerio/orbitport/internal/utils"
 )
 
 func main() {

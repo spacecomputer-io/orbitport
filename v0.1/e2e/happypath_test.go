@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/spacecoinxyz/orbitport/internal/api/auth"
-	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
+	"github.com/spacecomputerio/orbitport/internal/api/auth"
+	randomness_common "github.com/spacecomputerio/orbitport/internal/randomness/common"
 )
 
 /// Run with:

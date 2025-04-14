@@ -22,15 +22,15 @@ Get an access token from auth0:
 
 ```bash
 curl --request POST \
-  --url https://op.spacecoin.xyz/oauth/token \
+  --url https://op.spacecomputer.io/oauth/token \
   --header 'content-type: application/json' \
-  --data '{"client_id":"${OP_CLIENT_ID}","client_secret":"${OP_CLIENT_SECRET}","audience":"https://op.spacecoin.xyz/api","grant_type":"client_credentials"}'
+  --data '{"client_id":"${OP_CLIENT_ID}","client_secret":"${OP_CLIENT_SECRET}","audience":"https://op.spacecomputer.io/api","grant_type":"client_credentials"}'
 ```
 
 Call rand_seed endpoint:
 
 ```bash
-curl --request GET --url https://op.spacecoin.xyz/api/v1/rand_seed --header 'authorization: Bearer ${ACCESS_TOKEN}'
+curl --request GET --url https://op.spacecomputer.io/api/v1/rand_seed --header 'authorization: Bearer ${ACCESS_TOKEN}'
 ```
 
 ### Dev Usage

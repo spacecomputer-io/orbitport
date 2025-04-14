@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
-	randomness_common "github.com/spacecoinxyz/orbitport/internal/randomness/common"
-	"github.com/spacecoinxyz/orbitport/internal/testutils"
-	"github.com/spacecoinxyz/orbitport/internal/utils"
+	randomness_common "github.com/spacecomputerio/orbitport/internal/randomness/common"
+	"github.com/spacecomputerio/orbitport/internal/testutils"
+	"github.com/spacecomputerio/orbitport/internal/utils"
 	"github.com/stretchr/testify/require"
 )
 

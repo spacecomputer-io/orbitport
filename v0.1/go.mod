@@ -1,4 +1,4 @@
-module github.com/spacecoinxyz/orbitport
+module github.com/spacecomputerio/orbitport
 
 go 1.23.4
 
