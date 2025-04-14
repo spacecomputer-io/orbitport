@@ -10,8 +10,8 @@ import (
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
 
-	"github.com/spacecoinxyz/orbitport/agents/pkg/utils"
-	"github.com/spacecoinxyz/orbitport/agents/proto"
+	"github.com/spacecomputerio/orbitport/agents/pkg/utils"
+	"github.com/spacecomputerio/orbitport/agents/proto"
 )
 
 // Agent implements the AuthAgentServer interface for the Auth0 API.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/spacecoinxyz/orbitport/agents/pkg/utils"
-	"github.com/spacecoinxyz/orbitport/agents/proto"
+	"github.com/spacecomputerio/orbitport/agents/pkg/utils"
+	"github.com/spacecomputerio/orbitport/agents/proto"
 )
 
 // Agent implements the interfaces for the Aptos Orbital API.

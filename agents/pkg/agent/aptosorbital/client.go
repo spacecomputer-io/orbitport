@@ -10,8 +10,8 @@ import (
 	"net/url"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/spacecoinxyz/orbitport/agents/pkg/oauth"
-	"github.com/spacecoinxyz/orbitport/agents/pkg/utils"
+	"github.com/spacecomputerio/orbitport/agents/pkg/oauth"
+	"github.com/spacecomputerio/orbitport/agents/pkg/utils"
 	"golang.org/x/time/rate"
 )
 

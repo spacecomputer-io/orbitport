@@ -1,4 +1,4 @@
-module github.com/spacecoinxyz/orbitport/agents
+module github.com/spacecomputerio/orbitport/agents
 
 go 1.24
 

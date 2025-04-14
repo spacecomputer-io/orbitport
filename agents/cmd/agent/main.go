@@ -7,12 +7,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/spacecoinxyz/orbitport/agents/pkg/agent/aptosorbital"
-	"github.com/spacecoinxyz/orbitport/agents/pkg/agent/auth"
-	"github.com/spacecoinxyz/orbitport/agents/pkg/core"
-	"github.com/spacecoinxyz/orbitport/agents/pkg/core/health"
-	"github.com/spacecoinxyz/orbitport/agents/pkg/utils"
-	"github.com/spacecoinxyz/orbitport/agents/proto"
+	"github.com/spacecomputerio/orbitport/agents/pkg/agent/aptosorbital"
+	"github.com/spacecomputerio/orbitport/agents/pkg/agent/auth"
+	"github.com/spacecomputerio/orbitport/agents/pkg/core"
+	"github.com/spacecomputerio/orbitport/agents/pkg/core/health"
+	"github.com/spacecomputerio/orbitport/agents/pkg/utils"
+	"github.com/spacecomputerio/orbitport/agents/proto"
 )
 
 func main() {

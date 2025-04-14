@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/spacecoinxyz/orbitport/agents/proto"
+	"github.com/spacecomputerio/orbitport/agents/proto"
 )
 
 // trngSeedResponse is a wrapper for the response of the trng_seed endpoint, which is an array of trngSeed.

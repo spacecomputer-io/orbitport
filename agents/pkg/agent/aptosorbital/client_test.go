@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/spacecoinxyz/orbitport/agents/pkg/testutils"
-	"github.com/spacecoinxyz/orbitport/agents/pkg/utils"
+	"github.com/spacecomputerio/orbitport/agents/pkg/testutils"
+	"github.com/spacecomputerio/orbitport/agents/pkg/utils"
 	"github.com/stretchr/testify/require"
 )
 
