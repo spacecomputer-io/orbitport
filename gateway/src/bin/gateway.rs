@@ -22,6 +22,12 @@ struct Args {
     default_master_seed: Option<String>,
     #[clap(long, env = "ORBITPORT_MASTER_SEED_INTERVAL")]
     master_seed_interval: Option<u64>,
+    /// Rate limit per access token, 4 requests per second
+    /// (40 requests per 10 seconds window)
+    #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
+    rate_limit: u32,
+    #[clap(long, env = "ORBITPORT_RATE_LIMIT_WINDOW", default_value = "10")]
+    rate_limit_window: u64,
 }
 
 impl Args {
@@ -61,7 +67,7 @@ async fn main() -> Result<(), OpRuntimeError> {
 
             let service_manager = Arc::new(service_manager);
             // Start the server
-            server::start(args.http_port, service_manager.clone()).await;
+            server::start(args.http_port, service_manager.clone(), args.rate_limit, args.rate_limit_window).await;
 
             let time_elapsed = start.elapsed();
             tracing::info!(

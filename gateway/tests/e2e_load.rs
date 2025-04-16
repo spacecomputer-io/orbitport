@@ -17,9 +17,9 @@ async fn test_e2e_load() {
     let base_url = env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string());
 
     let rps = env::var("OPTEST_RPS")
-        .unwrap_or("10".to_string())
+        .unwrap_or("4".to_string())
         .parse()
-        .unwrap_or(10);
+        .unwrap_or(4);
     let total_req: usize = env::var("OPTEST_TOTAL_REQ")
         .unwrap_or("100".to_string())
         .parse()
