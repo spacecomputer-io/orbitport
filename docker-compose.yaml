@@ -16,6 +16,14 @@ x-agent-base:
     start_period: 5s
 
 services:
+  agent-ipfs:
+    <<: *agent-base
+    container_name: agent-ipfs
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=ipfs
+      - ORBITPORT_GRPC_PORT=50002
+      - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
 
   agent-aptos-orbital:
     <<: *agent-base
@@ -36,6 +44,16 @@ services:
       - ORBITPORT_GRPC_PORT=50000
       - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
       - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
+      - ORBITPORT_IPFS_DATA_DIR=${ORBITPORT_IPFS_DATA_DIR}
+  ipfs-node:
+    image: ipfs/kubo:release
+    ports:
+      - "4001:4001"  # IPFS Swarm Port
+      - "5001:5001"  # IPFS API Port
+      - "8081:8080"  # IPFS Gateway Port
+    volumes:
+      - ${ORBITPORT_IPFS_DATA_DIR}:/data/ipfs
+    command: ["daemon", "--migrate=true"]
 
   gateway:
     container_name: gateway 

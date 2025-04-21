@@ -21,7 +21,17 @@ x-mocker-base:
       max-file: "3"
 
 services:
-
+  agent-ipfs:
+    <<: *agent-base
+    container_name: agent-ipfs
+    build:
+      context: ./agents
+    image: op-agent:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=ipfs
+      - ORBITPORT_GRPC_PORT=50002
+      - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
   aptos-orbital-api:
     <<: *mocker-base
     container_name: aptos-orbital-api
@@ -81,6 +91,16 @@ services:
       # - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
       # - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
 
+  ipfs-node:
+    image: ipfs/kubo:release
+    ports:
+      - "4001:4001"  # IPFS Swarm Port
+      - "5001:5001"  # IPFS API Port
+      - "8081:8080"  # IPFS Gateway Port
+    volumes:
+      - ./.data/ipfs_dev:/data/ipfs
+    command: ["daemon", "--migrate=true", "--offline"]
+
   gateway:
     container_name: gateway 
     image: op-gateway:latest
@@ -94,3 +114,4 @@ services:
       - ORBITPORT_DEFAULT_MASTER_SEED=${ORBITPORT_DEFAULT_MASTER_SEED}
     ports:
       - 8080:8080
+

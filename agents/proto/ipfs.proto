@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+option go_package = "github.com/spacecoinxyz/orbitport/agents/proto";
+
+package ipfs;
+
+service IpfsAgentService {
+    rpc Add(AddRequest) returns (AddResponse);
+    rpc Get(GetRequest) returns (GetResponse);
+    rpc Delete(DeleteRequest) returns (DeleteResponse);
+}
+
+message AddRequest {
+    bytes data = 1;
+    optional string ipns_name = 2;
+}
+
+message AddResponse {
+    string cid = 1;
+    optional string ipns_name = 2;
+}
+
+message GetRequest {
+    string key = 1;
+    string namespace = 2;
+}
+
+message GetResponse {
+    bytes data = 1;
+}
+
+message DeleteRequest {
+    string cid = 1;
+}
+
+message DeleteResponse {
+    bool success = 1;
+}

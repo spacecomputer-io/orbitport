@@ -9,6 +9,7 @@ import (
 
 	"github.com/spacecomputerio/orbitport/agents/pkg/agent/aptosorbital"
 	"github.com/spacecomputerio/orbitport/agents/pkg/agent/auth"
+	"github.com/spacecomputerio/orbitport/agents/pkg/agent/ipfs"
 	"github.com/spacecomputerio/orbitport/agents/pkg/core"
 	"github.com/spacecomputerio/orbitport/agents/pkg/core/health"
 	"github.com/spacecomputerio/orbitport/agents/pkg/utils"
@@ -41,6 +42,13 @@ func main() {
 		}
 		proto.RegisterAuthAgentServer(grpcServer, agent)
 		logger.Info("Auth agent ready")
+	case "ipfs":
+		agent, err := ipfs.NewAgent()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterIpfsAgentServiceServer(grpcServer, agent)
+		logger.Info("IPFS agent ready")
 	default:
 		panic("unknown agent")
 	}
