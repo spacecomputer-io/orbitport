@@ -1,0 +1,72 @@
+x-agent-base:
+  &agent-base
+  image: op-agent:latest
+  build:
+    context: ./agents
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 5s
+
+services:
+  agent-ipfs:
+    <<: *agent-base
+    container_name: agent-ipfs
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=ipfs
+      - ORBITPORT_GRPC_PORT=50002
+      - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
+
+  agent-aptos-orbital:
+    <<: *agent-base
+    container_name: agent-aptos-orbital
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=aptosorbital
+      - ORBITPORT_GRPC_PORT=50001
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=${ORBITPORT_APTOS_ORBITAL_CLIENT_ID}
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=${ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET}
+
+  agent-auth:
+    <<: *agent-base
+    container_name: agent-auth
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=auth
+      - ORBITPORT_GRPC_PORT=50000
+      - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
+      - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
+      - ORBITPORT_IPFS_DATA_DIR=${ORBITPORT_IPFS_DATA_DIR}
+  ipfs-node:
+    image: ipfs/kubo:release
+    ports:
+      - "4001:4001"  # IPFS Swarm Port
+      - "5001:5001"  # IPFS API Port
+      - "8081:8080"  # IPFS Gateway Port
+    volumes:
+      - ${ORBITPORT_IPFS_DATA_DIR}:/data/ipfs
+    command: ["daemon", "--migrate=true"]
+
+  gateway:
+    container_name: gateway 
+    image: op-gateway:latest
+    build:
+      context: ./gateway
+    environment:
+      - RUST_LOG=warn,orbitport=debug
+      - ORBITPORT_HTTP_PORT=8080
+      - ORBITPORT_AUTH_AGENT=http://agent-auth:50000
+      - ORBITPORT_TRNG_AGENT=http://agent-aptos-orbital:50001
+    depends_on:
+      - agent-aptos-orbital
+      - agent-auth
+    ports:
+      - 8080:8080

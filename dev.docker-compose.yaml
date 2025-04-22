@@ -1,0 +1,117 @@
+x-agent-base:
+  &agent-base
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 5s
+
+x-mocker-base:
+  &mocker-base
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  agent-ipfs:
+    <<: *agent-base
+    container_name: agent-ipfs
+    build:
+      context: ./agents
+    image: op-agent:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=ipfs
+      - ORBITPORT_GRPC_PORT=50002
+      - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
+  aptos-orbital-api:
+    <<: *mocker-base
+    container_name: aptos-orbital-api
+    build:
+      context: ./agents
+      args:
+        - BUILD_TARGET=mocker
+    image: op-mocker:latest
+    environment:
+      - OPMOCK_SERVICE=aptosorbital_api
+      - OPMOCK_PORT=8001
+      - OPMOCK_PROFILE=${OPMOCK_PROFILE}
+    depends_on:
+      - aptos-orbital-auth
+
+  aptos-orbital-auth:
+    <<: *mocker-base
+    container_name: aptos-orbital-auth
+    build:
+      context: ./agents
+      args:
+        - BUILD_TARGET=mocker
+    image: op-mocker:latest
+    environment:
+      - OPMOCK_SERVICE=aptosorbital_auth
+      - OPMOCK_PORT=8002
+
+  agent-aptos-orbital:
+    <<: *agent-base
+    container_name: agent-aptos-orbital
+    build:
+      context: ./agents
+    image: op-agent:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=aptosorbital
+      - ORBITPORT_GRPC_PORT=50001
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=2e4c704ae4d059e1
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=2e4c704ae4d059e1
+      - ORBITPORT_APTOS_ORBITAL_API_URL=http://aptos-orbital-api:8001
+      - ORBITPORT_APTOS_ORBITAL_AUTH_URL=http://aptos-orbital-auth:8002
+    depends_on:
+      - agent-auth
+      - aptos-orbital-api
+      - aptos-orbital-auth
+
+  agent-auth:
+    <<: *agent-base
+    container_name: agent-auth
+    build:
+      context: ./agents
+    image: op-agent:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_AGENT=auth
+      - ORBITPORT_GRPC_PORT=50000
+      # - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
+      # - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
+
+  ipfs-node:
+    image: ipfs/kubo:release
+    ports:
+      - "4001:4001"  # IPFS Swarm Port
+      - "5001:5001"  # IPFS API Port
+      - "8081:8080"  # IPFS Gateway Port
+    volumes:
+      - ./.data/ipfs_dev:/data/ipfs
+    command: ["daemon", "--migrate=true", "--offline"]
+
+  gateway:
+    container_name: gateway 
+    image: op-gateway:latest
+    build:
+      context: ./gateway
+    environment:
+      - RUST_LOG=warn,gateway=debug
+      - ORBITPORT_HTTP_PORT=8080
+      - ORBITPORT_AUTH_AGENT=http://agent-auth:50000
+      - ORBITPORT_TRNG_AGENT=http://agent-aptos-orbital:50001
+      - ORBITPORT_DEFAULT_MASTER_SEED=${ORBITPORT_DEFAULT_MASTER_SEED}
+    ports:
+      - 8080:8080
+

@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+option go_package = "github.com/spacecomputerio/orbitport/agents/proto";
+
+package auth;
+
+service AuthAgent {
+    rpc ValidateToken(TokenValidationRequest) returns (TokenValidationResponse); 
+}
+
+message TokenValidationRequest {
+    string token = 1;
+}
+
+message TokenValidationResponse {
+    bool ok = 1;
+}
