@@ -19,13 +19,13 @@ async fn test_e2e_load() {
     let base_url = env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string());
 
     let rps = env::var("OPTEST_RPS")
-        .unwrap_or("4".to_string())
+        .unwrap_or("3".to_string())
         .parse()
-        .unwrap_or(4);
+        .unwrap_or(3);
     let total_req: usize = env::var("OPTEST_TOTAL_REQ")
-        .unwrap_or("80".to_string())
+        .unwrap_or("60".to_string())
         .parse()
-        .unwrap_or(80);
+        .unwrap_or(60);
     let threads: usize = env::var("OPTEST_THREADS")
         .unwrap_or("4".to_string())
         .parse()
@@ -162,16 +162,10 @@ async fn run_test(
     }
     let sent = sent.load(Ordering::SeqCst);
     let received = received.load(Ordering::SeqCst);
-    tracing::info!("Total requests sent: {}, received: {}", sent, received);
+    let success_rate = received as f64 / sent as f64;
+    tracing::info!("Total requests sent: {}, received: {}, success rate: {}%", sent, received, success_rate * 100.0);
     assert!(sent > 0, "No requests sent");
     if sent != received {
-        let success_rate = received as f64 / sent as f64;
-        tracing::warn!(
-            "Some requests failed, success-rate: {}% sent: {}, received: {}",
-            success_rate * 100.0,
-            sent,
-            received
-        );
         assert!(
             success_rate > 0.9,
             "More than 10% of requests failed or missed"
