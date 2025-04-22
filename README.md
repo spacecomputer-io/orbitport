@@ -1,6 +1,6 @@
 # OrbitPort
 
-Orbitport is a gateway to orbital services such as `cTRNG` (cosmic True Random Number Generation) or `cTEE` (cosmic TEE).
+Orbitport is a gateway to orbital services such as `cTRNG` (cosmic True Random Number Generation) or `spaceTEE`.
 
 
 ## Getting Started
