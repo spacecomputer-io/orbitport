@@ -14,6 +14,8 @@ pub enum OpRuntimeError {
 struct Args {
     #[clap(short = 'p', long, env = "ORBITPORT_HTTP_PORT", default_value = "8080")]
     http_port: u16,
+    #[clap(long, env = "ORBITPORT_METRICS_PORT", default_value = "9100")]
+    metric_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_AGENT")]
     auth_agent: String,
     #[clap(long, env = "ORBITPORT_TRNG_AGENT")]
@@ -65,8 +67,12 @@ async fn main() -> Result<(), OpRuntimeError> {
                 args.master_seed_interval, args.default_master_seed,
             ).await.unwrap();
 
+            let metrics_port = args.metric_port;
+            tokio::spawn(async move {
+                server::start_metrics(metrics_port).await;
+            });
+
             let service_manager = Arc::new(service_manager);
-            // Start the server
             server::start(args.http_port, service_manager.clone(), args.rate_limit, args.rate_limit_window).await;
 
             let time_elapsed = start.elapsed();

@@ -13,6 +13,8 @@ pub mod ctx;
 pub mod logging;
 pub mod os_signals;
 
+pub mod metrics;
+
 pub mod server;
 pub mod service;
 pub mod service_manager;

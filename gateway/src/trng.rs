@@ -4,15 +4,14 @@ use rand::Rng as _;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tonic::transport::Channel;
 
+use crate::ctx;
+use crate::metrics;
 use crate::proto::trng::{
     TrngRequest, TrngResponse, randomness_agent_client::RandomnessAgentClient,
 };
-
 use crate::service::{
     ServiceError, ServiceHandler, ServiceRequest, ServiceResponse, ServiceResult, Signature,
 };
-
-use crate::ctx;
 
 use bip32::{ChildNumber, ExtendedPrivateKey, XPrv};
 
@@ -78,9 +77,13 @@ impl TrngService {
                     tracing::info!("Using master seed with {} bytes", master_seed.0.len());
                     master_seeds.push(master_seed);
                 }
+                metrics::TRNG_MASTER_SEEDS.set(master_seeds.len() as i64);
                 Arc::new(RwLock::new(master_seeds))
             }
-            None => Arc::new(RwLock::new(vec![])),
+            None => {
+                metrics::TRNG_MASTER_SEEDS.set(0);
+                Arc::new(RwLock::new(vec![]))
+            }
         };
         let master_seed_interval = master_seed_interval.unwrap_or(DEFAULT_MASTER_SEED_INTERVAL);
         if master_seed_interval > 0 {
@@ -111,6 +114,7 @@ impl TrngService {
                                         master_seeds.remove(0);
                                     }
                                     master_seeds.push(master_seed);
+                                    metrics::TRNG_MASTER_SEEDS.set(master_seeds.len() as i64);
                                 }
                                 Err(_) => {
                                     tracing::warn!("Failed to receive master seed");
@@ -189,7 +193,13 @@ impl ServiceHandler for TrngService {
                 tracing::warn!("Failed to get trng from aptos orbital: {}", e);
                 if svc_req.src.contains(&SRC_DERIVED_TRNG.to_string()) {
                     tracing::info!("Fallback to derived trng");
+                    metrics::TRNG_FALLBACKS_COUNTER
+                        .with_label_values(&["derived"])
+                        .inc();
                     let trng = self.fallback().await?;
+                    metrics::TRNG_FALLBACKS_COUNTER
+                        .with_label_values(&["ok"])
+                        .inc();
                     let response = to_service_response(svc_req.req_id, trng, SRC_DERIVED_TRNG);
                     return Ok(response);
                 }

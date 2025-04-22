@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, convert::Infallible, sync::Arc};
 use thiserror::Error;
 use tokio::{
     sync::Mutex,
@@ -14,6 +14,7 @@ use warp::{
     reject::Reject,
 };
 
+use crate::metrics;
 use crate::proto::auth::{
     TokenValidationRequest, TokenValidationResponse, auth_agent_client::AuthAgentClient,
 };
@@ -169,6 +170,33 @@ async fn rate_limit(
 
     Ok(())
 }
+
+/// Metrics endpoint handler, gathers metrics from the prometheus registry
+async fn metrics_handler() -> Result<impl Reply, Infallible> {
+    use prometheus::{Encoder, TextEncoder};
+    let encoder = TextEncoder::new();
+
+    let mut buffer = Vec::new();
+    let metric_families = prometheus::gather();
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    Ok(warp::http::Response::builder()
+        .header("Content-Type", encoder.format_type())
+        .body(buffer))
+}
+
+pub async fn start_metrics(metrics_port: u16) {
+    let metrics_route = warp::path!("metrics")
+        .and(warp::get())
+        .and_then(metrics_handler);
+
+    tracing::info!("Starting metrics endpoint on: :{}", metrics_port);
+
+    warp::serve(metrics_route)
+        .run(([0, 0, 0, 0], metrics_port))
+        .await;
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct QueryParams {
     src: Option<String>,
@@ -212,6 +240,8 @@ pub async fn start(
         .and(warp::query::<QueryParams>())
         .and(warp::any().map(move || service_manager_post_clone.clone()))
         .and_then(handle_post);
+
+    //
 
     let routes = get_route.or(post_route);
 
@@ -275,28 +305,51 @@ async fn handle_service_req(
     svc_req: ServiceRequest,
     service_manager: Arc<ServiceManager>,
 ) -> Result<impl Reply, Rejection> {
+    let timer: Instant = Instant::now();
+
     let req_id = svc_req.req_id;
+    let svc_name = svc_req.service.clone();
+    metrics::API_REQ_COUNTER
+        .with_label_values(&[&svc_name])
+        .inc();
     let response = timeout(Duration::from_secs(10), async {
         service_manager.handle(svc_req).await
     })
     .await;
 
+    let duration = timer.elapsed().as_secs_f64();
+    metrics::API_REQ_DURATION_SECONDS
+        .with_label_values(&[&svc_name])
+        .observe(duration);
+
     match response {
         Ok(Ok(res)) => match res.result {
             Ok(result) => {
+                metrics::API_REQ_OK_COUNTER
+                    .with_label_values(&[&svc_name])
+                    .inc();
                 tracing::debug!("[req={}] Got service result", req_id);
                 Ok(warp::reply::json(&result))
             }
             Err(e) => {
+                metrics::API_REQ_ERR_COUNTER
+                    .with_label_values(&[&svc_name])
+                    .inc();
                 tracing::error!("[req={}] Error result: {:?}", req_id, e);
                 Err(warp::reject::custom(e))
             }
         },
         Ok(Err(e)) => {
+            metrics::API_REQ_FAILED_COUNTER
+                .with_label_values(&[&svc_name])
+                .inc();
             tracing::error!("[req={}] Error routing request: {:?}", req_id, e);
             Err(warp::reject::custom(e))
         }
         Err(_) => {
+            metrics::API_REQ_TIMEOUT_COUNTER
+                .with_label_values(&[&svc_name])
+                .inc();
             tracing::error!("[req={}] Request timed out", req_id);
             Err(warp::reject::custom(ServiceError::ServiceTimeout))
         }
