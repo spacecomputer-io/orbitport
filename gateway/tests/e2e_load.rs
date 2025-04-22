@@ -163,7 +163,12 @@ async fn run_test(
     let sent = sent.load(Ordering::SeqCst);
     let received = received.load(Ordering::SeqCst);
     let success_rate = received as f64 / sent as f64;
-    tracing::info!("Total requests sent: {}, received: {}, success rate: {}%", sent, received, success_rate * 100.0);
+    tracing::info!(
+        "Total requests sent: {}, received: {}, success rate: {}%",
+        sent,
+        received,
+        success_rate * 100.0
+    );
     assert!(sent > 0, "No requests sent");
     if sent != received {
         assert!(
