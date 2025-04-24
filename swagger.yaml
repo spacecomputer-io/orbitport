@@ -1,0 +1,66 @@
+openapi: 3.0.0
+info:
+  title: OrbitPort API
+  version: 0.2.0
+  description: |
+    Orbitport is a gateway to orbital services such as `cTRNG` (cosmic True Random Number Generator) or `spaceTEE`.
+paths:
+  /api/v1/services/trng:
+    get:
+      summary: Cosmic True Random Number Generator
+      description: The cosmic True Random Number Generation (cTRNG) provides true random numbers harvested from hardware on satellites, or uses a cTRNG seed to derive random numbers.
+      parameters:
+        - in: query
+          name: src
+          schema:
+            type: array
+            items:
+              type: string
+          description: |
+            The gateway supports multiple sources of randomness:
+            1. **aptosorbital**: Space-based randomness provided by `cEDGE` or `Crypto2` satellites.
+            2. **derived**: Randomness derived from a cosmic TRNG (master seed) that is fetched continuously. The seed is used to generate more random numbers when satellites are not responsive, by using it as a seed for a BIP32 master key and deriving keys from it.
+      responses:
+        '200':
+          description: A cTRNG response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    description: A 32 byte chunk of random data as a hexadecimal string.
+                  signature:
+                    type: object
+                    description: The signature provided by the satellite.
+                    properties:
+                      value:
+                        type: string
+                        description: The signature value.
+                      pk:
+                        type: string
+                        description: The public key used for the signature.
+                      algo:
+                        type: string
+                        description: The algorithm used for the signature.
+              example:
+                service: "trng"
+                src: "aptosorbital"
+                data: "a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890"
+                signature: 
+                  value: "3046022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890"
+                  pk: ""
+                  algo: ""
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    description: Error message
+              example:
+                message: "Internal Server Error"
