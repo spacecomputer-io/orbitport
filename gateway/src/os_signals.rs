@@ -1,21 +1,16 @@
 use tokio::{select, signal};
 use tracing::debug;
 
-use thiserror::Error;
+use crate::common::GatewayError;
 
-#[derive(Error, Debug)]
-pub enum OsSignalsError {
-    #[error("Error while waiting for termination signal: {0}")]
-    TerminationError(String),
-}
-
-pub async fn wait_exit_signals() -> Result<(), OsSignalsError> {
+/// Wait for OS signals like SIGTERM, SIGINT, and SIGQUIT.
+pub async fn wait_exit_signals() -> Result<(), GatewayError> {
     let mut terminate = signal::unix::signal(signal::unix::SignalKind::terminate())
-        .map_err(|e| OsSignalsError::TerminationError(e.to_string()))?;
+        .map_err(|e| GatewayError::TerminationError(e.to_string()))?;
     let mut interrupt = signal::unix::signal(signal::unix::SignalKind::interrupt())
-        .map_err(|e| OsSignalsError::TerminationError(e.to_string()))?;
+        .map_err(|e| GatewayError::TerminationError(e.to_string()))?;
     let mut quit = signal::unix::signal(signal::unix::SignalKind::quit())
-        .map_err(|e| OsSignalsError::TerminationError(e.to_string()))?;
+        .map_err(|e| GatewayError::TerminationError(e.to_string()))?;
 
     select! {
         _ = terminate.recv() => {

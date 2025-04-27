@@ -30,4 +30,4 @@ jobs:
       run: cargo build --verbose
     - name: Run unit tests
       working-directory: ./gateway
-      run: cargo test -- --skip test_e2e
+      run: make test

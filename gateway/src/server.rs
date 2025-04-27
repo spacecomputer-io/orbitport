@@ -1,7 +1,6 @@
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, convert::Infallible, sync::Arc};
-use thiserror::Error;
 use tokio::{
     sync::Mutex,
     time::{Duration, Instant, timeout},
@@ -14,31 +13,16 @@ use warp::{
     reject::Reject,
 };
 
+use crate::common::GatewayError;
 use crate::metrics;
 use crate::proto::auth::{
     TokenValidationRequest, TokenValidationResponse, auth_agent_client::AuthAgentClient,
 };
-use crate::service::{ServiceError, ServiceRequest};
+use crate::service::ServiceRequest;
 use crate::service_manager::ServiceManager;
 use crate::trng::{SRC_APTOS_ORBITAL, SRC_DERIVED_TRNG};
 
-#[derive(Error, Debug)]
-pub enum GatewayError {
-    #[error("Missing Authorization header")]
-    NoAuthHeaderError,
-    #[error("Invalid Authorization header")]
-    InvalidAuthHeaderError,
-    #[error("Failed to connect to auth agent: {0}")]
-    AuthAgentConnectionError(String),
-    #[error("Failed to authenticate")]
-    AuthenticationFailed,
-    #[error("Rate limit exceeded")]
-    RateLimitExceeded,
-}
-
 impl Reject for GatewayError {}
-
-impl Reject for ServiceError {}
 
 const BEARER: &str = "Bearer ";
 
@@ -351,7 +335,7 @@ async fn handle_service_req(
                 .with_label_values(&[&svc_name])
                 .inc();
             tracing::error!("[req={}] Request timed out", req_id);
-            Err(warp::reject::custom(ServiceError::ServiceTimeout))
+            Err(warp::reject::custom(GatewayError::ServiceTimeout))
         }
     }
 }

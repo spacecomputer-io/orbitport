@@ -32,6 +32,9 @@ services:
       - ORBITPORT_AGENT=ipfs
       - ORBITPORT_GRPC_PORT=50002
       - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
+    ports:
+      - 50002:50002 # expose the port for integration tests
+
   aptos-orbital-api:
     <<: *mocker-base
     container_name: aptos-orbital-api

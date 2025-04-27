@@ -7,15 +7,22 @@ pub mod proto {
     pub mod trng {
         tonic::include_proto!("trng");
     }
+    pub mod ipfs {
+        tonic::include_proto!("ipfs");
+    }
 }
+
+pub mod common;
 
 pub mod ctx;
 pub mod logging;
 pub mod os_signals;
 
+pub mod block;
 pub mod metrics;
-
 pub mod server;
 pub mod service;
 pub mod service_manager;
+pub mod storage;
+pub mod structures;
 pub mod trng;

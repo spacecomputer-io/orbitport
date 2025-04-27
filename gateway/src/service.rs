@@ -1,23 +1,10 @@
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
+use crate::common::GatewayError;
+use crate::structures::service::ServiceResult;
 
 /// A trait representing a service that can handle service requests.
 pub trait ServiceHandler {
     #[allow(async_fn_in_trait)]
-    async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, ServiceError>;
-}
-
-/// Error type for service interaction
-#[derive(Error, Debug, Clone)]
-pub enum ServiceError {
-    #[error("Internal error: {0}")]
-    InternalError(String),
-    #[error("Service timeout")]
-    ServiceTimeout,
-    #[error("Service connection failed: {0}")]
-    ServiceConnectionError(String),
-    #[error("Service not found: {0}")]
-    ServiceNotFoundError(String),
+    async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, GatewayError>;
 }
 
 /// ServiceRequest is an internal struct that represents a request to a service.
@@ -43,32 +30,5 @@ pub struct ServiceRequest {
 #[derive(Debug, Clone)]
 pub struct ServiceResponse {
     pub req_id: u64,
-    pub result: Result<ServiceResult, ServiceError>,
-}
-
-/// Signature contains the signature, the public key, and the algorithm used for verification.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct Signature {
-    /// The signature bytes.
-    pub value: String,
-    /// The public key used to verify the signature.
-    pub pk: String,
-    /// The algorithm used for signing (e.g., "ed25519", "rsa", "ecdsa").
-    pub algo: String,
-}
-
-/// ServiceResult is the result of a service call.
-/// It contains the source of the service, the data returned by the service,
-/// and the signature of the service.
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct ServiceResult {
-    /// The service that was called.
-    pub service: String,
-    /// The source of the service.
-    /// This is the service provider that provided the data.
-    pub src: String,
-    /// The data returned by the service.
-    pub data: String,
-    /// The signature is used to verify the authenticity of the data.
-    pub signature: Signature,
+    pub result: Result<ServiceResult, GatewayError>,
 }

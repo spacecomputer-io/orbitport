@@ -4,14 +4,14 @@ use rand::Rng as _;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tonic::transport::Channel;
 
+use crate::common::GatewayError;
 use crate::ctx;
 use crate::metrics;
 use crate::proto::trng::{
     TrngRequest, TrngResponse, randomness_agent_client::RandomnessAgentClient,
 };
-use crate::service::{
-    ServiceError, ServiceHandler, ServiceRequest, ServiceResponse, ServiceResult, Signature,
-};
+use crate::service::{ServiceHandler, ServiceRequest, ServiceResponse};
+use crate::structures::service::{ServiceResult, Signature};
 
 use bip32::{ChildNumber, ExtendedPrivateKey, XPrv};
 
@@ -37,7 +37,7 @@ const MAX_MASTER_SEEDS: usize = 10;
 #[derive(Error, Debug)]
 pub enum TrngError {
     #[error("Trng service error: {0}")]
-    ServiceError(#[from] ServiceError),
+    GatewayError(#[from] GatewayError),
     #[error("Failed to derive TRN from master seed: {0}")]
     MasterSeedDerivationError(String),
 }
@@ -66,7 +66,7 @@ impl TrngService {
             .await
             .map_err(|e| {
                 tracing::error!("Failed to connect to randomness agent: {}", e);
-                TrngError::ServiceError(ServiceError::ServiceConnectionError(e.to_string()))
+                TrngError::GatewayError(GatewayError::ServiceConnectionError(e.to_string()))
             })?;
         let master_seeds = match master_seed {
             Some(seed) => {
@@ -148,7 +148,7 @@ impl TrngService {
         Some(master_seeds[index].clone())
     }
 
-    async fn fallback(&mut self) -> Result<TrngResponse, ServiceError> {
+    async fn fallback(&mut self) -> Result<TrngResponse, GatewayError> {
         if let Some(master_seed) = self.get_next_master_seed() {
             let mut rng = rand::rng();
             let index = rng.random_range(0..ChildNumber::HARDENED_FLAG);
@@ -163,14 +163,14 @@ impl TrngService {
                 }
                 Err(e) => {
                     tracing::error!("Failed to derive key from master seed: {}", e);
-                    Err(ServiceError::InternalError(
+                    Err(GatewayError::InternalError(
                         "Failed to derive key".to_string(),
                     ))
                 }
             }
         } else {
             tracing::error!("No master seed available");
-            Err(ServiceError::InternalError(
+            Err(GatewayError::InternalError(
                 "No master seed available".to_string(),
             ))
         }
@@ -178,7 +178,7 @@ impl TrngService {
 }
 
 impl ServiceHandler for TrngService {
-    async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, ServiceError> {
+    async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, GatewayError> {
         tracing::info!(
             "Received request for service: {}, src: {:?}",
             svc_req.service,
@@ -211,7 +211,7 @@ impl ServiceHandler for TrngService {
 
 async fn get_trng(
     mut client: RandomnessAgentClient<Channel>,
-) -> Result<TrngResponse, ServiceError> {
+) -> Result<TrngResponse, GatewayError> {
     let request = TrngRequest {
         ignore_sig: false,
         chunks: 1,
@@ -221,7 +221,7 @@ async fn get_trng(
         .await
         .map_err(|e| {
             tracing::warn!("Failed to get trng: {}", e);
-            ServiceError::InternalError("Failed to get trng".to_string())
+            GatewayError::InternalError("Failed to get trng".to_string())
         })?
         .into_inner();
     Ok(trng)

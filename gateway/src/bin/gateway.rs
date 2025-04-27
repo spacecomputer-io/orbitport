@@ -1,14 +1,7 @@
 use clap::Parser;
 use std::sync::Arc;
-use thiserror::Error;
 
-use gateway::{ctx, logging, os_signals, server, service_manager};
-
-#[derive(Error, Debug)]
-pub enum OpRuntimeError {
-    #[error("Internal error: {0}")]
-    InternalError(String),
-}
+use gateway::{common::GatewayError, ctx, logging, os_signals, server, service_manager};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -41,7 +34,7 @@ impl Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), OpRuntimeError> {
+async fn main() -> Result<(), GatewayError> {
     let _log_guard = logging::initialize_logging();
 
     let start = std::time::Instant::now();

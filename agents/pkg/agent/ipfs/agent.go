@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/ipfs/boxo/ipns"
 	"github.com/ipfs/boxo/path"
 	"github.com/ipfs/go-cid"
 	"github.com/ipfs/kubo/client/rpc"
@@ -21,10 +23,13 @@ import (
 )
 
 type Agent struct {
-	agentsproto.IpfsAgentServiceServer
+	agentsproto.IpfsAgentServer
 
-	node  *rpc.HttpApi
-	cache *lru.Cache
+	node      *rpc.HttpApi
+	cache     *lru.Cache
+	ipnsCache *lru.Cache
+
+	leaseDuration time.Duration
 }
 
 // NewAgent creates a new IPFS agent with a storage layer.
@@ -54,15 +59,23 @@ func NewAgent() (*Agent, error) {
 
 	logger.Info("IPFS agent created")
 
-	cache, err := lru.New(cfg.CacheSize)
+	cache, err := lru.New(int(cfg.CacheSize))
 	if err != nil {
 		logger.Warnf("failed to create cache: %s", err)
 		return nil, err
 	}
 
+	ipnsCache, err := lru.New(int(cfg.CacheSize / 2))
+	if err != nil {
+		logger.Warnf("failed to create IPNS cache: %s", err)
+		return nil, err
+	}
+
 	return &Agent{
-		node:  node,
-		cache: cache,
+		node:          node,
+		cache:         cache,
+		ipnsCache:     ipnsCache,
+		leaseDuration: cfg.LeaseDuration,
 	}, nil
 }
 
@@ -76,71 +89,43 @@ func (a *Agent) Add(ctx context.Context, req *agentsproto.AddRequest) (*agentspr
 		logger.Warnf("failed to add data: %s", err)
 		return nil, err
 	}
+	// pin the added block
+	if err := a.node.Pin().Add(ctx, block.Path()); err != nil {
+		logger.Warnf("failed to pin cid (%s): %s", block.Path().RootCid(), err)
+		return nil, err
+	}
 
-	var updatedIpnsName *string
+	var ipnsName string
 
-	// if ipns name is provided, publish the newly created CID to this name
-	if req.IpnsName != nil {
-		resolved, err := a.node.Name().Resolve(ctx, *req.IpnsName)
+	// publish on IPNS if a name is provided
+	publishName := req.PublishName
+	if publishName != nil && len(*publishName) > 0 {
+		name := *publishName
+		_, err := a.resolveOrGenerateKey(ctx, name)
 		if err != nil {
-			logger.Warnf("failed to resolve name: %s", err)
 			return nil, err
 		}
-
-		// if key exists, update the mutable link
-		if resolved != nil {
-			logger.Infof("updating existing name: %s", req.IpnsName)
-			key, err := a.keyForName(ctx, *req.IpnsName)
-			if err != nil {
-				logger.Errorf("failed to get key for name, but must exist: %s", err)
-				return nil, err
-			}
-
-			logger.Debugf("publishing using key: %s", key.Name())
-
-			// update the value for the existing name
-			_, err = a.node.Name().Publish(ctx, block.Path(), options.Name.Key(key.Name()))
-			if err != nil {
-				logger.Warnf("failed to update name: %s", err)
-				return nil, err
-			}
-
-			logger.Infof("updated name: %s", req.IpnsName)
-
-			updatedIpnsName = req.IpnsName
+		if updatedName, err := a.publish(ctx, block.Path(), name); err != nil {
+			logger.Warnf("failed to publish (%s): %s", name, err)
+			return nil, err
 		} else {
-			logger.Infof("name does not exist, creating new one: %s", req.IpnsName)
-
-			key, err := a.node.Key().Generate(ctx, *req.IpnsName)
-			if err != nil {
-				logger.Warnf("failed to generate key: %s", err)
-				return nil, err
-			}
-
-			logger.Debugf("generated key: %s", key.Name())
-
-			// publish the newly created key
-			name, err := a.node.Name().Publish(ctx, block.Path(), options.Name.Key(key.Name()))
-			if err != nil {
-				logger.Warnf("failed to publish key: %s", err)
-				return nil, err
-			}
-
-			logger.Infof("published name: %s", name)
+			ipnsName = updatedName.String()
 		}
 	}
 
 	path := block.Path()
 
-	logger.Infof("caching data for path: %s. Data size: %d", path.String(), len(req.Data))
-
+	logger.Debugf("caching data for path: %s. Data size: %d", path.String(), len(req.Data))
 	// add to cache
 	a.cache.Add(path.String(), req.Data)
 
-	return &agentsproto.AddResponse{
-		Cid:      path.RootCid().String(),
-		IpnsName: updatedIpnsName,
-	}, nil
+	resp := &agentsproto.AddResponse{
+		Cid: path.RootCid().String(),
+	}
+	if len(ipnsName) > 0 {
+		resp.IpnsName = &ipnsName
+	}
+	return resp, nil
 }
 
 // Get implements the Get RPC method.
@@ -149,26 +134,36 @@ func (a *Agent) Get(ctx context.Context, req *agentsproto.GetRequest) (*agentspr
 	logger.Infof("Getting data from IPFS for key: %s. Namespace: %s", req.Key, req.Namespace)
 
 	var p path.Path
-	if req.Namespace == "ipns" {
-		// resolve by name
-		resolved, err := a.node.Name().Resolve(ctx, req.Key)
-		if err != nil {
-			logger.Warnf("failed to resolve name (does it exist?): %s", err)
-			return nil, err
-		}
-
-		p = resolved
-	} else {
+	switch req.Namespace {
+	case "ipfs":
 		// resolve by cid
 		cid, err := cid.Decode(req.Key)
 		if err != nil {
-			logger.Warnf("failed to decode cid: %s", err)
+			logger.Warnf("failed to decode cid (%s): %s", req.Key, err)
 			return nil, err
 		}
-
 		p = path.FromCid(cid)
+	case "ipns": // resolve by name
+		name := req.Key
+		// check if the name is in the cache
+		if resolved, ok := a.ipnsCache.Get(name); ok {
+			logger.Debugf("found in cache: %s", name)
+			p = resolved.(path.Path)
+		} else {
+			// resolve by name
+			resolved, err := a.node.Name().Resolve(ctx, name)
+			if err != nil {
+				logger.Warnf("failed to resolve name (does it exist?): %s", err)
+				return nil, err
+			}
+			p = resolved
+			a.ipnsCache.Add(name, p)
+			logger.Debugf("resolved path for name: %s", name)
+		}
+	default:
+		logger.Warnf("unknown namespace: %s", req.Namespace)
+		return nil, fmt.Errorf("unknown namespace: %s", req.Namespace)
 	}
-
 	logger.Debugf("resolved path: %s", p.String())
 
 	// get the data
@@ -180,6 +175,31 @@ func (a *Agent) Get(ctx context.Context, req *agentsproto.GetRequest) (*agentspr
 
 	return &agentsproto.GetResponse{
 		Data: data,
+	}, nil
+}
+
+func (a *Agent) Publish(ctx context.Context, req *agentsproto.PublishRequest) (*agentsproto.PublishResponse, error) {
+	logger := utils.GetLogger("orbitport:ipfs")
+
+	logger.Infof("Publishing %s on IPNS (%s)", req.Cid, req.PublishName)
+
+	key, err := a.resolveOrGenerateKey(ctx, req.PublishName)
+	if err != nil {
+		return nil, err
+	}
+	cid, err := cid.Decode(req.Cid)
+	if err != nil {
+		logger.Warnf("failed to decode cid (%s): %s", req.Cid, err)
+		return nil, err
+	}
+	updatedName, err := a.publish(ctx, path.FromCid(cid), key.Name())
+	if err != nil {
+		logger.Warnf("failed to publish (%s): %s", key.Name(), err)
+		return nil, err
+	}
+	logger.Infof("published %s", updatedName)
+	return &agentsproto.PublishResponse{
+		IpnsName: updatedName.String(),
 	}, nil
 }
 
@@ -211,6 +231,54 @@ func (a *Agent) Delete(ctx context.Context, req *agentsproto.DeleteRequest) (*ag
 	return &agentsproto.DeleteResponse{
 		Success: true,
 	}, nil
+}
+
+func (a *Agent) resolveOrGenerateKey(ctx context.Context, name string) (iface.Key, error) {
+	logger := utils.GetLogger("orbitport:ipfs")
+
+	resolved, _ := a.node.Name().Resolve(ctx, name)
+	// if key exists, update the mutable link
+	if resolved != nil {
+		logger.Infof("updating existing name: %s", name)
+		key, err := a.keyForName(ctx, name)
+		if err != nil {
+			logger.Warnf("failed to get key for name: %s", err)
+			return nil, err
+		}
+		return key, nil
+	}
+
+	logger.Infof("name does not exist, creating new one: %s", name)
+	key, err := a.node.Key().Generate(ctx, name)
+	if err != nil {
+		logger.Warnf("failed to generate key: %s", err)
+		return nil, err
+	}
+	return key, nil
+}
+
+// publish publishes the data on IPNS using the provided name.
+// NOTE: assuming a key for the given name already exists
+func (a *Agent) publish(ctx context.Context, p path.Path, name string) (*ipns.Name, error) {
+	logger := utils.GetLogger("orbitport:ipfs")
+
+	logger.Infof("Publishing on IPNS (%s): %s", name, p)
+
+	published, err := a.node.Name().Publish(ctx, p,
+		options.Name.Key(name),
+		options.Name.AllowOffline(true),
+		options.Name.ValidTime(a.leaseDuration),
+	)
+	if err != nil {
+		logger.Warnf("failed to publish data: %s", err)
+		return nil, err
+	}
+
+	// cache the published name
+	_ = a.ipnsCache.Add(name, p)
+	logger.Infof("published %s", published.AsPath())
+
+	return &published, nil
 }
 
 func (a *Agent) getByPath(ctx context.Context, path path.Path) ([]byte, error) {

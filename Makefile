@@ -23,6 +23,9 @@ build: protoc
 	@cd agents && make build
 	@cd gateway && make build
 
+integration:
+	@cd gateway && RUST_LOG=info cargo test --test int_*
+
 e2e:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_${E2E_PROFILE} --features localtest
 
@@ -49,6 +52,7 @@ help:
 	@echo "  lint            Run linters"
 	@echo "  fmt             Format code"
 	@echo "  build           Build the project"
+	@echo "  integration      Run integration tests"
 	@echo "  e2e             Run end-to-end tests including setup"
 	@echo "  e2e-lazy        Run end-to-end tests without setup"
 	@echo "  devenv-up       Start development environment"

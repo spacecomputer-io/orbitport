@@ -2,7 +2,7 @@ use std::env;
 use thiserror::Error;
 use tokio::process::Command;
 
-use gateway::service::ServiceResult;
+use gateway::structures::service::ServiceResult;
 
 /// Error type for end-to-end tests
 #[allow(dead_code)]

@@ -1,24 +1,29 @@
 package ipfs
 
 import (
+	"time"
+
 	"github.com/spf13/viper"
 )
 
 type Config struct {
-	IPFSAddress string `json:"ipfs_address"`
-	CacheSize   int    `json:"cache_size"`
+	IPFSAddress   string        `json:"ipfs_address"`
+	CacheSize     uint          `json:"cache_size"`
+	LeaseDuration time.Duration `json:"lease_duration"`
 }
 
 func readFromEnv() *Config {
 	setDefaults()
 
 	return &Config{
-		IPFSAddress: viper.GetString("ORBITPORT_IPFS_ADDRESS"),
-		CacheSize:   viper.GetInt("ORBITPORT_IPFS_AGENT_CACHE_SIZE"),
+		IPFSAddress:   viper.GetString("IPFS_ADDRESS"),
+		CacheSize:     viper.GetUint("AGENT_CACHE_SIZE"),
+		LeaseDuration: viper.GetDuration("IPNS_LEASE_DURATION"),
 	}
 }
 
 func setDefaults() {
-	viper.SetDefault("ORBITPORT_IPFS_ADDRESS", "http://localhost:5001")
-	viper.SetDefault("ORBITPORT_IPFS_AGENT_CACHE_SIZE", 100)
+	viper.SetDefault("IPFS_ADDRESS", "http://localhost:5001")
+	viper.SetDefault("AGENT_CACHE_SIZE", 100)
+	viper.SetDefault("IPNS_LEASE_DURATION", time.Hour*24)
 }

@@ -47,7 +47,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		proto.RegisterIpfsAgentServiceServer(grpcServer, agent)
+		proto.RegisterIpfsAgentServer(grpcServer, agent)
 		logger.Info("IPFS agent ready")
 	default:
 		panic("unknown agent")
