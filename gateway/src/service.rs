@@ -21,6 +21,8 @@ pub struct ServiceRequest {
     pub service: String,
     /// The service provider/s to use.
     pub src: Vec<String>,
+    /// The number of items to return
+    pub bulk: Option<usize>,
     /// Arguments for the service in a vector of [(key, value), ...]
     pub args: Option<Vec<(String, String)>>,
 }

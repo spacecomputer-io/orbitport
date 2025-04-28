@@ -123,7 +123,7 @@ async fn run_test(
 
                 handles.push(tokio::spawn(async move {
                     sent.fetch_add(1, Ordering::SeqCst);
-                    match common::get_trng(&base_url, &access_token, None).await {
+                    match common::get_trng(&base_url, &access_token, None, None).await {
                         Ok(resp) => {
                             assert!(resp.data.len() > 0, "Response data is empty");
                             received.fetch_add(1, Ordering::SeqCst);

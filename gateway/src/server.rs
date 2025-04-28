@@ -26,6 +26,8 @@ impl Reject for GatewayError {}
 
 const BEARER: &str = "Bearer ";
 
+const MAX_BULK_SIZE: usize = 10;
+
 /// Rate limit structure
 pub type RateLimit = (u32, Instant);
 /// Rate limit items
@@ -183,19 +185,25 @@ pub async fn start_metrics(metrics_port: u16) {
 
 #[derive(Debug, Clone, Deserialize)]
 struct QueryParams {
+    /// The source of the service, i.e. the service provider
     src: Option<String>,
+    /// The number of derived items to return
+    bulk: Option<usize>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct PostBody {
+    /// The source of the service, i.e. the service provider
     src: Option<String>,
+    /// The number of derived items to return
+    bulk: Option<usize>,
+    /// The arguments for the service
+    /// in a vector of [(key, value), ...]
     args: Option<Vec<(String, String)>>,
 }
 
 /// Starts the gateway server, returns a future that resolves when the server stops or fails
 /// It exposes the following enpoints:
-/// `GET /api/v1/services/{service}?src={service_provider}` -> invoke some service with the given provider
-/// `POST /api/v1/services/{service} {src: ["{service_provider}"], args: [["{arg_name}", "{arg_value}"], ...]}` -> invoke some service with the given provider
 pub async fn start(
     http_port: u16,
     service_manager: Arc<ServiceManager>,
@@ -252,10 +260,18 @@ async fn handle_get(
     } else {
         vec![SRC_APTOS_ORBITAL.to_string(), SRC_DERIVED_TRNG.to_string()]
     };
+    if let Some(b) = query.bulk {
+        if b > MAX_BULK_SIZE {
+            return Err(warp::reject::custom(GatewayError::BadRequest(
+                "Bulk size exceeds maximum limit".to_string(),
+            )));
+        }
+    }
     let svc_req = ServiceRequest {
         req_id,
         service,
         src,
+        bulk: query.bulk,
         args: None,
     };
     handle_service_req(svc_req, service_manager.clone()).await
@@ -275,11 +291,24 @@ async fn handle_post(
     } else {
         query.src.unwrap_or(SRC_APTOS_ORBITAL.to_string()).clone()
     };
+    let bulk = if let Some(b) = body.bulk {
+        Some(b)
+    } else {
+        query.bulk
+    };
+    if let Some(b) = bulk {
+        if b > MAX_BULK_SIZE {
+            return Err(warp::reject::custom(GatewayError::BadRequest(
+                "Bulk size exceeds maximum limit".to_string(),
+            )));
+        }
+    }
     let args = body.args.clone();
     let svc_req = ServiceRequest {
         req_id,
         service,
         src: vec![src],
+        bulk,
         args,
     };
     handle_service_req(svc_req, service_manager.clone()).await

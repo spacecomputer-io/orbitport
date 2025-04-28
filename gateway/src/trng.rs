@@ -180,13 +180,22 @@ impl TrngService {
 impl ServiceHandler for TrngService {
     async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, GatewayError> {
         tracing::info!(
-            "Received request for service: {}, src: {:?}",
+            "Received request ({}) for service: {}, src: {:?}, bulk: {:?}",
+            svc_req.req_id,
             svc_req.service,
-            svc_req.src
+            svc_req.src,
+            svc_req.bulk
         );
         match get_trng(self.aptos_orbital_client.clone()).await {
             Ok(trng) => {
-                let response = to_service_response(svc_req.req_id, trng, SRC_APTOS_ORBITAL);
+                let bulk_results = if svc_req.bulk.is_some() {
+                    let master_seed = MasterSeed(trng.value.clone());
+                    derive_results(master_seed, svc_req.bulk.unwrap()).await?
+                } else {
+                    vec![]
+                };
+                let response =
+                    to_service_response(svc_req.req_id, trng, SRC_APTOS_ORBITAL, bulk_results);
                 Ok(response)
             }
             Err(e) => {
@@ -200,13 +209,49 @@ impl ServiceHandler for TrngService {
                     metrics::TRNG_FALLBACKS_COUNTER
                         .with_label_values(&["ok"])
                         .inc();
-                    let response = to_service_response(svc_req.req_id, trng, SRC_DERIVED_TRNG);
+                    let bulk_results = if svc_req.bulk.is_some() {
+                        let master_seed = MasterSeed(trng.value.clone());
+                        derive_results(master_seed, svc_req.bulk.unwrap()).await?
+                    } else {
+                        vec![]
+                    };
+                    let response =
+                        to_service_response(svc_req.req_id, trng, SRC_DERIVED_TRNG, bulk_results);
                     return Ok(response);
                 }
                 Err(e)
             }
         }
     }
+}
+
+async fn derive_results(
+    master_seed: MasterSeed,
+    bulk: usize,
+) -> Result<Vec<ServiceResult>, GatewayError> {
+    let mut results = vec![];
+    for i in 0..bulk {
+        let derived_key = master_seed.derive(i as u32);
+        if derived_key.is_err() {
+            tracing::error!("Failed to derive key from master");
+            return Err(GatewayError::InternalError(
+                "Failed to derive key from master".to_string(),
+            ));
+        }
+        let derived_trng = to_trng(derived_key.unwrap());
+        results.push(ServiceResult {
+            service: SERVICE_TRNG.to_string(),
+            src: SRC_DERIVED_TRNG.to_string(),
+            data: derived_trng,
+            signature: Signature {
+                value: "".to_string(), // TODO: Add signature
+                pk: "".to_string(),    // TODO: Add public key
+                algo: None,
+            },
+            bulk: None,
+        });
+    }
+    Ok(results)
 }
 
 async fn get_trng(
@@ -310,7 +355,17 @@ fn to_trng(key: Vec<u8>) -> String {
     hex::encode(&key[..TRNG_SIZE])
 }
 
-fn to_service_response(req_id: u64, trng: TrngResponse, src: &str) -> ServiceResponse {
+fn to_service_response(
+    req_id: u64,
+    trng: TrngResponse,
+    src: &str,
+    bulk_results: Vec<ServiceResult>,
+) -> ServiceResponse {
+    let bulk = if bulk_results.is_empty() {
+        None
+    } else {
+        Some(bulk_results)
+    };
     ServiceResponse {
         req_id,
         result: Ok(ServiceResult {
@@ -319,9 +374,10 @@ fn to_service_response(req_id: u64, trng: TrngResponse, src: &str) -> ServiceRes
             data: trng.value.clone(),
             signature: Signature {
                 value: trng.sig.clone(),
-                pk: "".to_string(),
-                algo: "".to_string(),
+                pk: "".to_string(), // TODO: Add public key
+                algo: None,
             },
+            bulk,
         }),
     }
 }
@@ -364,5 +420,21 @@ mod tests {
             derived_key,
             "0224c02f4c886f8fe38037df5b8f674d75150246a1e1e0628b373927f7df35ab".to_string()
         );
+    }
+
+    #[tokio::test]
+    async fn test_derive_results() {
+        let master_seed = MasterSeed(
+            "a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890".to_string(),
+        );
+        let results = derive_results(master_seed, 10).await.unwrap();
+        assert_eq!(results.len(), 10);
+        let results_json = serde_json::to_string(&results).unwrap();
+        tracing::debug!("Derived results JSON: {}", results_json);
+        for result in results {
+            assert_eq!(result.service, SERVICE_TRNG.to_string());
+            assert_eq!(result.src, SRC_DERIVED_TRNG.to_string());
+            assert_eq!(result.bulk.is_none(), true);
+        }
     }
 }

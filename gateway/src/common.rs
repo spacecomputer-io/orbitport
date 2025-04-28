@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]
 pub enum GatewayError {
+    #[error("Invalid request: {0}")]
+    BadRequest(String),
     #[error("Internal error: {0}")]
     InternalError(String),
     #[error("Service timeout")]

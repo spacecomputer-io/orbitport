@@ -23,6 +23,7 @@ pub async fn get_trng(
     base_url: &str,
     access_token: &str,
     src: Option<Vec<String>>,
+    bulk: Option<usize>,
 ) -> Result<ServiceResult, E2EError> {
     let srcs = src.unwrap_or(vec![]);
     let src = srcs
@@ -33,9 +34,14 @@ pub async fn get_trng(
     let client = reqwest::Client::new();
     let start_time = std::time::Instant::now();
     tracing::debug!("Making request to gateway with src: {}", src);
-
+    let bulk = bulk.unwrap_or(0);
+    let bulk = if bulk > 0 {
+        format!("bulk={bulk}")
+    } else {
+        String::new()
+    };
     let response = client
-        .get(format!("{base_url}/api/v1/services/trng?{src}"))
+        .get(format!("{base_url}/api/v1/services/trng?{src}&{bulk}"))
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
         .bearer_auth(access_token)

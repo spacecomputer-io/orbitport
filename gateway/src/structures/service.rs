@@ -8,7 +8,8 @@ pub struct Signature {
     /// The public key used to verify the signature.
     pub pk: String,
     /// The algorithm used for signing (e.g., "ed25519", "rsa", "ecdsa").
-    pub algo: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub algo: Option<String>,
 }
 
 /// ServiceResult is the result of a service call.
@@ -25,4 +26,7 @@ pub struct ServiceResult {
     pub data: String,
     /// The signature is used to verify the authenticity of the data.
     pub signature: Signature,
+    /// Derived results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bulk: Option<Vec<ServiceResult>>,
 }
