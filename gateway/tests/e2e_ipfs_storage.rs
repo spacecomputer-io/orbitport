@@ -7,7 +7,7 @@ use gateway::storage::{
 use gateway::structures::block::Block;
 
 #[tokio::test]
-async fn test_integration_ipfs() {
+async fn test_e2e_ipfs_storage() {
     tracing_subscriber::fmt::init();
 
     let ipfs_agent_url =

@@ -6,7 +6,7 @@ RUST_LOG?=debug
 CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl 
 
 test:
-	@cargo test -- --skip test_e2e --skip test_integration
+	@cargo test -- --skip test_e2e
 
 fmt:
 	@cargo fmt

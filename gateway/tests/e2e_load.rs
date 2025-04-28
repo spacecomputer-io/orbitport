@@ -31,7 +31,9 @@ async fn test_e2e_load() {
         .parse()
         .unwrap_or(4);
 
-    tracing::info!("Starting e2e happy path test with base_url: {base_url}");
+    tracing::info!(
+        "Starting e2e load test with base_url: {base_url}; req per second (per thread): {rps}; total_req: {total_req}; threads: {threads}"
+    );
 
     #[cfg(feature = "localtest")]
     let started = common::pre_test("happy").await.unwrap();
@@ -39,7 +41,7 @@ async fn test_e2e_load() {
     let result = async {
         let mut handles = vec![];
         for i in 0..threads {
-            tracing::info!("Starting thread {i}");
+            tracing::debug!("Starting thread {i}");
             let access_token = access_token.clone();
             let base_url = base_url.clone();
             let rps = rps;
@@ -61,7 +63,7 @@ async fn test_e2e_load() {
         for handle in handles {
             match handle.await {
                 Ok(Ok(())) => {
-                    tracing::info!("Thread completed successfully");
+                    tracing::debug!("Thread completed successfully");
                 }
                 Ok(Err(e)) => {
                     tracing::warn!("Thread failed: {:?}", e);
@@ -141,13 +143,13 @@ async fn run_test(
 
         tokio::select! {
             _ = handle => {
-                tracing::info!("All requests completed successfully");
+                tracing::debug!("All requests completed successfully");
             }
             _ = tokio::time::sleep(interval) => {
             }
         }
 
-        tracing::info!(
+        tracing::debug!(
             "Round completed: sent: {}, received: {}",
             sent_round.load(Ordering::SeqCst),
             received_round.load(Ordering::SeqCst)

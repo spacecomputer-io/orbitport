@@ -36,21 +36,9 @@ jobs:
           make devenv-up
         continue-on-error: false
 
-      - name: Run integration tests
+      - name: Run e2e tests
         run: |
-          make integration
-
-      - name: Run e2e test (happy path)
-        run: |
-          make E2E_PROFILE=happy e2e-lazy
-
-      - name: Run e2e test (offline)
-        run: |
-          make E2E_PROFILE=offline e2e-lazy
-
-      - name: Run e2e test (load)
-        run: |
-          make E2E_PROFILE=load e2e-lazy
+          make e2e-all
 
       - name: Stop devenv
         run: |

@@ -23,14 +23,17 @@ build: protoc
 	@cd agents && make build
 	@cd gateway && make build
 
-integration:
-	@cd gateway && RUST_LOG=info cargo test --test int_*
-
 e2e:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_${E2E_PROFILE} --features localtest
 
 e2e-lazy:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_${E2E_PROFILE}
+
+e2e-all:
+	@cd gateway && RUST_LOG=info cargo test --test e2e_*
+
+devenv:
+	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
 
 devenv-up: devenv-down
 	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up --build -d
@@ -52,10 +55,11 @@ help:
 	@echo "  lint            Run linters"
 	@echo "  fmt             Format code"
 	@echo "  build           Build the project"
-	@echo "  integration      Run integration tests"
 	@echo "  e2e             Run end-to-end tests including setup"
 	@echo "  e2e-lazy        Run end-to-end tests without setup"
-	@echo "  devenv-up       Start development environment"
+	@echo "  e2e-all         Run all end-to-end tests"
+	@echo "  devenv          Start development environment"
+	@echo "  devenv-up       Build & start development environment (forced)"
 	@echo "  devenv-down     Stop development environment"
 	@echo "  docker-build    Build Docker images of the project"
 	@echo "  help            Show this help message"

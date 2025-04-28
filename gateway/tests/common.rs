@@ -32,7 +32,7 @@ pub async fn get_trng(
         .join("&");
     let client = reqwest::Client::new();
     let start_time = std::time::Instant::now();
-    tracing::info!("Making request to gateway with src: {}", src);
+    tracing::debug!("Making request to gateway with src: {}", src);
 
     let response = client
         .get(format!("{base_url}/api/v1/services/trng?{src}"))
@@ -47,12 +47,12 @@ pub async fn get_trng(
         .text()
         .await
         .map_err(|e| E2EError::ParseError(e.to_string()))?;
-    tracing::info!("Raw response: {}", raw);
+    tracing::debug!("Raw response: {}", raw);
     let parsed = serde_json::from_str::<ServiceResult>(&raw)
         .map_err(|e| E2EError::ParseError(e.to_string()))?;
 
     let elapsed_time = start_time.elapsed();
-    tracing::info!("Request completed in {:?}", elapsed_time);
+    tracing::debug!("Request completed in {:?}", elapsed_time);
 
     Ok(parsed)
 }
