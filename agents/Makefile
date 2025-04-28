@@ -21,7 +21,7 @@ protoc-dry-run: protoc-deps
 	@./scripts/protoc.sh --dry-run
 
 test: deps
-	@go test -v $(GOPACKAGES)
+	@GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} go test -v $(GOPACKAGES)
 
 race: deps
 	@go test -race $(GOPACKAGES)

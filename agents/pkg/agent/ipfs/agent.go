@@ -218,7 +218,13 @@ func (a *Agent) Delete(ctx context.Context, req *agentsproto.DeleteRequest) (*ag
 
 	path := path.FromCid(cid)
 
-	logger.Debugf("path: %s", path.String())
+	logger.Debugf("unpining path: %s", path.String())
+	err = a.node.Pin().Rm(ctx, path)
+	if err != nil {
+		logger.Warnf("failed to unpin cid (%s): %s", path.String(), err)
+		return nil, err
+	}
+	logger.Debugf("removing path from IPFS: %s", path.String())
 
 	err = a.node.Block().Rm(ctx, path)
 	if err != nil {
