@@ -1,6 +1,17 @@
-# OrbitPort / Aptos Orbital
+# OrbitPort Agent / Aptos Orbital
 
 This document contains information on the integration with `Aptos Orbital` services.
+
+## Overview
+
+The `Aptos Orbital` agent is responsible for interacting with the `Aptos Orbital API` (`api.aptosorbital.com`). 
+It provides access to true random number generation and other services provided by the Aptos Orbital satellites.
+
+**NOTE** at the moment, the only service available is the true random number generation.
+
+### Agent
+
+The agent is designed to be used in conjunction with the `orbitport` framework, which provides a unified interface for interacting with various services using `gRPC`.
 
 ## Aptos Orbital API
 
