@@ -35,7 +35,7 @@ impl Blockstore for IpfsBlockstore {
     fn get_block(
         &self,
         link: &str,
-    ) -> impl std::future::Future<Output = Result<Block, BlockError>> + Send {
+    ) -> impl std::future::Future<Output = Result<(Block, String), BlockError>> + Send {
         let mut client = self.client.clone();
         let link = link.to_string();
         async move {
@@ -45,14 +45,16 @@ impl Blockstore for IpfsBlockstore {
             };
             match client.get(request).await {
                 Ok(response) => {
-                    let block = Block::try_from(response.into_inner().data).map_err(|e| {
+                    let resp = response.into_inner();
+                    let block = Block::try_from(resp.data).map_err(|e| {
                         tracing::error!("Failed to convert block to raw data: {}", e);
                         BlockError::GetBlockError(format!(
                             "Failed to convert block to raw data: {}",
                             e
                         ))
                     })?;
-                    Ok(block)
+                    let p = resp.path;
+                    Ok((block, p))
                 }
                 Err(e) => Err(BlockError::GetBlockError(format!(
                     "Failed to get block: {}",
@@ -65,6 +67,7 @@ impl Blockstore for IpfsBlockstore {
     fn add_block(
         &self,
         block: Block,
+        publish_name: Option<String>,
     ) -> impl std::future::Future<Output = Result<String, BlockError>> + Send {
         let mut client = self.client.clone();
         async move {
@@ -74,7 +77,7 @@ impl Blockstore for IpfsBlockstore {
             })?;
             let request = AddRequest {
                 data: block_raw,
-                publish_name: None,
+                publish_name,
             };
             match client.add(request).await {
                 Ok(response) => Ok(response.into_inner().cid),
@@ -92,7 +95,7 @@ impl Bucketstore for IpfsBlockstore {
     fn get_bucket(
         &self,
         link: &str,
-    ) -> impl std::future::Future<Output = Result<Block, BlockError>> + Send {
+    ) -> impl std::future::Future<Output = Result<(Block, String), BlockError>> + Send {
         let mut client = self.client.clone();
         let link = link.to_string();
         async move {
@@ -102,14 +105,16 @@ impl Bucketstore for IpfsBlockstore {
             };
             match client.get(request).await {
                 Ok(response) => {
-                    let block = Block::try_from(response.into_inner().data).map_err(|e| {
+                    let resp = response.into_inner();
+                    let block = Block::try_from(resp.data).map_err(|e| {
                         tracing::error!("Failed to convert block to raw data: {}", e);
                         BlockError::GetBlockError(format!(
                             "Failed to convert block to raw data: {}",
                             e
                         ))
                     })?;
-                    Ok(block)
+                    let p = resp.path;
+                    Ok((block, p))
                 }
                 Err(e) => Err(BlockError::GetBlockError(format!(
                     "Failed to get bucket: {}",

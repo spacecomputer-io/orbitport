@@ -96,6 +96,7 @@ func TestIpfsAgent(t *testing.T) {
 		getResp, err := agent.Get(ctx, getReq)
 		require.NoError(t, err, "failed to get data from IPFS via IPNS")
 		require.Equal(t, data, getResp.Data, "retrieved data should match the original")
+		t.Logf("data retrieved from IPFS via IPNS: %s", getResp.Path)
 	})
 }
 

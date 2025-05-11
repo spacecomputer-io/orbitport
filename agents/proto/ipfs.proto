@@ -28,6 +28,7 @@ message GetRequest {
 
 message GetResponse {
     bytes data = 1;
+    string path = 2;
 }
 
 message PublishRequest {

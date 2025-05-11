@@ -157,6 +157,7 @@ func (a *Agent) Get(ctx context.Context, req *agentsproto.GetRequest) (*agentspr
 				return nil, err
 			}
 			p = resolved
+
 			a.ipnsCache.Add(name, p)
 			logger.Debugf("resolved path for name: %s", name)
 		}
@@ -175,6 +176,7 @@ func (a *Agent) Get(ctx context.Context, req *agentsproto.GetRequest) (*agentspr
 
 	return &agentsproto.GetResponse{
 		Data: data,
+		Path: p.String(),
 	}, nil
 }
 

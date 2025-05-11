@@ -180,6 +180,7 @@ func (x *GetRequest) GetNamespace() string {
 type GetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -219,6 +220,13 @@ func (x *GetResponse) GetData() []byte {
 		return x.Data
 	}
 	return nil
+}
+
+func (x *GetResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
 }
 
 type PublishRequest struct {
@@ -423,9 +431,10 @@ const file_proto_ipfs_proto_rawDesc = "" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1c\n" +
-	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"!\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"5\n" +
 	"\vGetResponse\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\"E\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\"E\n" +
 	"\x0ePublishRequest\x12\x10\n" +
 	"\x03cid\x18\x01 \x01(\tR\x03cid\x12!\n" +
 	"\fpublish_name\x18\x02 \x01(\tR\vpublishName\".\n" +

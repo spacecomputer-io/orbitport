@@ -22,7 +22,7 @@ pub trait Bucketstore {
     fn get_bucket(
         &self,
         name: &str,
-    ) -> impl std::future::Future<Output = Result<Block, BlockError>> + Send;
+    ) -> impl std::future::Future<Output = Result<(Block, String), BlockError>> + Send;
 
     fn add_bucket(
         &self,
@@ -37,11 +37,12 @@ pub trait Blockstore {
     fn get_block(
         &self,
         link: &str,
-    ) -> impl std::future::Future<Output = Result<Block, BlockError>> + Send;
+    ) -> impl std::future::Future<Output = Result<(Block, String), BlockError>> + Send;
 
     fn add_block(
         &self,
         block: Block,
+        publish_name: Option<String>,
     ) -> impl std::future::Future<Output = Result<String, BlockError>> + Send;
 }
 
@@ -56,7 +57,7 @@ pub async fn read_blocks(
     let mut depth = 0;
     while depth < max_depth {
         match blockstore.get_block(&current).await {
-            Ok(block) => {
+            Ok((block, _)) => {
                 if blocks.iter().any(|b: &Block| b.link == block.link) {
                     break; // Avoid cycles
                 }
@@ -120,13 +121,13 @@ impl Blockstore for InMemBlockstore {
     fn get_block(
         &self,
         link: &str,
-    ) -> impl std::future::Future<Output = Result<Block, BlockError>> + Send {
+    ) -> impl std::future::Future<Output = Result<(Block, String), BlockError>> + Send {
         let blocks = self.blocks.clone();
         let link = link.to_string();
         async move {
             let blocks = blocks.read().await;
             if let Some(block) = blocks.get(&link) {
-                Ok(block.clone())
+                Ok((block.clone(), link.to_string()))
             } else {
                 Err(BlockError::GetBlockError(format!(
                     "Block not found: {}",
@@ -139,6 +140,7 @@ impl Blockstore for InMemBlockstore {
     fn add_block(
         &self,
         block: Block,
+        _: Option<String>,
     ) -> impl std::future::Future<Output = Result<String, BlockError>> + Send {
         let blocks = self.blocks.clone();
         async move {
@@ -163,9 +165,9 @@ mod test {
         let block2 = Block::new(block1.hash().unwrap(), vec![4, 5, 6]);
         let block3 = Block::new(block2.hash().unwrap(), vec![7, 8, 9]);
 
-        let _ = blockstore.add_block(block1.clone()).await;
-        let _ = blockstore.add_block(block2.clone()).await;
-        let _ = blockstore.add_block(block3.clone()).await;
+        let _ = blockstore.add_block(block1.clone(), None).await;
+        let _ = blockstore.add_block(block2.clone(), None).await;
+        let _ = blockstore.add_block(block3.clone(), None).await;
 
         let blocks = read_blocks(blockstore.clone(), block3.hash().unwrap().as_str(), 2)
             .await
