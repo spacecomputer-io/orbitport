@@ -1,4 +1,4 @@
-# Orbitport: Dev Guide
+# Orbitport | Dev Guide
 
 **Prerequisites**
 
@@ -23,12 +23,24 @@ make CONTAINER_TOOL=nerdctl docker-build
 
 ### Running Dev Mode with Docker
 
-Run with docker compose:
+Teardown, build and run with docker compose:
 ```bash
 make devenv-up
 ```
 
+Run with docker compose:
+```bash
+make devenv
+```
+
+Tear down with:
+```bash
+make devenv-down
+```
+
 This will start the gateway and all agents in docker containers, as well as mocked services.
+
+#### Running E2E Tests on Dev Mode
 
 Run e2e tests on that environment:
 ```bash
@@ -37,10 +49,6 @@ make E2E_PROFILE=load e2e-lazy
 make E2E_PROFILE=offline e2e-lazy
 ```
 
-Tear down with:
-```bash
-make devenv-down
-```
 
 ### Running with Docker
 
