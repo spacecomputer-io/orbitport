@@ -7,10 +7,9 @@ use tonic_health::pb::{
     health_client::HealthClient,
 };
 
-use crate::common::GatewayError;
 use crate::ctx;
-use crate::service::{ServiceHandler, ServiceRequest, ServiceResponse};
 use crate::trng::TrngService;
+use crate::types::{GatewayError, ServiceHandler, ServiceRequest, ServiceResponse};
 
 use crate::proto::auth::auth_agent_client::AuthAgentClient;
 

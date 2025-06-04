@@ -1,7 +1,7 @@
 use tokio::{select, signal};
 use tracing::debug;
 
-use crate::common::GatewayError;
+use crate::types::GatewayError;
 
 /// Wait for OS signals like SIGTERM, SIGINT, and SIGQUIT.
 pub async fn wait_exit_signals() -> Result<(), GatewayError> {

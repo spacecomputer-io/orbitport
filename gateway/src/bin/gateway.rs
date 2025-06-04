@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::sync::Arc;
 
-use gateway::{common::GatewayError, ctx, logging, os_signals, server, service_manager};
+use gateway::{ctx, logging, os_signals, server, service_manager, types::GatewayError};
 
 #[derive(Parser, Debug)]
 struct Args {

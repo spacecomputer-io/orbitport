@@ -13,14 +13,13 @@ use warp::{
     reject::Reject,
 };
 
-use crate::common::GatewayError;
 use crate::metrics;
 use crate::proto::auth::{
     TokenValidationRequest, TokenValidationResponse, auth_agent_client::AuthAgentClient,
 };
-use crate::service::ServiceRequest;
 use crate::service_manager::ServiceManager;
 use crate::trng::{SRC_APTOS_ORBITAL, SRC_DERIVED_TRNG};
+use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
 impl Reject for GatewayError {}
 
@@ -187,8 +186,12 @@ pub async fn start_metrics(metrics_port: u16) {
 struct QueryParams {
     /// The source of the service, i.e. the service provider
     src: Option<String>,
-    /// The number of derived items to return
+    /// The number of derived items to return (EXPERIMENTAL)
     bulk: Option<usize>,
+    /// The key for encryption in the format of <scheme>@<key> (EXPERIMENTAL)
+    /// This is used to encrypt the service result.
+    /// Currently only supports tpk (threshold public key) i.e. "tpk@<key>".
+    key: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -197,6 +200,10 @@ struct PostBody {
     src: Option<String>,
     /// The number of derived items to return
     bulk: Option<usize>,
+    /// The key for encryption in the format of <scheme>@<key> (EXPERIMENTAL)
+    /// This is used to encrypt the service result.
+    /// Currently only supports tpk (threshold public key) i.e. "tpk@<key>".
+    key: Option<String>,
     /// The arguments for the service
     /// in a vector of [(key, value), ...]
     args: Option<Vec<(String, String)>>,
@@ -267,11 +274,20 @@ async fn handle_get(
             )));
         }
     }
+    let enc_key = if let Some(key) = query.key {
+        Some(
+            EncryptionKey::new_from_arg(&key)
+                .map_err(|e| warp::reject::custom(GatewayError::BadRequest(e.to_string())))?,
+        )
+    } else {
+        None
+    };
     let svc_req = ServiceRequest {
         req_id,
         service,
         src,
         bulk: query.bulk,
+        enc_key,
         args: None,
     };
     handle_service_req(svc_req, service_manager.clone()).await
@@ -303,12 +319,26 @@ async fn handle_post(
             )));
         }
     }
+    let key = if let Some(k) = query.key {
+        Some(k)
+    } else {
+        body.key
+    };
+    let enc_key = if let Some(key) = key {
+        Some(
+            EncryptionKey::new_from_arg(&key)
+                .map_err(|e| warp::reject::custom(GatewayError::BadRequest(e.to_string())))?,
+        )
+    } else {
+        None
+    };
     let args = body.args.clone();
     let svc_req = ServiceRequest {
         req_id,
         service,
         src: vec![src],
         bulk,
+        enc_key,
         args,
     };
     handle_service_req(svc_req, service_manager.clone()).await

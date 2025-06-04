@@ -1,17 +1,19 @@
 use std::sync::{Arc, RwLock};
 
 use rand::Rng as _;
+use threshold::core::CiphertextMsg;
 use tokio::sync::broadcast::{Receiver, Sender};
 use tonic::transport::Channel;
 
-use crate::common::GatewayError;
 use crate::ctx;
 use crate::metrics;
 use crate::proto::trng::{
     TrngRequest, TrngResponse, randomness_agent_client::RandomnessAgentClient,
 };
-use crate::service::{ServiceHandler, ServiceRequest, ServiceResponse};
 use crate::structures::service::{ServiceResult, Signature};
+use crate::types::{
+    EncryptionKey, EncryptionScheme, GatewayError, ServiceHandler, ServiceRequest, ServiceResponse,
+};
 
 use bip32::{ChildNumber, ExtendedPrivateKey, XPrv};
 
@@ -180,11 +182,12 @@ impl TrngService {
 impl ServiceHandler for TrngService {
     async fn handle(&mut self, svc_req: ServiceRequest) -> Result<ServiceResponse, GatewayError> {
         tracing::info!(
-            "Received request ({}) for service: {}, src: {:?}, bulk: {:?}",
+            "Received request ({}) for service: {}, src: {:?}, bulk: {:?}, enc_key: {:?}",
             svc_req.req_id,
             svc_req.service,
             svc_req.src,
-            svc_req.bulk
+            svc_req.bulk,
+            svc_req.enc_key
         );
         match get_trng(self.aptos_orbital_client.clone()).await {
             Ok(trng) => {
@@ -194,8 +197,13 @@ impl ServiceHandler for TrngService {
                 } else {
                     vec![]
                 };
-                let response =
-                    to_service_response(svc_req.req_id, trng, SRC_APTOS_ORBITAL, bulk_results);
+                let response = process_response(
+                    svc_req.req_id,
+                    svc_req.enc_key,
+                    trng,
+                    SRC_APTOS_ORBITAL,
+                    bulk_results,
+                )?;
                 Ok(response)
             }
             Err(e) => {
@@ -215,8 +223,13 @@ impl ServiceHandler for TrngService {
                     } else {
                         vec![]
                     };
-                    let response =
-                        to_service_response(svc_req.req_id, trng, SRC_DERIVED_TRNG, bulk_results);
+                    let response = process_response(
+                        svc_req.req_id,
+                        svc_req.enc_key,
+                        trng,
+                        SRC_DERIVED_TRNG,
+                        bulk_results,
+                    )?;
                     return Ok(response);
                 }
                 Err(e)
@@ -355,23 +368,46 @@ fn to_trng(key: Vec<u8>) -> String {
     hex::encode(&key[..TRNG_SIZE])
 }
 
-fn to_service_response(
+fn process_response(
     req_id: u64,
+    enc_key: Option<EncryptionKey>,
     trng: TrngResponse,
     src: &str,
     bulk_results: Vec<ServiceResult>,
-) -> ServiceResponse {
+) -> Result<ServiceResponse, GatewayError> {
     let bulk = if bulk_results.is_empty() {
         None
     } else {
         Some(bulk_results)
     };
-    ServiceResponse {
+
+    let data = if let Some(enc_key) = enc_key {
+        match enc_key.scheme {
+            EncryptionScheme::None => trng.value,
+            EncryptionScheme::Threshold => {
+                let pk = threshold::serialization::pubkey_from_hex(enc_key.key.as_str()).map_err(
+                    |e| {
+                        tracing::error!("Failed to parse public key: {}", e);
+                        GatewayError::InvalidEncryptionKey
+                    },
+                )?;
+                let cipher = CiphertextMsg::new(pk.encrypt(&trng.value));
+                cipher.try_into().map_err(|e| {
+                    tracing::error!("Failed to encrypt TRNG value: {}", e);
+                    GatewayError::InternalError("Failed to encrypt TRNG value".to_string())
+                })?
+            }
+        }
+    } else {
+        trng.value.clone()
+    };
+
+    Ok(ServiceResponse {
         req_id,
         result: Ok(ServiceResult {
             service: SERVICE_TRNG.to_string(),
             src: src.to_string(),
-            data: trng.value.clone(),
+            data,
             signature: Signature {
                 value: trng.sig.clone(),
                 pk: "".to_string(), // TODO: Add public key
@@ -379,7 +415,7 @@ fn to_service_response(
             },
             bulk,
         }),
-    }
+    })
 }
 
 #[cfg(test)]

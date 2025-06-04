@@ -24,6 +24,7 @@ pub async fn get_trng(
     access_token: &str,
     src: Option<Vec<String>>,
     bulk: Option<usize>,
+    tpk: Option<String>,
 ) -> Result<ServiceResult, E2EError> {
     let srcs = src.unwrap_or(vec![]);
     let src = srcs
@@ -36,12 +37,17 @@ pub async fn get_trng(
     tracing::debug!("Making request to gateway with src: {}", src);
     let bulk = bulk.unwrap_or(0);
     let bulk = if bulk > 0 {
-        format!("bulk={bulk}")
+        format!("&bulk={bulk}")
+    } else {
+        String::new()
+    };
+    let tpk = if let Some(tpk) = tpk {
+        format!("&key={tpk}")
     } else {
         String::new()
     };
     let response = client
-        .get(format!("{base_url}/api/v1/services/trng?{src}&{bulk}"))
+        .get(format!("{base_url}/api/v1/services/trng?{src}{bulk}{tpk}"))
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
         .bearer_auth(access_token)

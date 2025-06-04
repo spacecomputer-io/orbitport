@@ -23,7 +23,7 @@ async fn test_e2e_offline() {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         let n = 1;
         for _ in 0..n {
-            let resp = common::get_trng(&base_url, &access_token, None, None).await?;
+            let resp = common::get_trng(&base_url, &access_token, None, None, None).await?;
             assert!(resp.data.len() > 0, "Response data is empty");
         }
         tracing::info!("All requests completed successfully");

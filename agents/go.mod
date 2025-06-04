@@ -4,6 +4,8 @@ go 1.24
 
 require (
 	github.com/auth0/go-jwt-middleware/v2 v2.3.0
+	github.com/docker/docker v28.0.1+incompatible
+	github.com/docker/go-connections v0.5.0
 	github.com/hashicorp/golang-lru v1.0.2
 	github.com/ipfs/boxo v0.29.1
 	github.com/ipfs/go-cid v0.5.0
@@ -28,8 +30,6 @@ require (
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/docker v28.0.1+incompatible // indirect
-	github.com/docker/go-connections v0.5.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.8.2 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
