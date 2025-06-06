@@ -17,8 +17,8 @@ pub enum GatewayError {
     NoAuthHeaderError,
     #[error("Invalid Authorization header")]
     InvalidAuthHeaderError,
-    #[error("Failed to connect to auth agent: {0}")]
-    AuthAgentConnectionError(String),
+    #[error("Failed to connect to auth plugin: {0}")]
+    AuthPluginConnectionError(String),
     #[error("Failed to authenticate")]
     AuthenticationFailed,
     #[error("Rate limit exceeded")]

@@ -21,7 +21,7 @@
 go.work
 go.work.sum
 
-agents/bin/
+plugins/bin/
 
 # env file
 .env

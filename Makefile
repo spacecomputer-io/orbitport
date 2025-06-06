@@ -4,23 +4,23 @@ CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl
 DOCKER_TAG?=latest ## DOCKER_TAG=v*.*.*
 
 protoc:
-	@cd agents && make protoc
-	@cp agents/proto/*.proto gateway/proto/
+	@cd plugins && make protoc
+	@cp plugins/proto/*.proto gateway/proto/
 
 test:
-	@cd agents && make test
+	@cd plugins && make test
 	@cd gateway && make test
 
 lint:
-	@cd agents && make lint
+	@cd plugins && make lint
 	@cd gateway && make lint
 
 fmt:
-	@cd agents && make fmt
+	@cd plugins && make fmt
 	@cd gateway && make fmt
 
 build: protoc
-	@cd agents && make build
+	@cd plugins && make build
 	@cd gateway && make build
 
 e2e:
@@ -42,7 +42,7 @@ devenv-down:
 	@docker-compose -f dev.docker-compose.yaml down
 
 docker-build:
-	@cd agents && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
+	@cd plugins && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
 	@cd gateway && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
 
 help:

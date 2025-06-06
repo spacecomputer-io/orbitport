@@ -9,10 +9,10 @@ struct Args {
     http_port: u16,
     #[clap(long, env = "ORBITPORT_METRICS_PORT", default_value = "9100")]
     metric_port: u16,
-    #[clap(long, env = "ORBITPORT_AUTH_AGENT")]
-    auth_agent: String,
-    #[clap(long, env = "ORBITPORT_TRNG_AGENT")]
-    trng_agent: String,
+    #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
+    auth_plugin: String,
+    #[clap(long, env = "ORBITPORT_TRNG_PLUGIN")]
+    trng_plugin: String,
     #[clap(long, env = "ORBITPORT_DEFAULT_MASTER_SEED")]
     default_master_seed: Option<String>,
     #[clap(long, env = "ORBITPORT_MASTER_SEED_INTERVAL")]
@@ -46,17 +46,17 @@ async fn main() -> Result<(), GatewayError> {
     tracing::info!("Starting orbitport with args: {:?}", args);
 
     // let ctx_cloned = ctx.clone();
-    let auth_agent = args.auth_agent.clone();
-    let trng_agent = args.trng_agent.clone();
+    let auth_plugin = args.auth_plugin.clone();
+    let trng_plugin = args.trng_plugin.clone();
     tokio::select! {
         _ = tokio::spawn(async move {
             service_manager::wait_for_deps(
-                vec![auth_agent.clone(), trng_agent.clone()],
+                vec![auth_plugin.clone(), trng_plugin.clone()],
                 std::time::Duration::from_secs(60),
             ).await.unwrap();
 
             let service_manager = service_manager::ServiceManager::new(
-                ctx_cloned, auth_agent.as_str(), trng_agent.as_str(),
+                ctx_cloned, auth_plugin.as_str(), trng_plugin.as_str(),
                 args.master_seed_interval, args.default_master_seed,
             ).await.unwrap();
 

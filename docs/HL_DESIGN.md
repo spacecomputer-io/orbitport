@@ -73,19 +73,19 @@ IPFS is a public network, where data is shared between nodes. To ensure privacy,
 
 There are 2 main points of integration with the satellites:
 - Read cTRNG data via satellite API/SDK.
-  - Agents are used abstract the complexity and implementation of the underlying provider.
+  - Plugins are used abstract the complexity and implementation of the underlying provider.
 - Verify authenticity of the cTRNG
   - Verify signature against the public key of the satellite.
   - Verify that the public key is part of the certificate tree of the provider.
 
-Integration with satellites is done through agents, which abstract the complexity and implementation of the underlying providers or their SDKs/APIs.
-By having a decoupled agent for each provider, we can easily add new providers and manage the rate limits, auth, etc.
+Integration with satellites is done through plugins, which abstract the complexity and implementation of the underlying providers or their SDKs/APIs.
+By having a decoupled plugin for each provider, we can easily add new providers and manage the rate limits, auth, etc.
 
 ### Deployment
 
 Oribtport is deployed in a Kubernetes cluster, with a load balancer (Traefik) in front to distribute the traffic.
 
-Agents are deployed as lightweight, stateless containers within the same pod as the orbitport service. This approach ensures high availability, simplifies communication through localhost, and maintains reliability while keeping the architecture modular.
+Plugins are deployed as lightweight, stateless containers within the same pod as the orbitport service. This approach ensures high availability, simplifies communication through localhost, and maintains reliability while keeping the architecture modular.
 
 IPFS nodes are deployed as a separate service, with a persistent volume to store the data and a service to expose the API to the Orbitport service.
 

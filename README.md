@@ -1,6 +1,6 @@
 # SpaceComputer | Orbitport 
 
-![Agents](https://github.com/spacecomputerio/orbitport/actions/workflows/agents.yml/badge.svg?branch=main)
+![Plugins](https://github.com/spacecomputerio/orbitport/actions/workflows/plugins.yml/badge.svg?branch=main)
 ![Gateway](https://github.com/spacecomputerio/orbitport/actions/workflows/gateway.yml/badge.svg?branch=main)
 ![E2E](https://github.com/spacecomputerio/orbitport/actions/workflows/e2e.yml/badge.svg?branch=main)
 

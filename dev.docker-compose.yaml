@@ -1,5 +1,5 @@
-x-agent-base:
-  &agent-base
+x-plugin-base:
+  &plugin-base
   logging:
     driver: "json-file"
     options:
@@ -21,15 +21,15 @@ x-mocker-base:
       max-file: "3"
 
 services:
-  agent-ipfs:
-    <<: *agent-base
-    container_name: agent-ipfs
+  plugin-ipfs:
+    <<: *plugin-base
+    container_name: plugin-ipfs
     build:
-      context: ./agents
-    image: op-agent:latest
+      context: ./plugins
+    image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_AGENT=ipfs
+      - ORBITPORT_PLUGIN=ipfs
       - ORBITPORT_GRPC_PORT=50002
       - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
     ports:
@@ -39,7 +39,7 @@ services:
     <<: *mocker-base
     container_name: aptos-orbital-api
     build:
-      context: ./agents
+      context: ./plugins
       args:
         - BUILD_TARGET=mocker
     image: op-mocker:latest
@@ -54,7 +54,7 @@ services:
     <<: *mocker-base
     container_name: aptos-orbital-auth
     build:
-      context: ./agents
+      context: ./plugins
       args:
         - BUILD_TARGET=mocker
     image: op-mocker:latest
@@ -62,34 +62,34 @@ services:
       - OPMOCK_SERVICE=aptosorbital_auth
       - OPMOCK_PORT=8002
 
-  agent-aptos-orbital:
-    <<: *agent-base
-    container_name: agent-aptos-orbital
+  plugin-aptos-orbital:
+    <<: *plugin-base
+    container_name: plugin-aptos-orbital
     build:
-      context: ./agents
-    image: op-agent:latest
+      context: ./plugins
+    image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_AGENT=aptosorbital
+      - ORBITPORT_PLUGIN=aptosorbital
       - ORBITPORT_GRPC_PORT=50001
       - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=2e4c704ae4d059e1
       - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=2e4c704ae4d059e1
       - ORBITPORT_APTOS_ORBITAL_API_URL=http://aptos-orbital-api:8001
       - ORBITPORT_APTOS_ORBITAL_AUTH_URL=http://aptos-orbital-auth:8002
     depends_on:
-      - agent-auth
+      - plugin-auth
       - aptos-orbital-api
       - aptos-orbital-auth
 
-  agent-auth:
-    <<: *agent-base
-    container_name: agent-auth
+  plugin-auth:
+    <<: *plugin-base
+    container_name: plugin-auth
     build:
-      context: ./agents
-    image: op-agent:latest
+      context: ./plugins
+    image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_AGENT=auth
+      - ORBITPORT_PLUGIN=auth
       - ORBITPORT_GRPC_PORT=50000
       # - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
       # - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
@@ -112,8 +112,8 @@ services:
     environment:
       - RUST_LOG=warn,gateway=debug
       - ORBITPORT_HTTP_PORT=8080
-      - ORBITPORT_AUTH_AGENT=http://agent-auth:50000
-      - ORBITPORT_TRNG_AGENT=http://agent-aptos-orbital:50001
+      - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
+      - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_DEFAULT_MASTER_SEED=${ORBITPORT_DEFAULT_MASTER_SEED}
     ports:
       - 8080:8080

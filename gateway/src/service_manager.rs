@@ -11,7 +11,7 @@ use crate::ctx;
 use crate::trng::TrngService;
 use crate::types::{GatewayError, ServiceHandler, ServiceRequest, ServiceResponse};
 
-use crate::proto::auth::auth_agent_client::AuthAgentClient;
+use crate::proto::auth::auth_plugin_client::AuthPluginClient;
 
 async fn check_health(addr: &str) -> Result<HealthCheckResponse, tonic::Status> {
     let channel = Channel::from_shared(addr.to_string())
@@ -78,7 +78,7 @@ pub async fn wait_for_deps(addrs: Vec<String>, max_delay: Duration) -> Result<()
 }
 
 pub struct ServiceManager {
-    auth_client: AuthAgentClient<Channel>,
+    auth_client: AuthPluginClient<Channel>,
     trng_svc: TrngService,
 }
 
@@ -98,10 +98,10 @@ impl ServiceManager {
                 tracing::error!("Failed to create TRNG service: {}", e);
                 GatewayError::ServiceConnectionError(e.to_string())
             })?;
-        let auth_client = AuthAgentClient::connect(auth_url.to_string())
+        let auth_client = AuthPluginClient::connect(auth_url.to_string())
             .await
             .map_err(|e| {
-                tracing::error!("Failed to connect to auth agent: {}", e);
+                tracing::error!("Failed to connect to auth plugin: {}", e);
                 GatewayError::ServiceConnectionError(e.to_string())
             })?;
 
@@ -111,7 +111,7 @@ impl ServiceManager {
         })
     }
 
-    pub fn get_auth_client(&self) -> AuthAgentClient<Channel> {
+    pub fn get_auth_client(&self) -> AuthPluginClient<Channel> {
         self.auth_client.clone()
     }
 

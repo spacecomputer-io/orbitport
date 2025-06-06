@@ -7,7 +7,7 @@
 
 ### Build Docker Images
 
-Build the docker images for the agents and the gateway:
+Build the docker images for the plugins and the gateway:
 
 **NOTE:** use `DOCKER_TAG` to set the tag for the images. `latest` by default.
 
@@ -38,7 +38,7 @@ Tear down with:
 make devenv-down
 ```
 
-This will start the gateway and all agents in docker containers, as well as mocked services.
+This will start the gateway and all plugins in docker containers, as well as mocked services.
 
 #### Running E2E Tests on Dev Mode
 
@@ -59,6 +59,6 @@ Run with docker compose:
 docker-compose --env-file .env up
 ```
 
-This will start the gateway and all agents in docker containers.
+This will start the gateway and all plugins in docker containers.
 
 

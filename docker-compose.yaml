@@ -1,8 +1,8 @@
-x-agent-base:
-  &agent-base
-  image: op-agent:latest
+x-plugin-base:
+  &plugin-base
+  image: op-plugin:latest
   build:
-    context: ./agents
+    context: ./plugins
   logging:
     driver: "json-file"
     options:
@@ -16,31 +16,31 @@ x-agent-base:
     start_period: 5s
 
 services:
-  agent-ipfs:
-    <<: *agent-base
-    container_name: agent-ipfs
+  plugin-ipfs:
+    <<: *plugin-base
+    container_name: plugin-ipfs
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_AGENT=ipfs
+      - ORBITPORT_PLUGIN=ipfs
       - ORBITPORT_GRPC_PORT=50002
       - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
 
-  agent-aptos-orbital:
-    <<: *agent-base
-    container_name: agent-aptos-orbital
+  plugin-aptos-orbital:
+    <<: *plugin-base
+    container_name: plugin-aptos-orbital
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_AGENT=aptosorbital
+      - ORBITPORT_PLUGIN=aptosorbital
       - ORBITPORT_GRPC_PORT=50001
       - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=${ORBITPORT_APTOS_ORBITAL_CLIENT_ID}
       - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=${ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET}
 
-  agent-auth:
-    <<: *agent-base
-    container_name: agent-auth
+  plugin-auth:
+    <<: *plugin-base
+    container_name: plugin-auth
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_AGENT=auth
+      - ORBITPORT_PLUGIN=auth
       - ORBITPORT_GRPC_PORT=50000
       - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
       - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
@@ -63,10 +63,10 @@ services:
     environment:
       - RUST_LOG=warn,orbitport=debug
       - ORBITPORT_HTTP_PORT=8080
-      - ORBITPORT_AUTH_AGENT=http://agent-auth:50000
-      - ORBITPORT_TRNG_AGENT=http://agent-aptos-orbital:50001
+      - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
+      - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
     depends_on:
-      - agent-aptos-orbital
-      - agent-auth
+      - plugin-aptos-orbital
+      - plugin-auth
     ports:
       - 8080:8080

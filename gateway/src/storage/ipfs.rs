@@ -3,27 +3,27 @@ use tonic::transport::Channel;
 use crate::storage::blockstore::{BlockError, Blockstore, Bucketstore};
 use crate::structures::block::Block;
 
-use crate::proto::ipfs::{AddRequest, GetRequest, ipfs_agent_client::IpfsAgentClient};
+use crate::proto::ipfs::{AddRequest, GetRequest, ipfs_plugin_client::IpfsPluginClient};
 
 const NAMESPACE_IPFS: &str = "ipfs";
 const NAMESPACE_IPNS: &str = "ipns";
 
 /// A blockstore that uses IPFS as the underlying storage mechanism.
-/// This blockstore uses the IPFS agent to get and put blocks.
+/// This blockstore uses the IPFS plugin to get and put blocks.
 /// It is used to abstract the underlying storage mechanism for blocks.
 #[derive(Clone, Debug)]
 pub struct IpfsBlockstore {
-    client: IpfsAgentClient<Channel>,
+    client: IpfsPluginClient<Channel>,
 }
 
 impl IpfsBlockstore {
     /// Creates a new IPFS blockstore.
-    /// It connects to the IPFS agent at the given URL.
-    pub async fn new(ipfs_agent_url: &str) -> Result<Self, BlockError> {
-        let client = IpfsAgentClient::connect(ipfs_agent_url.to_string())
+    /// It connects to the IPFS plugin at the given URL.
+    pub async fn new(ipfs_plugin_url: &str) -> Result<Self, BlockError> {
+        let client = IpfsPluginClient::connect(ipfs_plugin_url.to_string())
             .await
             .map_err(|e| {
-                tracing::error!("Failed to connect to IPFS agent: {}", e);
+                tracing::error!("Failed to connect to IPFS plugin: {}", e);
                 BlockError::RemoteStorageNotConnected
             })?;
         Ok(IpfsBlockstore { client })

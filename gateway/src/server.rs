@@ -15,7 +15,7 @@ use warp::{
 
 use crate::metrics;
 use crate::proto::auth::{
-    TokenValidationRequest, TokenValidationResponse, auth_agent_client::AuthAgentClient,
+    TokenValidationRequest, TokenValidationResponse, auth_plugin_client::AuthPluginClient,
 };
 use crate::service_manager::ServiceManager;
 use crate::trng::{SRC_APTOS_ORBITAL, SRC_DERIVED_TRNG};
@@ -60,7 +60,7 @@ pub fn with_auth(
 type ApiResult<T> = std::result::Result<T, warp::Rejection>;
 
 async fn authorize(
-    (headers, mut auth_client): (HeaderMap<HeaderValue>, AuthAgentClient<Channel>),
+    (headers, mut auth_client): (HeaderMap<HeaderValue>, AuthPluginClient<Channel>),
 ) -> ApiResult<String> {
     match jwt_from_header(&headers) {
         Ok(jwt) => {
@@ -70,8 +70,8 @@ async fn authorize(
                 .await
                 .map_err(|e| match e.code() {
                     tonic::Code::Unavailable | tonic::Code::NotFound => {
-                        tracing::error!("Auth agent is unavailable: {}", e);
-                        warp::reject::custom(GatewayError::AuthAgentConnectionError(
+                        tracing::error!("Auth plugin is unavailable: {}", e);
+                        warp::reject::custom(GatewayError::AuthPluginConnectionError(
                             "unavailable".to_string(),
                         ))
                     }

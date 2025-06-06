@@ -8,7 +8,7 @@ use tonic::transport::Channel;
 use crate::ctx;
 use crate::metrics;
 use crate::proto::trng::{
-    TrngRequest, TrngResponse, randomness_agent_client::RandomnessAgentClient,
+    TrngRequest, TrngResponse, randomness_plugin_client::RandomnessPluginClient,
 };
 use crate::structures::service::{ServiceResult, Signature};
 use crate::types::{
@@ -45,12 +45,12 @@ pub enum TrngError {
 }
 
 /// The TrngService is a service that provides access to the Aptos Orbital
-/// randomness agent. It maintains a list of master_seed that it keeps collecting in the background
+/// randomness plugin. It maintains a list of master_seed that it keeps collecting in the background
 /// (every master_seed_interval) and uses it to derive new random numbers as fallback strategy
 /// when aptos orbital is not available or doesn't keep up with the demand.
 #[derive(Clone)]
 pub struct TrngService {
-    aptos_orbital_client: RandomnessAgentClient<Channel>,
+    aptos_orbital_client: RandomnessPluginClient<Channel>,
     master_seeds: Arc<RwLock<Vec<MasterSeed>>>,
 }
 
@@ -64,10 +64,10 @@ impl TrngService {
         master_seed_interval: Option<u64>,
         master_seed: Option<String>,
     ) -> Result<Self, TrngError> {
-        let aptos_orbital_client = RandomnessAgentClient::connect(trng_url.to_string())
+        let aptos_orbital_client = RandomnessPluginClient::connect(trng_url.to_string())
             .await
             .map_err(|e| {
-                tracing::error!("Failed to connect to randomness agent: {}", e);
+                tracing::error!("Failed to connect to randomness plugin: {}", e);
                 TrngError::GatewayError(GatewayError::ServiceConnectionError(e.to_string()))
             })?;
         let master_seeds = match master_seed {
@@ -268,7 +268,7 @@ async fn derive_results(
 }
 
 async fn get_trng(
-    mut client: RandomnessAgentClient<Channel>,
+    mut client: RandomnessPluginClient<Channel>,
 ) -> Result<TrngResponse, GatewayError> {
     let request = TrngRequest {
         ignore_sig: false,
@@ -291,10 +291,10 @@ pub async fn fetch_master_seeds(
     processor: Sender<MasterSeed>,
     mut quit: Receiver<()>,
 ) {
-    let client = match RandomnessAgentClient::connect(trng_url.to_string()).await {
+    let client = match RandomnessPluginClient::connect(trng_url.to_string()).await {
         Ok(c) => c,
         Err(e) => {
-            tracing::warn!("Failed to connect to randomness agent: {}", e);
+            tracing::warn!("Failed to connect to randomness plugin: {}", e);
             return;
         }
     };

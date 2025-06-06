@@ -10,12 +10,12 @@ use gateway::structures::block::Block;
 async fn test_e2e_ipfs_storage() {
     tracing_subscriber::fmt::init();
 
-    let ipfs_agent_url =
-        env::var("OPTEST_IPFS_AGENT").unwrap_or("http://localhost:50002".to_string());
+    let ipfs_plugin_url =
+        env::var("OPTEST_IPFS_PLUGIN").unwrap_or("http://localhost:50002".to_string());
 
-    tracing::info!("Starting e2e happy path test with ipfs_agent_url: {ipfs_agent_url}");
+    tracing::info!("Starting e2e happy path test with ipfs_plugin_url: {ipfs_plugin_url}");
 
-    let blockstore = IpfsBlockstore::new(&ipfs_agent_url).await.unwrap();
+    let blockstore = IpfsBlockstore::new(&ipfs_plugin_url).await.unwrap();
 
     let block = Block::new("test_block".to_string(), vec![1, 2, 3, 4, 5]);
 
