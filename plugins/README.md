@@ -6,7 +6,8 @@ Plugins are grpc services that runs in their own processes and encapsulate the l
 
 - [x] [Aptos Orbital](./pkg/plugin/aptosorbital)
 - [x] [Auth](./pkg/plugin/auth)
-- [ ] [IPFS](./pkg/plugin/ipfs)
+- [x] [IPFS](./pkg/plugin/ipfs)
+- [ ] [Beacon](./pkg/plugin/beacon)
 
 ## Usage
 

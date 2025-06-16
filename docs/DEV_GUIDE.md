@@ -4,6 +4,8 @@
 
 - [Make](https://www.gnu.org/software/make/)
 - [Docker](https://docs.docker.com/get-docker/)
+- [Golang](https://go.dev/doc/install) (1.24+)
+- [Rust](https://www.rust-lang.org/tools/install) (1.85+)
 
 ### Build Docker Images
 
