@@ -104,6 +104,7 @@ The registry contains the metadata of all beacons registered in the system, it w
   - `name`: Name of the beacon.
 - **Beacon Block**: Contains a reference to the previous block and a batch of random numbers.
   - `previous`: hash (CID) of the previous block.
+  - `seq`: Sequence number (u64) of the block 
   - `rng`: List of random numbers `[ cTRNG, ... ]`
 
 **Beacon Scheduler**
