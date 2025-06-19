@@ -62,7 +62,7 @@ async fn main() -> Result<(), GatewayError> {
 
             let metrics_port = args.metric_port;
             tokio::spawn(async move {
-                server::start_metrics(metrics_port).await;
+                gateway::metrics::start_server(metrics_port).await;
             });
 
             let service_manager = Arc::new(service_manager);

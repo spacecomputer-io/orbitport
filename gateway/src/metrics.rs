@@ -1,6 +1,8 @@
 use prometheus::{self, HistogramVec, IntCounterVec, IntGauge};
+use std::convert::Infallible;
 
 use lazy_static::lazy_static;
+use warp::{Filter, Reply};
 
 lazy_static! {
     pub static ref TRNG_MASTER_SEEDS: IntGauge = prometheus::register_int_gauge!(
@@ -50,4 +52,30 @@ lazy_static! {
         &["service"]
     )
     .unwrap();
+}
+
+/// Metrics endpoint handler, gathers metrics from the prometheus registry
+async fn metrics_handler() -> Result<impl Reply, Infallible> {
+    use prometheus::{Encoder, TextEncoder};
+    let encoder = TextEncoder::new();
+
+    let mut buffer = Vec::new();
+    let metric_families = prometheus::gather();
+    encoder.encode(&metric_families, &mut buffer).unwrap();
+
+    Ok(warp::http::Response::builder()
+        .header("Content-Type", encoder.format_type())
+        .body(buffer))
+}
+
+pub async fn start_server(metrics_port: u16) {
+    let metrics_route = warp::path!("metrics")
+        .and(warp::get())
+        .and_then(metrics_handler);
+
+    tracing::info!("Starting metrics endpoint on: :{}", metrics_port);
+
+    warp::serve(metrics_route)
+        .run(([0, 0, 0, 0], metrics_port))
+        .await;
 }

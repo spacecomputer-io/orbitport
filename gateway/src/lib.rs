@@ -18,10 +18,8 @@ pub mod ctx;
 pub mod logging;
 pub mod os_signals;
 
-pub mod block;
 pub mod metrics;
 pub mod server;
 pub mod service_manager;
-pub mod storage;
 pub mod structures;
 pub mod trng;

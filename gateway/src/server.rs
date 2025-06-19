@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::{collections::HashMap, convert::Infallible, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use tokio::{
     sync::Mutex,
     time::{Duration, Instant, timeout},
@@ -154,32 +154,6 @@ async fn rate_limit(
     }
 
     Ok(())
-}
-
-/// Metrics endpoint handler, gathers metrics from the prometheus registry
-async fn metrics_handler() -> Result<impl Reply, Infallible> {
-    use prometheus::{Encoder, TextEncoder};
-    let encoder = TextEncoder::new();
-
-    let mut buffer = Vec::new();
-    let metric_families = prometheus::gather();
-    encoder.encode(&metric_families, &mut buffer).unwrap();
-
-    Ok(warp::http::Response::builder()
-        .header("Content-Type", encoder.format_type())
-        .body(buffer))
-}
-
-pub async fn start_metrics(metrics_port: u16) {
-    let metrics_route = warp::path!("metrics")
-        .and(warp::get())
-        .and_then(metrics_handler);
-
-    tracing::info!("Starting metrics endpoint on: :{}", metrics_port);
-
-    warp::serve(metrics_route)
-        .run(([0, 0, 0, 0], metrics_port))
-        .await;
 }
 
 #[derive(Debug, Clone, Deserialize)]
