@@ -3,6 +3,7 @@
 ![Plugins](https://github.com/spacecomputerio/orbitport/actions/workflows/plugins.yml/badge.svg?branch=main)
 ![Gateway](https://github.com/spacecomputerio/orbitport/actions/workflows/gateway.yml/badge.svg?branch=main)
 ![E2E](https://github.com/spacecomputerio/orbitport/actions/workflows/e2e.yml/badge.svg?branch=main)
+![Build & Push Image](https://github.com/spacecomputerio/orbitport/actions/workflows/build_push.yml/badge.svg)
 
 This repository contains the Orbitport project by SpaceComputer.
 
