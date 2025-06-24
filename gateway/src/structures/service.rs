@@ -25,8 +25,9 @@ pub struct ServiceResult {
     /// The data returned by the service.
     pub data: String,
     /// The signature is used to verify the authenticity of the data.
-    pub signature: Signature,
-    /// Derived results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub signature: Option<Signature>,
+    /// Bulk results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bulk: Option<Vec<ServiceResult>>,
 }

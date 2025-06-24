@@ -10,7 +10,7 @@ use crate::metrics;
 use crate::proto::trng::{
     TrngRequest, TrngResponse, randomness_plugin_client::RandomnessPluginClient,
 };
-use crate::structures::service::{ServiceResult, Signature};
+use crate::structures::service::ServiceResult;
 use crate::types::{
     EncryptionKey, EncryptionScheme, GatewayError, ServiceHandler, ServiceRequest, ServiceResponse,
 };
@@ -256,11 +256,7 @@ async fn derive_results(
             service: SERVICE_TRNG.to_string(),
             src: SRC_DERIVED_TRNG.to_string(),
             data: derived_trng,
-            signature: Signature {
-                value: "".to_string(), // TODO: Add signature
-                pk: "".to_string(),    // TODO: Add public key
-                algo: None,
-            },
+            signature: None, // TODO: Add signature
             bulk: None,
         });
     }
@@ -402,17 +398,25 @@ fn process_response(
         trng.value.clone()
     };
 
+    let signature = None;
+    // TODO: Uncomment once public key is available
+    // let signature = if trng.sig.is_empty() {
+    //     None
+    // } else {
+    //     Some(Signature {
+    //         value: trng.sig,
+    //         pk: "".to_string(), // TODO: Add public key
+    //         algo: None,
+    //     })
+    // };
+
     Ok(ServiceResponse {
         req_id,
         result: Ok(ServiceResult {
             service: SERVICE_TRNG.to_string(),
             src: src.to_string(),
             data,
-            signature: Signature {
-                value: trng.sig.clone(),
-                pk: "".to_string(), // TODO: Add public key
-                algo: None,
-            },
+            signature,
             bulk,
         }),
     })
