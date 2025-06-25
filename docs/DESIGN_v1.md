@@ -99,13 +99,32 @@ The registry contains the metadata of all beacons registered in the system, it w
 
 **Beacon Structure**
 
+Each block has a high level structure (aka block):
+```proto
+message Block {
+  string link = 1; // CID of the previous block. empty for genesis
+  bytes data = 2; // serialized payload
+}
+```
+
+There are 2 payload types for beacons:
+
 - **Genesis Block**: Contains the metadata of the beacon.
-  - `pubkey`: Public key associated with the beacon.
-  - `name`: Name of the beacon.
-- **Beacon Block**: Contains a reference to the previous block and a batch of random numbers.
-  - `previous`: hash (CID) of the previous block.
-  - `seq`: Sequence number (u64) of the block 
-  - `rng`: List of random numbers `[ cTRNG, ... ]`
+  ``` proto
+  message BeaconMetadata {
+    string name = 1; // Name of the beacon.
+    string pubkey = 2; // Public key associated with the beacon.
+    string version = 3; // The version of the beacon
+  }
+  ```
+- **Beacon Block**: Contains a batch of random numbers.
+  ``` proto
+  message BeaconBlockPayload {
+    uint64 seq = 1; // Sequence number of the block.
+    uint64 timestamp = 2; // Timestamp of the block.
+    repeated bytes rng = 3; // List of random numbers
+  }
+  ```
 
 **Beacon Scheduler**
 
