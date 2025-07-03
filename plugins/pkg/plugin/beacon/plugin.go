@@ -1,0 +1,204 @@
+package beacon
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/spacecomputerio/orbitport/plugins/pkg/core/health"
+	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputerio/orbitport/plugins/proto"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+type Plugin struct {
+	cfg Config
+
+	registry *Registry
+
+	scheduler *Scheduler
+	builder   *Builder
+}
+
+// NewPlugin creates a new Beacon plugin with a storage layer.
+func NewPlugin() (*Plugin, error) {
+	ctx := context.Background()
+	cfg := readFromEnv()
+
+	logger := utils.GetLogger("orbitport:beacon")
+	logger.Infof("Creating plugin with config: %+v", cfg)
+
+	err := health.WaitForDependencies(ctx, time.Second, time.Duration(60*time.Second), cfg.IPFSPlugin, cfg.CTRNGPlugin)
+	if err != nil {
+		return nil, fmt.Errorf("beacon plugin dependencies failed to start within the alloted timeframe, aborting: %w", err)
+	}
+
+	registry, err := loadRegistry(context.Background(), cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load beacon registry: %w", err)
+	}
+	scheduler := NewScheduler(cfg, registry)
+	// Initialize the plugin with the configuration
+	plugin := &Plugin{
+		cfg:       cfg,
+		registry:  registry,
+		scheduler: scheduler,
+		builder:   NewBuilder(scheduler),
+	}
+
+	return plugin, nil
+}
+
+// Start starts the beacon plugin, spwawning background tasks for scheduling beacon updates.
+func (p *Plugin) Start(ctx context.Context) error {
+	logger := utils.GetLogger("orbitport:beacon")
+
+	logger.Info("Starting beacon plugin...")
+
+	if err := p.scheduler.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start beacon scheduler: %w", err)
+	}
+	logger.Info("Beacon scheduler started")
+
+	if err := p.builder.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start beacon builder: %w", err)
+	}
+	logger.Info("Beacon builder started")
+
+	return nil
+}
+
+// Stop stops the beacon plugin, cleaning up resources.
+func (p *Plugin) Close() error {
+	logger := utils.GetLogger("orbitport:beacon")
+	logger.Info("Stopping beacon plugin...")
+
+	_ = p.scheduler.Close()
+	_ = p.builder.Close()
+
+	return nil
+}
+
+func loadLastBeaconBlock(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, name string) (string, *BeaconPayload, error) {
+
+	logger := utils.GetLogger("orbitport:beacon")
+	getResp, err := ipfsPluginClient.Get(ctx, &proto.GetRequest{
+		Key:       name,
+		Namespace: "ipns",
+	})
+	if err != nil {
+		// TODO: Handle error appropriately, maybe retry or set to recoverable state
+		return "", nil, fmt.Errorf("failed to get beacon from IPFS: %v", err)
+	}
+	lastCid := getResp.GetPath()
+	logger.Infof("retrieved last beacon block CID: %s", lastCid)
+	lastBlock, err := UnmarshalBeaconBlock[BeaconPayload](getResp.GetData())
+	if err != nil {
+		_, err2 := UnmarshalBeaconBlock[BeaconMetadata](getResp.GetData())
+		if err2 != nil {
+			return "", nil, fmt.Errorf("failed to unmarshal beacon block: %v", err)
+		}
+		lastBlock = new(BeaconPayload)
+	}
+	return lastCid, lastBlock, nil
+}
+
+// creates a new beacon in ipfs and returns its ipns public key
+func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, beaconName string) (string, error) {
+	logger := utils.GetLogger("orbitport:beacon")
+	gen := &BeaconPayload{Sequence: 0, Timestamp: time.Now().Unix()}
+	data, err := gen.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal genesis block payload: %w", err)
+	}
+
+	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
+		Data:        data,
+		PublishName: &beaconName,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to add genesis block to IPFS: %w", err)
+	}
+	pubKey := *addResp.IpnsName
+	logger.Infof("beacon created with public key %s", pubKey)
+	return pubKey, nil
+}
+
+// init initializes the plugin, loading beacons from the registry.
+func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
+	logger := utils.GetLogger("orbitport:beacon:registry_loader")
+
+	conn, ipfsPluginClient, err := getIpfsPluginClient(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to IPFS plugin: %w", err)
+	}
+	defer func() {
+		err = conn.Close()
+		if err != nil {
+			logger.Errorf("error closing ipfs plugin connection: %v", err)
+		}
+	}()
+
+	if len(cfg.BeaconRegsitry) == 0 {
+		beaconName := "default-beacon1.7"
+		logger.Info("No beacon registry configured. Creating new registry with genesis block")
+		pubKey, err := createBeacon(ctx, ipfsPluginClient, beaconName)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create new beacon for new registry: %w", err)
+		}
+
+		logger.Info("Registry created. Name: %s, PublicKey: %s", beaconName, pubKey)
+		return &Registry{
+			Beacons: []BeaconMetadata{
+				{
+					Name:      beaconName,
+					PublicKey: pubKey,
+					Version:   "1.0",
+					Encoding:  "json",
+					BatchSize: 2,
+					Interval:  10 * time.Minute,
+				},
+			},
+		}, nil
+	}
+
+	logger.Info("beacon registry key acquired from config")
+	getResp, err := ipfsPluginClient.Get(ctx, &proto.GetRequest{
+		Key:       cfg.BeaconRegsitry,
+		Namespace: "ipns",
+	}, grpc.WaitForReady(true))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get beacon registry from IPFS: %w", err)
+	}
+	logger.Info("Successfully retrieved beacon registry from IPFS")
+
+	registry := new(Registry)
+	err = registry.Unmarshal(getResp.GetData())
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal beacon registry: %w", err)
+	}
+	logger.Infof("Loaded %d beacons from registry", len(registry.Beacons))
+
+	return registry, nil
+}
+
+func getIpfsPluginClient(cfg Config) (*grpc.ClientConn, proto.IpfsPluginClient, error) {
+	conn, err := grpc.NewClient(cfg.IPFSPlugin, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to IPFS plugin: %w", err)
+	}
+
+	client := proto.NewIpfsPluginClient(conn)
+	return conn, client, nil
+}
+
+func getCtrngPluginClient(cfg Config) (*grpc.ClientConn, proto.RandomnessPluginClient, error) {
+	conn, err := grpc.NewClient(cfg.CTRNGPlugin, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to CTRNG plugin: %w", err)
+	}
+
+	client := proto.NewRandomnessPluginClient(conn)
+	return conn, client, nil
+}

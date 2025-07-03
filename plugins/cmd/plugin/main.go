@@ -11,6 +11,7 @@ import (
 	"github.com/spacecomputerio/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/aptosorbital"
 	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/auth"
+	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/beacon"
 	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/ipfs"
 	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputerio/orbitport/plugins/proto"
@@ -49,6 +50,25 @@ func main() {
 		}
 		proto.RegisterIpfsPluginServer(grpcServer, plugin)
 		logger.Info("IPFS plugin ready")
+	case "beacon":
+		beaconpn, err := beacon.NewPlugin()
+		if err != nil {
+			panic("beacon.newPlugin panic")
+		}
+
+		logger.Info("Beacon plugin ready")
+
+		err = beaconpn.Start(context.Background())
+		if err != nil {
+			logger.Errorf("error starting beacon plugin: %v", err)
+		}
+		defer func() {
+			err := beaconpn.Close()
+			if err != nil {
+				logger.Errorf("error closing beacon plugin: %v", err)
+			}
+		}()
+
 	default:
 		panic("unknown plugin")
 	}

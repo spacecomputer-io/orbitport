@@ -118,3 +118,14 @@ services:
     ports:
       - 8080:8080
 
+  plugin-beacon:
+    <<: *plugin-base
+    container_name: plugin-beacon
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=beacon
+      - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
+      - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001

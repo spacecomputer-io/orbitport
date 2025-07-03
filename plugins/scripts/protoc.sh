@@ -1,9 +1,6 @@
 #!/bin/bash
 
 export PATH="$HOME/go/bin:$PATH"
-
-
-
 (protoc-gen-go --version &> /dev/null) || (echo "Missing protoc-gen-go" && exit 1)
 
 ## create .backup folder just in case
