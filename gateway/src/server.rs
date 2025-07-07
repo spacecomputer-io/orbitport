@@ -127,7 +127,7 @@ async fn rate_limit(
 ) -> Result<(), warp::Rejection> {
     // NOTE: Using empty_token in case authentication is off, in case authentication was on and there is no auth header
     // this will be rejected before this point.
-    let empty_token = format!("{}empty", BEARER);
+    let empty_token = format!("{BEARER}empty");
     let token = extract_jwt(auth_header.as_deref().unwrap_or(empty_token.as_str()))
         .map_err(|_| warp::reject::custom(GatewayError::NoAuthHeaderError))?;
     // Hash the token to avoid storing it directly

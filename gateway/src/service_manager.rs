@@ -15,10 +15,10 @@ use crate::proto::auth::auth_plugin_client::AuthPluginClient;
 
 async fn check_health(addr: &str) -> Result<HealthCheckResponse, tonic::Status> {
     let channel = Channel::from_shared(addr.to_string())
-        .map_err(|e| tonic::Status::unavailable(format!("Failed to create channel: {}", e)))?
+        .map_err(|e| tonic::Status::unavailable(format!("Failed to create channel: {e}")))?
         .connect()
         .await
-        .map_err(|e| tonic::Status::unavailable(format!("Failed to connect to {}: {}", addr, e)))?;
+        .map_err(|e| tonic::Status::unavailable(format!("Failed to connect to {addr}: {e}")))?;
     let mut client = HealthClient::new(channel);
     let request = HealthCheckRequest::default();
     client
