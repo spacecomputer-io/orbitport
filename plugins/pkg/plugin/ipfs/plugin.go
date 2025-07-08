@@ -95,24 +95,6 @@ func (pi *Plugin) Add(ctx context.Context, req *pluginsproto.AddRequest) (*plugi
 		return nil, err
 	}
 
-	var ipnsName string
-
-	// publish on IPNS if a name is provided
-	publishName := req.PublishName
-	if publishName != nil && len(*publishName) > 0 {
-		name := *publishName
-		_, err := pi.resolveOrGenerateKey(ctx, name)
-		if err != nil {
-			return nil, err
-		}
-		if updatedName, err := pi.publish(ctx, block.Path(), name); err != nil {
-			logger.Warnf("failed to publish (%s): %s", name, err)
-			return nil, err
-		} else {
-			ipnsName = updatedName.String()
-		}
-	}
-
 	path := block.Path()
 
 	logger.Debugf("caching data for path: %s. Data size: %d", path.String(), len(req.Data))
@@ -122,9 +104,7 @@ func (pi *Plugin) Add(ctx context.Context, req *pluginsproto.AddRequest) (*plugi
 	resp := &pluginsproto.AddResponse{
 		Cid: path.RootCid().String(),
 	}
-	if len(ipnsName) > 0 {
-		resp.IpnsName = &ipnsName
-	}
+
 	return resp, nil
 }
 
@@ -244,20 +224,15 @@ func (pi *Plugin) Delete(ctx context.Context, req *pluginsproto.DeleteRequest) (
 func (pi *Plugin) resolveOrGenerateKey(ctx context.Context, name string) (iface.Key, error) {
 	logger := utils.GetLogger("orbitport:ipfs")
 
-	resolved, _ := pi.node.Name().Resolve(ctx, name)
 	// if key exists, update the mutable link
-	if resolved != nil {
-		logger.Infof("updating existing name: %s", name)
-		key, err := pi.keyForName(ctx, name)
-		if err != nil {
-			logger.Warnf("failed to get key for name: %s", err)
-			return nil, err
-		}
+	logger.Debugf("attmept to resolve key by name: %s", name)
+	key, err := pi.keyForName(ctx, name)
+	if err == nil {
 		return key, nil
 	}
 
 	logger.Infof("name does not exist, creating new one: %s", name)
-	key, err := pi.node.Key().Generate(ctx, name)
+	key, err = pi.node.Key().Generate(ctx, name)
 	if err != nil {
 		logger.Warnf("failed to generate key: %s", err)
 		return nil, err

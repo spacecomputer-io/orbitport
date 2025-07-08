@@ -24,7 +24,6 @@ const (
 type AddRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	PublishName   *string                `protobuf:"bytes,2,opt,name=publish_name,json=publishName,proto3,oneof" json:"publish_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -66,17 +65,9 @@ func (x *AddRequest) GetData() []byte {
 	return nil
 }
 
-func (x *AddRequest) GetPublishName() string {
-	if x != nil && x.PublishName != nil {
-		return *x.PublishName
-	}
-	return ""
-}
-
 type AddResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Cid           string                 `protobuf:"bytes,1,opt,name=cid,proto3" json:"cid,omitempty"`
-	IpnsName      *string                `protobuf:"bytes,2,opt,name=ipns_name,json=ipnsName,proto3,oneof" json:"ipns_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,13 +105,6 @@ func (*AddResponse) Descriptor() ([]byte, []int) {
 func (x *AddResponse) GetCid() string {
 	if x != nil {
 		return x.Cid
-	}
-	return ""
-}
-
-func (x *AddResponse) GetIpnsName() string {
-	if x != nil && x.IpnsName != nil {
-		return *x.IpnsName
 	}
 	return ""
 }
@@ -417,17 +401,12 @@ var File_proto_ipfs_proto protoreflect.FileDescriptor
 
 const file_proto_ipfs_proto_rawDesc = "" +
 	"\n" +
-	"\x10proto/ipfs.proto\x12\x04ipfs\"Y\n" +
+	"\x10proto/ipfs.proto\x12\x04ipfs\" \n" +
 	"\n" +
 	"AddRequest\x12\x12\n" +
-	"\x04data\x18\x01 \x01(\fR\x04data\x12&\n" +
-	"\fpublish_name\x18\x02 \x01(\tH\x00R\vpublishName\x88\x01\x01B\x0f\n" +
-	"\r_publish_name\"O\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\"\x1f\n" +
 	"\vAddResponse\x12\x10\n" +
-	"\x03cid\x18\x01 \x01(\tR\x03cid\x12 \n" +
-	"\tipns_name\x18\x02 \x01(\tH\x00R\bipnsName\x88\x01\x01B\f\n" +
-	"\n" +
-	"_ipns_name\"<\n" +
+	"\x03cid\x18\x01 \x01(\tR\x03cid\"<\n" +
 	"\n" +
 	"GetRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1c\n" +
@@ -495,8 +474,6 @@ func file_proto_ipfs_proto_init() {
 	if File_proto_ipfs_proto != nil {
 		return
 	}
-	file_proto_ipfs_proto_msgTypes[0].OneofWrappers = []any{}
-	file_proto_ipfs_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

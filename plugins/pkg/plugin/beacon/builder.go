@@ -134,17 +134,29 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	}
 
 	// Save block to IPFS
-	publishName := metadata.Name
 	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
-		Data:        blockBytes,
-		PublishName: &publishName,
+		Data: blockBytes,
 	})
 	if err != nil {
 		logger.Errorf("failed to add beacon block to IPFS: %v", err)
+		return err
 		// TODO: Handle error appropriately, maybe retry or set to recoverable state
-	} else {
-		logger.Infof("Added beacon (%s) block to IPFS with CID: %s", publishName, addResp.GetCid())
 	}
+
+	logger.Infof("block added to IFPS with CID %s, publishing to IPNS beacon-name: %s, beacon-CID: %s", addResp.Cid, metadata.Name, metadata.PublicKey)
+
+	// publish new block data to beacon key
+	publishName := metadata.Name
+	_, err = ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
+		Cid:         addResp.Cid,
+		PublishName: publishName,
+	})
+
+	if err != nil {
+		logger.Errorf("failed to publish updated beacon block %s to IPNS beacon-name %s, beacon-CID %s: %v", addResp.Cid, metadata.Name, metadata.PublicKey, err)
+		return err
+	}
+	logger.Infof("block %s published to beacon (%s), with CID: %s", addResp.GetCid(), publishName, metadata.PublicKey)
 
 	return nil
 }

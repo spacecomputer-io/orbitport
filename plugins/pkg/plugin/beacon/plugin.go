@@ -114,14 +114,22 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 	}
 
 	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
-		Data:        data,
-		PublishName: &beaconName,
+		Data: data,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to add genesis block to IPFS: %w", err)
 	}
-	pubKey := *addResp.IpnsName
-	logger.Infof("beacon created with public key %s", pubKey)
+
+	publishResp, err := ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
+		Cid:         addResp.Cid,
+		PublishName: beaconName,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to publish genesis block to IPNS: %w", err)
+	}
+
+	pubKey := publishResp.IpnsName
+	logger.Infof("beacon created with beacon name %s, public key %s", beaconName, pubKey)
 	return pubKey, nil
 }
 
@@ -141,14 +149,14 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 	}()
 
 	if len(cfg.BeaconRegsitry) == 0 {
-		beaconName := "default-beacon1.7"
+		beaconName := "default-beacon2.4"
 		logger.Info("No beacon registry configured. Creating new registry with genesis block")
 		pubKey, err := createBeacon(ctx, ipfsPluginClient, beaconName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new beacon for new registry: %w", err)
 		}
 
-		logger.Info("Registry created. Name: %s, PublicKey: %s", beaconName, pubKey)
+		logger.Infof("Registry created. Name: %s, PublicKey: %s", beaconName, pubKey)
 		return &Registry{
 			Beacons: []BeaconMetadata{
 				{

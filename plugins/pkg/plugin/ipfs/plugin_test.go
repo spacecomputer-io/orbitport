@@ -75,22 +75,27 @@ func TestIpfsPlugin(t *testing.T) {
 		data := []byte(fmt.Sprintf("test data to be pubilshed %d", now.UnixNano()))
 		publishName := fmt.Sprintf("test-publish-name-%d", now.Unix())
 		req := &proto.AddRequest{
-			Data:        data,
-			PublishName: &publishName,
+			Data: data,
 		}
 
 		resp, err := plugin.Add(ctx, req)
 		require.NoError(t, err, "failed to add data to IPFS")
+
+		pubresp, err := plugin.Publish(ctx, &proto.PublishRequest{
+			Cid:         resp.Cid,
+			PublishName: publishName,
+		})
+		require.NoError(t, err, "failed to publish data to IPNS")
 		fmt.Printf("got response: %v\n", resp)
 		require.NotEmpty(t, resp.Cid, "CID should not be empty")
-		require.NotNil(t, resp.IpnsName, "IPNS name should not be nil")
-		require.NotEmpty(t, *resp.IpnsName, "IPNS name should not be empty")
+		require.NotNil(t, pubresp.IpnsName, "IPNS name should not be nil")
+		require.NotEmpty(t, pubresp.IpnsName, "IPNS name should not be empty")
 		t.Logf("data added to IPFS: %s", resp.Cid)
-		t.Logf("IPNS name: %s", *resp.IpnsName)
+		t.Logf("IPNS name: %s", pubresp.IpnsName)
 
 		// Verify data is retrievable via IPNS
 		getReq := &proto.GetRequest{
-			Key:       *resp.IpnsName,
+			Key:       pubresp.IpnsName,
 			Namespace: "ipns",
 		}
 		getResp, err := plugin.Get(ctx, getReq)

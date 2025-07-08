@@ -13,12 +13,10 @@ service IpfsPlugin {
 
 message AddRequest {
     bytes data = 1;
-    optional string publish_name = 2;
 }
 
 message AddResponse {
     string cid = 1;
-    optional string ipns_name = 2;
 }
 
 message GetRequest {
