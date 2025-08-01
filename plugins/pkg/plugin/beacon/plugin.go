@@ -148,7 +148,7 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 		}
 	}()
 
-	if len(cfg.BeaconRegsitry) == 0 {
+	if len(cfg.BeaconRegistry) == 0 {
 		beaconName := "default-beacon2.4"
 		logger.Info("No beacon registry configured. Creating new registry with genesis block")
 		pubKey, err := createBeacon(ctx, ipfsPluginClient, beaconName)
@@ -173,7 +173,7 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 
 	logger.Info("beacon registry key acquired from config")
 	getResp, err := ipfsPluginClient.Get(ctx, &proto.GetRequest{
-		Key:       cfg.BeaconRegsitry,
+		Key:       cfg.BeaconRegistry,
 		Namespace: "ipns",
 	}, grpc.WaitForReady(true))
 	if err != nil {

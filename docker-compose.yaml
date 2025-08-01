@@ -47,6 +47,7 @@ services:
 
   ipfs-node:
     image: ipfs/kubo:release
+    container_name: ipfs-node
     ports:
       - "4001:4001"  # IPFS Swarm Port
       - "5001:5001"  # IPFS API Port
@@ -70,3 +71,15 @@ services:
       - plugin-auth
     ports:
       - 8080:8080
+
+  plugin-beacon:
+    <<: *plugin-base
+    container_name: plugin-beacon
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=beacon
+      - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
+      - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001

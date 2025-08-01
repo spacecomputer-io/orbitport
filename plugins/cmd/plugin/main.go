@@ -28,6 +28,10 @@ func main() {
 
 	logger.Infof("Starting plugin %s", cfg.Plugin)
 
+	healthCheck := func(_ context.Context) (health.HealthState, error) {
+		return health.HealthStateHealthy, nil
+	}
+
 	switch cfg.Plugin {
 	case "aptosorbital":
 		plugin, err := aptosorbital.NewPlugin()
@@ -49,11 +53,15 @@ func main() {
 			panic(err)
 		}
 		proto.RegisterIpfsPluginServer(grpcServer, plugin)
+
+		// Override health check for IPFS plugin
+		healthCheck = beacon.IpfsHealthCheck
+
 		logger.Info("IPFS plugin ready")
 	case "beacon":
 		beaconpn, err := beacon.NewPlugin()
 		if err != nil {
-			panic("beacon.newPlugin panic")
+			panic(err)
 		}
 
 		logger.Info("Beacon plugin ready")
@@ -73,9 +81,6 @@ func main() {
 		panic("unknown plugin")
 	}
 
-	healthCheck := func(_ context.Context) (health.HealthState, error) {
-		return health.HealthStateHealthy, nil
-	}
 	healthServer := health.NewHealthServer(healthCheck)
 	grpc_health_v1.RegisterHealthServer(grpcServer, healthServer)
 
