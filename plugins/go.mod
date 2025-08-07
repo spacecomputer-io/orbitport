@@ -1,4 +1,4 @@
-module github.com/spacecomputerio/orbitport/plugins
+module github.com/spacecomputer-io/orbitport/plugins
 
 go 1.24
 

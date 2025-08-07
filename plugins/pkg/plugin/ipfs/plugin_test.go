@@ -8,8 +8,8 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/testutils"
-	"github.com/spacecomputerio/orbitport/plugins/proto"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/testutils"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"

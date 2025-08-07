@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/testutils"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/testutils"
 )
 
 // generateLocalRandomBytes returns securely generated random bytes.

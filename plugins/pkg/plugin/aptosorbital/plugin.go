@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputerio/orbitport/plugins/proto"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
 
 // Plugin implements the interfaces for the Aptos Orbital API.

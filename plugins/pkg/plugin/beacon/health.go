@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/core/health"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 )
 
 func IpfsHealthCheck(ctx context.Context) (health.HealthState, error) {

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputerio/orbitport/plugins/proto"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
 
 type Builder struct {

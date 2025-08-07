@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spf13/viper"
 )
 

@@ -10,8 +10,8 @@ import (
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputerio/orbitport/plugins/proto"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
 
 // Plugin implements the AuthPluginServer interface for the Auth0 API.

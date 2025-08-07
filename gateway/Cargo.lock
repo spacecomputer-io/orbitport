@@ -2357,7 +2357,7 @@ dependencies = [
 [[package]]
 name = "threshold"
 version = "0.0.1"
-source = "git+https://www.github.com/spacecomputerio/threshold?tag=v0.0.1#87c98eb9976f23c67fb1d62aac1f01e9dc5213ae"
+source = "git+https://www.github.com/spacecomputer-io/threshold?tag=v0.0.1#87c98eb9976f23c67fb1d62aac1f01e9dc5213ae"
 dependencies = [
  "hex",
  "rand 0.7.3",

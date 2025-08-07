@@ -29,7 +29,7 @@ sha2 = "0.10.8"
 lazy_static = "1.5.0"
 prometheus = "0.14.0"
 
-threshold = { git = "https://www.github.com/spacecomputerio/threshold", tag = "v0.0.1" }
+threshold = { git = "https://www.github.com/spacecomputer-io/threshold", tag = "v0.0.1" }
 
 [build-dependencies]
 tonic-build = "0.13.0"

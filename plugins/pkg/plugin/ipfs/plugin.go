@@ -18,8 +18,8 @@ import (
 	"github.com/ipfs/kubo/core/coreiface/options"
 	ma "github.com/multiformats/go-multiaddr"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
-	pluginsproto "github.com/spacecomputerio/orbitport/plugins/proto"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
+	pluginsproto "github.com/spacecomputer-io/orbitport/plugins/proto"
 )
 
 type Plugin struct {

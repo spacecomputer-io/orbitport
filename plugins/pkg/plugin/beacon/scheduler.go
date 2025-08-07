@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 )
 
 type Scheduler struct {

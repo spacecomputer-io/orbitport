@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/core/health"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputerio/orbitport/plugins/proto"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

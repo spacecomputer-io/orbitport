@@ -7,14 +7,14 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
 
-	"github.com/spacecomputerio/orbitport/plugins/pkg/core"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/core/health"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/aptosorbital"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/auth"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/beacon"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/plugin/ipfs"
-	"github.com/spacecomputerio/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputerio/orbitport/plugins/proto"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/core"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/aptosorbital"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
 
 func main() {
