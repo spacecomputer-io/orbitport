@@ -10,7 +10,7 @@ import (
 )
 
 func IpfsHealthCheck(ctx context.Context) (health.HealthState, error) {
-	cfg := readFromEnv() // make sure this resolves to the SAME IPFSAddress the ipfs plugin uses, including scheme
+	cfg := readFromEnv() // shohuld resolve to IPFSAddress used by ipfs plugin
 	client := &http.Client{Timeout: 2 * time.Second}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.IPFSAddress+"/api/v0/version", nil)
