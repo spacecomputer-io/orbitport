@@ -22,7 +22,9 @@ func IpfsHealthCheck(ctx context.Context) (health.HealthState, error) {
 	if err != nil {
 		return health.HealthStateUnhealthy, fmt.Errorf("IPFS not reachable: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return health.HealthStateUnhealthy, fmt.Errorf("IPFS API error: %s", resp.Status)
