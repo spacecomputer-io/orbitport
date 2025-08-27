@@ -128,7 +128,6 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	}
 
 	blockBytes, err := json.Marshal(block)
-	logger.Debugf("Encoded block: %s", string(blockBytes))
 	if err != nil {
 		return fmt.Errorf("failed to marshal beacon block: %v", err)
 	}
