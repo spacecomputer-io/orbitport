@@ -94,29 +94,22 @@ func loadLastBeaconBlock(ctx context.Context, ipfsPluginClient proto.IpfsPluginC
 	}
 	lastCid := getResp.GetPath()
 	logger.Infof("retrieved last beacon block CID: %s", lastCid)
-	lastBlock, err := UnmarshalBeaconBlock[BeaconPayload](getResp.GetData())
+	block, err := UnmarshalBeaconBlock(getResp.GetData())
 	if err != nil {
-		_, err2 := UnmarshalBeaconBlock[BeaconMetadata](getResp.GetData())
-		if err2 != nil {
-			return "", nil, fmt.Errorf("failed to unmarshal beacon block: %v", err)
-		}
-		lastBlock = new(BeaconPayload)
+		return "", nil, fmt.Errorf("failed to unmarshal beacon block: %w", err)
 	}
-	return lastCid, lastBlock, nil
+
+	return lastCid, block.Data, nil
 }
 
 // creates a new beacon in ipfs and returns its ipns public key
 func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, beaconName string) (string, error) {
 	logger := utils.GetLogger("orbitport:beacon")
 	gen := &BeaconPayload{Sequence: 0, Timestamp: time.Now().Unix(), CTRNG: []string{}}
-	data, err := gen.Marshal()
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal genesis block payload: %w", err)
-	}
 
 	block := Block{
 		Link: "",
-		Data: data,
+		Data: gen,
 	}
 
 	blockBytes, err := json.Marshal(block)

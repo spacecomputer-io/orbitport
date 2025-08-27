@@ -90,7 +90,7 @@ func (b *Builder) Close() error {
 }
 
 func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrngPluginClient proto.RandomnessPluginClient, ipfsPluginClient proto.IpfsPluginClient) error {
-	ctx, cancel := context.WithTimeout(c, time.Minute*2)
+	ctx, cancel := context.WithTimeout(c, time.Minute*1)
 	defer cancel()
 
 	logger := utils.GetLogger("orbitport:beacon:executor")
@@ -120,20 +120,15 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 		CTRNG:     ctrngs,
 	}
 
-	logger.Infof("Beacon payload: %+v", beaconPayload)
-
-	payloadBytes, err := json.Marshal(beaconPayload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal beacon payload: %w", err)
-	}
+	logger.Debugf("Beacon payload: %+v", beaconPayload)
 
 	block := Block{
 		Link: lastCid,
-		Data: json.RawMessage(payloadBytes),
+		Data: beaconPayload,
 	}
 
 	blockBytes, err := json.Marshal(block)
-	logger.Infof("Encoded block: %s", string(blockBytes))
+	logger.Debugf("Encoded block: %s", string(blockBytes))
 	if err != nil {
 		return fmt.Errorf("failed to marshal beacon block: %v", err)
 	}
