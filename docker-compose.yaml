@@ -23,7 +23,7 @@ services:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=ipfs
       - ORBITPORT_GRPC_PORT=50002
-      - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
+      - ORBITPORT_IPFS_ADDRESS=http://65.109.2.230:5001
 
   plugin-aptos-orbital:
     <<: *plugin-base

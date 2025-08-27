@@ -26,5 +26,5 @@ func setDefaults() {
 	viper.SetDefault("ORBITPORT_IPFS_PLUGIN", "plugin-ipfs:50002")
 	viper.SetDefault("ORBITPORT_CTRNG_PLUGIN", "plugin-aptos-orbital:50001")
 	viper.SetDefault("BEACON_REGISTRY", "")
-	viper.SetDefault("IPFS_ADDRESS", "http://ipfs-node:5001")
+	viper.SetDefault("IPFS_ADDRESS", "http://65.109.2.230:5001")
 }

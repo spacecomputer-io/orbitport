@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -107,14 +108,24 @@ func loadLastBeaconBlock(ctx context.Context, ipfsPluginClient proto.IpfsPluginC
 // creates a new beacon in ipfs and returns its ipns public key
 func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, beaconName string) (string, error) {
 	logger := utils.GetLogger("orbitport:beacon")
-	gen := &BeaconPayload{Sequence: 0, Timestamp: time.Now().Unix()}
+	gen := &BeaconPayload{Sequence: 0, Timestamp: time.Now().Unix(), CTRNG: []string{}}
 	data, err := gen.Marshal()
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal genesis block payload: %w", err)
 	}
 
-	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
+	block := Block{
+		Link: "",
 		Data: data,
+	}
+
+	blockBytes, err := json.Marshal(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal genesis block: %w", err)
+	}
+
+	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
+		Data: blockBytes,
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to add genesis block to IPFS: %w", err)

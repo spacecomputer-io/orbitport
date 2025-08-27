@@ -19,8 +19,8 @@ func (r *Registry) Unmarshal(data []byte) error {
 }
 
 type Block struct {
-	Link string `json:"previous"`
-	Data []byte `json:"data"`
+	Link string          `json:"previous"`
+	Data json.RawMessage `json:"data"`
 }
 
 func (b *Block) Marshal() ([]byte, error) {
@@ -63,9 +63,15 @@ func (b *BeaconPayload) Unmarshal(data []byte) error {
 }
 
 func UnmarshalBeaconBlock[T BeaconMetadata | BeaconPayload](data []byte) (*T, error) {
-	var block T
-	if err := json.Unmarshal(data, &block); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal beacon block: %w", err)
+	var container Block
+	if err := json.Unmarshal(data, &container); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal outer block: %w", err)
 	}
-	return &block, nil
+
+	var payload T
+	if err := json.Unmarshal(container.Data, &payload); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal inner data field: %w", err)
+	}
+
+	return &payload, nil
 }
