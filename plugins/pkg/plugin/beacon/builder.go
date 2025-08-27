@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -89,7 +90,7 @@ func (b *Builder) Close() error {
 }
 
 func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrngPluginClient proto.RandomnessPluginClient, ipfsPluginClient proto.IpfsPluginClient) error {
-	ctx, cancel := context.WithTimeout(c, time.Second*30)
+	ctx, cancel := context.WithTimeout(c, time.Minute*1)
 	defer cancel()
 
 	logger := utils.GetLogger("orbitport:beacon:executor")
@@ -119,20 +120,19 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 		CTRNG:     ctrngs,
 	}
 
-	beaconPayloadBytes, err := beaconPayload.Marshal()
-	if err != nil {
-		return fmt.Errorf("failed to marshal beacon payload: %v", err)
-	}
+	logger.Debugf("Beacon payload: %+v", beaconPayload)
 
 	block := Block{
 		Link: lastCid,
-		Data: beaconPayloadBytes,
+		Data: beaconPayload,
 	}
-	blockBytes, err := block.Marshal()
+
+	blockBytes, err := json.Marshal(block)
 	if err != nil {
 		return fmt.Errorf("failed to marshal beacon block: %v", err)
 	}
 
+	logger.Debugf("Beacon block JSON: %s", string(blockBytes))
 	// Save block to IPFS
 	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
 		Data: blockBytes,
