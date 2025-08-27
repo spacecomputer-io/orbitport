@@ -246,6 +246,8 @@ async fn handle_get(
             return Err(warp::reject::custom(GatewayError::BadRequest(
                 "Bulk size exceeds maximum limit".to_string(),
             )));
+        } else {
+            tracing::debug!("[req={}] Bulk size: {}", req_id, b);
         }
     }
     let enc_key = if let Some(key) = query.key {
@@ -291,6 +293,8 @@ async fn handle_post(
             return Err(warp::reject::custom(GatewayError::BadRequest(
                 "Bulk size exceeds maximum limit".to_string(),
             )));
+        } else {
+            tracing::debug!("[req={}] Bulk size: {}", req_id, b);
         }
     }
     let key = if let Some(k) = query.key {
