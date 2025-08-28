@@ -52,9 +52,15 @@ The core components of the system are:
 - **Gateway**: The main service that exposes the API and handles requests from users. Written in Rust for performance and safety.
 - **Plugins**: Lightweight, stateless grpc services that encapsulate the logic to interact with the underlying providers/satellites and with 3rd party services (e.g. IPFS, authentication), written in golang for easy integration and to work with standard libraries.
 
-The following diagram visualizes the overall architecture of Orbitport:
+The following diagram visualizes the high-level architecture of Orbitport:
 
-[![Orbitport Architecture](hl-arch-v1.png)](hl-arch-v1.png)
+[![Orbitport HL Architecture](hl-arch-v1.png)](hl-arch-v1.png)
+
+### System Architecture
+
+The following diagram describes the system architecture of Orbitport, showing the main components and their interactions:
+
+[![Orbitport System Architecture](sys-arch-v1.png)](sys-arch-v1.png)
 
 ### Satellite Integration
 
