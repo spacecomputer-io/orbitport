@@ -159,4 +159,5 @@ To overcome this, we are using [IPNS](https://docs.ipfs.io/concepts/ipns/) to pr
 
 **3. Privacy**
 
-IPFS is a public network, where data is shared between nodes. To ensure privacy, we encrypt any sensitive data before storing it on IPFS.
+IPFS is a public network, where data is shared between nodes. In the first phase, we won't focus on privacy, but in the future, we might implement a privacy layer or explore the market for other solutions.
+
