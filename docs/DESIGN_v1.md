@@ -52,9 +52,15 @@ The core components of the system are:
 - **Gateway**: The main service that exposes the API and handles requests from users. Written in Rust for performance and safety.
 - **Plugins**: Lightweight, stateless grpc services that encapsulate the logic to interact with the underlying providers/satellites and with 3rd party services (e.g. IPFS, authentication), written in golang for easy integration and to work with standard libraries.
 
-The following diagram visualizes the overall architecture of Orbitport:
+The following diagram visualizes the high-level architecture of Orbitport:
 
-[![Orbitport Architecture](hl-arch-v1.png)](hl-arch-v1.png)
+[![Orbitport HL Architecture](hl-arch-v1.png)](hl-arch-v1.png)
+
+### System Architecture
+
+The following diagram describes the system architecture of Orbitport, showing the main components and their interactions:
+
+[![Orbitport System Architecture](sys-arch-v1.png)](sys-arch-v1.png)
 
 ### Satellite Integration
 
@@ -153,4 +159,5 @@ To overcome this, we are using [IPNS](https://docs.ipfs.io/concepts/ipns/) to pr
 
 **3. Privacy**
 
-IPFS is a public network, where data is shared between nodes. To ensure privacy, we encrypt any sensitive data before storing it on IPFS.
+IPFS is a public network, where data is shared between nodes. In the first phase, we won't focus on privacy, but in the future, we might implement a privacy layer or explore the market for other solutions.
+
