@@ -7,24 +7,17 @@ import (
 	"sync"
 )
 
-func NewMockServer(rotate bool, responses ...string) *httptest.Server {
+func NewMockServer(rotate bool, responses ...string) *WrappedHTTPTestServer {
 	mock := &mockHandler{
 		rotate:    rotate,
 		responses: responses,
 	}
 
 	server := httptest.NewServer(mock)
-	return server
+	return &WrappedHTTPTestServer{Server: server}
 }
 
 type mockHandler struct {
-	rotate    bool
-	responses []string
-	lock      sync.Mutex
-}
-
-type MockServer struct {
-	mux       *http.ServeMux
 	rotate    bool
 	responses []string
 	lock      sync.Mutex
@@ -46,4 +39,14 @@ func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if m.rotate {
 		m.responses = append(m.responses, resp)
 	}
+}
+
+type WrappedHTTPTestServer struct {
+	*httptest.Server
+}
+
+// ListenAndServe just prints the URL (since httptest.Server already runs)
+func (w *WrappedHTTPTestServer) ListenAndServe(addr string) {
+	fmt.Println("Mock server running at:", w.Server.URL)
+	select {} // block forever for CLI
 }
