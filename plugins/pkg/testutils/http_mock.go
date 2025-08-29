@@ -3,31 +3,27 @@ package testutils
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 )
 
-func NewMockServer(rotate bool, responses ...string) *MockServer {
-	mux := http.NewServeMux()
-	return &MockServer{
-		mux:       mux,
+func NewMockServer(rotate bool, responses ...string) *WrappedHTTPTestServer {
+	mock := &mockHandler{
 		rotate:    rotate,
 		responses: responses,
 	}
+
+	server := httptest.NewServer(mock)
+	return &WrappedHTTPTestServer{Server: server}
 }
 
-type MockServer struct {
-	mux       *http.ServeMux
+type mockHandler struct {
 	rotate    bool
 	responses []string
 	lock      sync.Mutex
 }
 
-func (m *MockServer) ListenAndServe(addr string) {
-	m.mux.Handle("/", m)
-	_ = http.ListenAndServe(addr, m.mux)
-}
-
-func (m *MockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (m *mockHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -35,10 +31,22 @@ func (m *MockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 	resp := m.responses[0]
 	_, _ = fmt.Fprint(w, resp)
+
 	m.responses = m.responses[1:]
 	if m.rotate {
 		m.responses = append(m.responses, resp)
 	}
+}
+
+type WrappedHTTPTestServer struct {
+	*httptest.Server
+}
+
+// ListenAndServe just prints the URL (since httptest.Server already runs)
+func (w *WrappedHTTPTestServer) ListenAndServe(addr string) {
+	fmt.Printf("Mock server running at: %s", w.URL)
+	select {} // block forever for CLI
 }
