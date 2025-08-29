@@ -47,6 +47,6 @@ type WrappedHTTPTestServer struct {
 
 // ListenAndServe just prints the URL (since httptest.Server already runs)
 func (w *WrappedHTTPTestServer) ListenAndServe(addr string) {
-	fmt.Printf("Mock server running at: %s", w.Server.URL)
+	fmt.Printf("Mock server running at: %s", w.URL)
 	select {} // block forever for CLI
 }
