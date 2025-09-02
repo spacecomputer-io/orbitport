@@ -19,8 +19,9 @@ func (r *Registry) Unmarshal(data []byte) error {
 }
 
 type Block struct {
-	Link string         `json:"previous"`
-	Data *BeaconPayload `json:"data"`
+	Link     string          `json:"previous,omitempty"`
+	Data     *BeaconPayload  `json:"data,omitempty"`
+	Metadata *BeaconMetadata `json:"metadata,omitempty"`
 }
 
 func (b *Block) Marshal() ([]byte, error) {
