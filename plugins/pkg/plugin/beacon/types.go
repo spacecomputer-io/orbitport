@@ -38,6 +38,7 @@ type BeaconMetadata struct {
 	Version   string        `json:"version"`
 	Encoding  string        `json:"encoding"`
 	BatchSize uint64        `json:"batch_size"`
+	Message   string        `json:"message"`
 	Interval  time.Duration `json:"interval"`
 }
 

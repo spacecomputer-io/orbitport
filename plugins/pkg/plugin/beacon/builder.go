@@ -122,17 +122,9 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 
 	logger.Debugf("Beacon payload: %+v", beaconPayload)
 
-	var meta *BeaconMetadata
-	if lastBlock.Sequence == 0 {
-		meta = &metadata
-	} else {
-		meta = nil
-	}
-
 	block := Block{
-		Link:     lastCid,
-		Data:     beaconPayload,
-		Metadata: meta,
+		Link: lastCid,
+		Data: beaconPayload,
 	}
 
 	blockBytes, err := json.Marshal(block)
