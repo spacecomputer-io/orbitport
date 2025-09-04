@@ -192,7 +192,7 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 			return nil, fmt.Errorf("failed to create new beacon for new registry: %w", err)
 		}
 
-		logger.Infof("Registry created. Name: %s, PublicKey: %s", beaconMetadata.Name, beaconMetadata.PublicKey, beaconMetadata)
+		logger.Infof("Registry created. Name: %s, PublicKey: %s", beaconMetadata.Name, beaconMetadata.PublicKey)
 		return &Registry{
 			Beacons: []BeaconMetadata{
 				beaconMetadata,
