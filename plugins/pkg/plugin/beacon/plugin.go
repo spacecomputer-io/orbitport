@@ -136,7 +136,7 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 		PublicKey: pubKey,
 		Version:   "1.0",
 		Encoding:  "json",
-		BatchSize: 2,
+		BatchSize: 3,
 		Message:   msg,
 		Interval:  10 * time.Minute,
 	}
