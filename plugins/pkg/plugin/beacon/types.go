@@ -19,8 +19,9 @@ func (r *Registry) Unmarshal(data []byte) error {
 }
 
 type Block struct {
-	Link string         `json:"previous"`
-	Data *BeaconPayload `json:"data"`
+	Link     string          `json:"previous,omitempty"`
+	Data     *BeaconPayload  `json:"data,omitempty"`
+	Metadata *BeaconMetadata `json:"metadata,omitempty"`
 }
 
 func (b *Block) Marshal() ([]byte, error) {
@@ -37,6 +38,7 @@ type BeaconMetadata struct {
 	Version   string        `json:"version"`
 	Encoding  string        `json:"encoding"`
 	BatchSize uint64        `json:"batch_size"`
+	Message   string        `json:"message"`
 	Interval  time.Duration `json:"interval"`
 }
 

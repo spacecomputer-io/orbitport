@@ -103,38 +103,69 @@ func loadLastBeaconBlock(ctx context.Context, ipfsPluginClient proto.IpfsPluginC
 }
 
 // creates a new beacon in ipfs and returns its ipns public key
-func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, beaconName string) (string, error) {
+// Two-step genesis: A. pubKey acquisition, B. final genesis
+func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, beaconName string, msg string) (BeaconMetadata, error) {
 	logger := utils.GetLogger("orbitport:beacon")
-	gen := &BeaconPayload{Sequence: 0, Timestamp: time.Now().Unix(), CTRNG: []string{}}
 
-	block := Block{
-		Link: "",
-		Data: gen,
-	}
-
-	blockBytes, err := json.Marshal(block)
+	// A. temp genesis (no metadata)
+	gen0 := &BeaconPayload{Sequence: 0, Timestamp: time.Now().Unix(), CTRNG: []string{}}
+	tempBlock := Block{Link: "", Data: gen0}
+	tempBytes, err := json.Marshal(tempBlock)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal genesis block: %w", err)
+		return BeaconMetadata{}, fmt.Errorf("marshal temp genesis: %w", err)
 	}
 
-	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
-		Data: blockBytes,
-	})
+	addTemp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{Data: tempBytes})
 	if err != nil {
-		return "", fmt.Errorf("failed to add genesis block to IPFS: %w", err)
+		return BeaconMetadata{}, fmt.Errorf("add temp genesis: %w", err)
 	}
 
-	publishResp, err := ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
-		Cid:         addResp.Cid,
+	pubResp, err := ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
+		Cid:         addTemp.Cid,
 		PublishName: beaconName,
 	})
 	if err != nil {
-		return "", fmt.Errorf("failed to publish genesis block to IPNS: %w", err)
+		return BeaconMetadata{}, fmt.Errorf("publish temp genesis to IPNS: %w", err)
+	}
+	pubKey := pubResp.IpnsName
+	logger.Infof("temp genesis published for %q; acquired pubkey %s", beaconName, pubKey)
+
+	// B. final genesis with metadata
+	meta := &BeaconMetadata{
+		Name:      beaconName,
+		PublicKey: pubKey,
+		Version:   "1.0",
+		Encoding:  "json",
+		BatchSize: 3,
+		Message:   msg,
+		Interval:  10 * time.Minute,
 	}
 
-	pubKey := publishResp.IpnsName
-	logger.Infof("beacon created with beacon name %s, public key %s", beaconName, pubKey)
-	return pubKey, nil
+	finalBlock := Block{
+		Link:     "",
+		Data:     gen0,
+		Metadata: meta,
+	}
+	finalBytes, err := json.Marshal(finalBlock)
+	if err != nil {
+		return BeaconMetadata{}, fmt.Errorf("marshal final genesis: %w", err)
+	}
+
+	addFinal, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{Data: finalBytes})
+	if err != nil {
+		return BeaconMetadata{}, fmt.Errorf("add final genesis: %w", err)
+	}
+
+	// Republish to reference the final genesis CID in IPNS (removes reference to temp genesis)
+	if _, err := ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
+		Cid:         addFinal.Cid,
+		PublishName: beaconName,
+	}); err != nil {
+		return BeaconMetadata{}, fmt.Errorf("publish final genesis to IPNS: %w", err)
+	}
+	logger.Infof("final genesis published for %q (CID %s) with metadata; pubkey %s", beaconName, addFinal.Cid, pubKey)
+
+	return *meta, nil
 }
 
 // init initializes the plugin, loading beacons from the registry.
@@ -154,23 +185,17 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 
 	if len(cfg.BeaconRegistry) == 0 {
 		beaconName := "default-beacon2.4"
+		msg := cfg.BeaconMsg
 		logger.Info("No beacon registry configured. Creating new registry with genesis block")
-		pubKey, err := createBeacon(ctx, ipfsPluginClient, beaconName)
+		beaconMetadata, err := createBeacon(ctx, ipfsPluginClient, beaconName, msg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new beacon for new registry: %w", err)
 		}
 
-		logger.Infof("Registry created. Name: %s, PublicKey: %s", beaconName, pubKey)
+		logger.Infof("Registry created. Name: %s, PublicKey: %s", beaconMetadata.Name, beaconMetadata.PublicKey)
 		return &Registry{
 			Beacons: []BeaconMetadata{
-				{
-					Name:      beaconName,
-					PublicKey: pubKey,
-					Version:   "1.0",
-					Encoding:  "json",
-					BatchSize: 2,
-					Interval:  10 * time.Minute,
-				},
+				beaconMetadata,
 			},
 		}, nil
 	}
