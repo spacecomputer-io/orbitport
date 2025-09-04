@@ -156,7 +156,7 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 		return BeaconMetadata{}, fmt.Errorf("add final genesis: %w", err)
 	}
 
-	// Republish to reference ipns to the final genesis CID (bumps IPNS seq once more)
+	// Republish to reference ipns to the final genesis CID (removes reference to temp genesis)
 	if _, err := ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
 		Cid:         addFinal.Cid,
 		PublishName: beaconName,
