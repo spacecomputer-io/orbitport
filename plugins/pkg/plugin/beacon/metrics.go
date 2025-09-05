@@ -206,6 +206,5 @@ func init() {
 	prometheus.MustRegister(ipnsPublishDuration, ipnsPublishTotal)
 	prometheus.MustRegister(schedTickTotal, scheduledExecutionsTotal)
 	prometheus.MustRegister(lastSequence, lastTimestampSeconds)
-	prometheus.MustRegister(queueDepth)
 	prometheus.MustRegister(genesisStepTotal, genesisStepDuration)
 }

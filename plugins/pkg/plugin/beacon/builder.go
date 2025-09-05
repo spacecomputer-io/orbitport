@@ -67,6 +67,8 @@ func (b *Builder) Start(_ context.Context) error {
 				return
 			case event := <-q:
 				b.threads.GoCtx(ctx, func(ctx context.Context) {
+					execTimer := prometheus.NewTimer(execDuration.WithLabelValues(event.Name))
+					defer execTimer.ObserveDuration()
 					err := b.executeBeacon(ctx, event, ctrngPluginClient, ipfsPluginClient)
 					if err != nil {
 						logger.Errorf("Failed to execute beacon %s: %v", event.Name, err)
@@ -94,10 +96,7 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	ctx, cancel := context.WithTimeout(c, time.Minute*1)
 	defer cancel()
 
-	logger := utils.GetLogger("orbitport:beacon:executor")
-
-	execTimer := prometheus.NewTimer(execDuration.WithLabelValues(metadata.Name))
-	defer execTimer.ObserveDuration()
+	logger := utils.GetLogger("orbitport:beacon:executor").With("beacon", metadata.Name)
 
 	var execErr error
 	defer func() {
@@ -168,7 +167,6 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	if err != nil {
 		ipfsAddTotal.WithLabelValues(metadata.Name, "failed").Inc()
 		execErr = fmt.Errorf("failed to add beacon block to IPFS: %w", err)
-		logger.Error(execErr)
 		return execErr
 		// TODO: Handle error appropriately, maybe retry or set to recoverable state
 	}
@@ -188,7 +186,6 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	if err != nil {
 		ipnsPublishTotal.WithLabelValues(metadata.Name, "failed").Inc()
 		execErr = fmt.Errorf("failed to publish updated beacon block %s to IPNS beacon-name %s, beacon-CID %s: %w", addResp.Cid, metadata.Name, metadata.PublicKey, err)
-		logger.Error(execErr)
 		return execErr
 	}
 
