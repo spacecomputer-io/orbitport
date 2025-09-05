@@ -177,16 +177,6 @@ var (
 		},
 		[]string{"beacon", "step"},
 	)
-
-	beaconExecutionTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "op",
-			Subsystem: "beacon",
-			Name:      "beacon_execution_total",
-			Help:      "Total number of beacon executions (attempts) by status",
-		},
-		[]string{"beacon", "status"}, // status = success|failed
-	)
 )
 
 var (
