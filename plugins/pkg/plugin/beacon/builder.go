@@ -71,6 +71,7 @@ func (b *Builder) Start(_ context.Context) error {
 					defer execTimer.ObserveDuration()
 					err := b.executeBeacon(ctx, event, ctrngPluginClient, ipfsPluginClient)
 					if err != nil {
+						execTotal.WithLabelValues(event.Name, "failed").Inc()
 						logger.Errorf("Failed to execute beacon %s: %v", event.Name, err)
 						// TODO: Handle error appropriately, maybe retry or set to recoverable state
 					}
@@ -97,15 +98,8 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	defer cancel()
 
 	logger := utils.GetLogger("orbitport:beacon:executor").With("beacon", metadata.Name)
-
-	var execErr error
-	defer func() {
-		status := "success"
-		if execErr != nil {
-			status = "failed"
-		}
-		execTotal.WithLabelValues(metadata.Name, status).Inc()
-	}()
+	execTimer := prometheus.NewTimer(execDuration.WithLabelValues(metadata.Name))
+	defer execTimer.ObserveDuration()
 
 	logger.Infof("Executing beacon for metadata: %+v", metadata)
 
@@ -119,7 +113,7 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 		// drain the channel
 		// TODO: Handle error appropriately, maybe retry strategy or store the ctrngs for later
 		loadLastTotal.WithLabelValues(metadata.Name, "failed").Inc()
-		execErr = fmt.Errorf("failed to load last beacon block: %w", err)
+		execErr := fmt.Errorf("failed to load last beacon block: %w", err)
 		logger.Errorf("%v", execErr)
 
 		select {
@@ -166,8 +160,7 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 
 	if err != nil {
 		ipfsAddTotal.WithLabelValues(metadata.Name, "failed").Inc()
-		execErr = fmt.Errorf("failed to add beacon block to IPFS: %w", err)
-		return execErr
+		return fmt.Errorf("failed to add beacon block to IPFS: %w", err)
 		// TODO: Handle error appropriately, maybe retry or set to recoverable state
 	}
 
@@ -185,13 +178,13 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 
 	if err != nil {
 		ipnsPublishTotal.WithLabelValues(metadata.Name, "failed").Inc()
-		execErr = fmt.Errorf("failed to publish updated beacon block %s to IPNS beacon-name %s, beacon-CID %s: %w", addResp.Cid, metadata.Name, metadata.PublicKey, err)
-		return execErr
+		return fmt.Errorf("failed to publish updated beacon block %s to IPNS beacon-name %s, beacon-CID %s: %w", addResp.Cid, metadata.Name, metadata.PublicKey, err)
 	}
 
 	ipnsPublishTotal.WithLabelValues(metadata.Name, "success").Inc()
 	lastSequence.WithLabelValues(metadata.Name).Set(float64(beaconPayload.Sequence))
 	lastTimestampSeconds.WithLabelValues(metadata.Name).Set(float64(beaconPayload.Timestamp))
+	execTotal.WithLabelValues(metadata.Name, "success").Inc()
 	logger.Infof("block %s published to beacon (%s), with CID: %s", addResp.GetCid(), publishName, metadata.PublicKey)
 
 	return nil
