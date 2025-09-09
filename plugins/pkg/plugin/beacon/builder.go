@@ -67,8 +67,6 @@ func (b *Builder) Start(_ context.Context) error {
 				return
 			case event := <-q:
 				b.threads.GoCtx(ctx, func(ctx context.Context) {
-					execTimer := prometheus.NewTimer(execDuration.WithLabelValues(event.Name))
-					defer execTimer.ObserveDuration()
 					err := b.executeBeacon(ctx, event, ctrngPluginClient, ipfsPluginClient)
 					if err != nil {
 						execTotal.WithLabelValues(event.Name, "failed").Inc()
