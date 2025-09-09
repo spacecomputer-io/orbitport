@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
@@ -112,21 +113,30 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 	tempBlock := Block{Link: "", Data: gen0}
 	tempBytes, err := json.Marshal(tempBlock)
 	if err != nil {
+		genesisStepTotal.WithLabelValues(beaconName, "temp_add", "failed").Inc()
 		return BeaconMetadata{}, fmt.Errorf("marshal temp genesis: %w", err)
 	}
+	genesisStepTotal.WithLabelValues(beaconName, "temp_add", "success").Inc()
 
+	t := prometheus.NewTimer(genesisStepDuration.WithLabelValues(beaconName, "temp_add"))
 	addTemp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{Data: tempBytes})
+	t.ObserveDuration()
 	if err != nil {
 		return BeaconMetadata{}, fmt.Errorf("add temp genesis: %w", err)
 	}
 
+	t = prometheus.NewTimer(genesisStepDuration.WithLabelValues(beaconName, "temp_publish"))
 	pubResp, err := ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
 		Cid:         addTemp.Cid,
 		PublishName: beaconName,
 	})
+	t.ObserveDuration()
 	if err != nil {
+		genesisStepTotal.WithLabelValues(beaconName, "temp_publish", "failed").Inc()
 		return BeaconMetadata{}, fmt.Errorf("publish temp genesis to IPNS: %w", err)
 	}
+	genesisStepTotal.WithLabelValues(beaconName, "temp_publish", "success").Inc()
+
 	pubKey := pubResp.IpnsName
 	logger.Infof("temp genesis published for %q; acquired pubkey %s", beaconName, pubKey)
 
@@ -150,19 +160,30 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 	if err != nil {
 		return BeaconMetadata{}, fmt.Errorf("marshal final genesis: %w", err)
 	}
-
+	t = prometheus.NewTimer(genesisStepDuration.WithLabelValues(beaconName, "final_add"))
 	addFinal, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{Data: finalBytes})
+	t.ObserveDuration()
+
 	if err != nil {
+		genesisStepTotal.WithLabelValues(beaconName, "final_add", "failed").Inc()
 		return BeaconMetadata{}, fmt.Errorf("add final genesis: %w", err)
 	}
+	genesisStepTotal.WithLabelValues(beaconName, "final_add", "success").Inc()
 
 	// Republish to reference the final genesis CID in IPNS (removes reference to temp genesis)
-	if _, err := ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
+	t = prometheus.NewTimer(genesisStepDuration.WithLabelValues(beaconName, "final_publish"))
+	_, err = ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
 		Cid:         addFinal.Cid,
 		PublishName: beaconName,
-	}); err != nil {
+	})
+	t.ObserveDuration()
+
+	if err != nil {
+		genesisStepTotal.WithLabelValues(beaconName, "final_publish", "failed").Inc()
 		return BeaconMetadata{}, fmt.Errorf("publish final genesis to IPNS: %w", err)
 	}
+
+	genesisStepTotal.WithLabelValues(beaconName, "final_publish", "success").Inc()
 	logger.Infof("final genesis published for %q (CID %s) with metadata; pubkey %s", beaconName, addFinal.Cid, pubKey)
 
 	return *meta, nil

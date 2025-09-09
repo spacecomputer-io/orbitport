@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
@@ -68,6 +69,7 @@ func (b *Builder) Start(_ context.Context) error {
 				b.threads.GoCtx(ctx, func(ctx context.Context) {
 					err := b.executeBeacon(ctx, event, ctrngPluginClient, ipfsPluginClient)
 					if err != nil {
+						execTotal.WithLabelValues(event.Name, "failed").Inc()
 						logger.Errorf("Failed to execute beacon %s: %v", event.Name, err)
 						// TODO: Handle error appropriately, maybe retry or set to recoverable state
 					}
@@ -93,24 +95,37 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	ctx, cancel := context.WithTimeout(c, time.Minute*1)
 	defer cancel()
 
-	logger := utils.GetLogger("orbitport:beacon:executor")
+	logger := utils.GetLogger("orbitport:beacon:executor").With("beacon", metadata.Name)
+	execTimer := prometheus.NewTimer(execDuration.WithLabelValues(metadata.Name))
+	defer execTimer.ObserveDuration()
 
 	logger.Infof("Executing beacon for metadata: %+v", metadata)
 
+	ctrngTimer := prometheus.NewTimer(ctrngDuration.WithLabelValues(metadata.Name))
 	resp := loadCtrngs(ctx, b.threads, ctrngPluginClient, metadata)
+
+	loadTimer := prometheus.NewTimer(loadLastDuration.WithLabelValues(metadata.Name))
 	lastCid, lastBlock, err := loadLastBeaconBlock(ctx, ipfsPluginClient, metadata.Name)
+	loadTimer.ObserveDuration()
 	if err != nil {
 		// drain the channel
 		// TODO: Handle error appropriately, maybe retry strategy or store the ctrngs for later
+		loadLastTotal.WithLabelValues(metadata.Name, "failed").Inc()
+		execErr := fmt.Errorf("failed to load last beacon block: %w", err)
+		logger.Errorf("%v", execErr)
+
 		select {
 		case <-resp:
 		default:
 		}
-		return fmt.Errorf("failed to load last beacon block: %v", err)
+		return execErr
 	}
+
+	loadLastTotal.WithLabelValues(metadata.Name, "success").Inc()
 	logger.Infof("Last beacon (%s) block CID: %s, Sequence: %d", metadata.Name, lastCid, lastBlock.Sequence)
 
 	ctrngs := <-resp
+	ctrngTimer.ObserveDuration()
 
 	logger.Debugf("Loaded %d cTRNG values for beacon: %s", len(ctrngs), metadata.Name)
 
@@ -133,29 +148,41 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	}
 
 	logger.Debugf("Beacon block JSON: %s", string(blockBytes))
+
 	// Save block to IPFS
+	addTimer := prometheus.NewTimer(ipfsAddDuration.WithLabelValues(metadata.Name))
 	addResp, err := ipfsPluginClient.Add(ctx, &proto.AddRequest{
 		Data: blockBytes,
 	})
+	addTimer.ObserveDuration()
+
 	if err != nil {
-		logger.Errorf("failed to add beacon block to IPFS: %v", err)
-		return err
+		ipfsAddTotal.WithLabelValues(metadata.Name, "failed").Inc()
+		return fmt.Errorf("failed to add beacon block to IPFS: %w", err)
 		// TODO: Handle error appropriately, maybe retry or set to recoverable state
 	}
 
+	ipfsAddTotal.WithLabelValues(metadata.Name, "success").Inc()
 	logger.Infof("block added to IFPS with CID %s, publishing to IPNS beacon-name: %s, beacon-CID: %s", addResp.Cid, metadata.Name, metadata.PublicKey)
 
 	// publish new block data to beacon key
 	publishName := metadata.Name
+	pubTimer := prometheus.NewTimer(ipnsPublishDuration.WithLabelValues(metadata.Name))
 	_, err = ipfsPluginClient.Publish(ctx, &proto.PublishRequest{
 		Cid:         addResp.Cid,
 		PublishName: publishName,
 	})
+	pubTimer.ObserveDuration()
 
 	if err != nil {
-		logger.Errorf("failed to publish updated beacon block %s to IPNS beacon-name %s, beacon-CID %s: %v", addResp.Cid, metadata.Name, metadata.PublicKey, err)
-		return err
+		ipnsPublishTotal.WithLabelValues(metadata.Name, "failed").Inc()
+		return fmt.Errorf("failed to publish updated beacon block %s to IPNS beacon-name %s, beacon-CID %s: %w", addResp.Cid, metadata.Name, metadata.PublicKey, err)
 	}
+
+	ipnsPublishTotal.WithLabelValues(metadata.Name, "success").Inc()
+	lastSequence.WithLabelValues(metadata.Name).Set(float64(beaconPayload.Sequence))
+	lastTimestampSeconds.WithLabelValues(metadata.Name).Set(float64(beaconPayload.Timestamp))
+	execTotal.WithLabelValues(metadata.Name, "success").Inc()
 	logger.Infof("block %s published to beacon (%s), with CID: %s", addResp.GetCid(), publishName, metadata.PublicKey)
 
 	return nil
@@ -188,9 +215,12 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 					return
 				}
 				logger.Errorf("Failed to get cTRNG from CTRNG plugin: %v", err)
+				ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
 				continue
 			}
 			ctrngs = append(ctrngs, ctrngResp.GetValue())
+			ctrngTotal.WithLabelValues(metadata.Name, "ok").Inc()
+
 			// timeout for each CTRNG retrieval to reduce pressure on the CTRNG plugin
 			select {
 			case <-ctx.Done():

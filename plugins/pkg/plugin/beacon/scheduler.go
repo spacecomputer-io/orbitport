@@ -23,13 +23,20 @@ type Scheduler struct {
 
 // NewScheduler creates a new Scheduler instance for managing beacon execution.
 func NewScheduler(cfg Config, registry *Registry) *Scheduler {
-	return &Scheduler{
+	s := &Scheduler{
 		threads:   utils.NewThreadControl(),
 		cfg:       cfg,
 		registry:  registry,
 		q:         make(chan BeaconMetadata, 16),
 		lastExecs: make(map[string]time.Time),
 	}
+
+	// Register gauge, closure captures s.q, queueDepth is scaped automatically by prometheus (less stressful than manually setting value)
+	RegisterQueueDepthGauge(func() float64 {
+		return float64(len(s.q))
+	})
+
+	return s
 }
 
 // Start starts the scheduler, which will periodically update the last execution times of beacons.
@@ -84,15 +91,18 @@ func (s *Scheduler) checkAndTriggerBeacons() {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	schedTickTotal.Inc()
 	logger := utils.GetLogger("orbitport:beacon:scheduler")
 
 	for _, beacon := range s.registry.Beacons {
 		if beacon.Interval == 0 {
+			skippedTotal.WithLabelValues(beacon.Name, "no_interval").Inc()
 			continue // Skip beacons without a cron schedule
 		}
 		// Check if the beacon needs to be updated based on its cron schedule
 		if lastExec, exists := s.lastExecs[beacon.Name]; exists {
 			if time.Since(lastExec) < beacon.Interval {
+				skippedTotal.WithLabelValues(beacon.Name, "too_recent").Inc()
 				continue // Skip if the beacon was recently updated
 			}
 		}
@@ -103,8 +113,10 @@ func (s *Scheduler) checkAndTriggerBeacons() {
 		case s.q <- beacon:
 			logger.Debugf("Beacon execution queued for: %s", beacon.Name)
 			s.lastExecs[beacon.Name] = time.Now() // Update last execution time
+			scheduledExecutionsTotal.WithLabelValues(beacon.Name).Inc()
 		default:
 			logger.Warnf("Beacon queue is full, skipping execution for: %s", beacon.Name)
+			skippedTotal.WithLabelValues(beacon.Name, "queue_full").Inc()
 			// TODO: Handle the case where the queue is full
 			// This could involve logging, retrying later, or dropping the beacon
 			continue
