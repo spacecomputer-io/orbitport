@@ -101,7 +101,6 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 
 	logger.Infof("Executing beacon for metadata: %+v", metadata)
 
-	ctrngTimer := prometheus.NewTimer(ctrngDuration.WithLabelValues(metadata.Name))
 	resp := loadCtrngs(ctx, b.threads, ctrngPluginClient, metadata)
 
 	loadTimer := prometheus.NewTimer(loadLastDuration.WithLabelValues(metadata.Name))
@@ -125,9 +124,15 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	logger.Infof("Last beacon (%s) block CID: %s, Sequence: %d", metadata.Name, lastCid, lastBlock.Sequence)
 
 	ctrngs := <-resp
-	ctrngTimer.ObserveDuration()
+	if len(ctrngs) == 0 {
+		logger.Warnf("Beacon %s: received empty CTRNG slice", metadata.Name)
+		return fmt.Errorf("no CTRNG values received for beacon %s", metadata.Name)
+	}
 
-	logger.Debugf("Loaded %d cTRNG values for beacon: %s", len(ctrngs), metadata.Name)
+	logger.Debugf("Loaded %d CTRNG values for beacon %s", len(ctrngs), metadata.Name)
+	for i, v := range ctrngs {
+		logger.Debugf("  CTRNG[%d]: %s", i, v)
+	}
 
 	beaconPayload := &BeaconPayload{
 		Sequence:  lastBlock.Sequence + 1,
@@ -197,47 +202,39 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 		defer close(resp)
 
 		batchSize := metadata.BatchSize
-
-		ctrngs := make([]string, 0, batchSize)
-
-		for i := len(ctrngs); i < int(batchSize); i++ {
-			ctrngResp, err := ctrngPluginClient.GetTrng(ctx, &proto.TrngRequest{
-				IgnoreSig: true,
-				Chunks:    1,
-			})
-			if err != nil {
-				if ctx.Err() != nil {
-					logger.Info("Context done, stopping CTRNG retrieval")
-					select {
-					case resp <- ctrngs:
-					default:
-					}
-					return
-				}
-				logger.Errorf("Failed to get cTRNG from CTRNG plugin: %v", err)
-				ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
-				continue
-			}
-			ctrngs = append(ctrngs, ctrngResp.GetValue())
-			ctrngTotal.WithLabelValues(metadata.Name, "ok").Inc()
-
-			// timeout for each CTRNG retrieval to reduce pressure on the CTRNG plugin
-			select {
-			case <-ctx.Done():
-				logger.Info("Context done, stopping CTRNG retrieval")
-				select {
-				case resp <- ctrngs:
-				default:
-				}
-				return
-			case <-time.After(time.Millisecond * 100):
-			}
+		if batchSize <= 0 {
+			batchSize = 1
 		}
 
+		ctrngTimer := prometheus.NewTimer(ctrngDuration.WithLabelValues(metadata.Name))
+		ctrngResp, err := ctrngPluginClient.GetTrng(ctx, &proto.TrngRequest{
+			IgnoreSig: true,
+			Chunks:    uint32(batchSize),
+		})
+		ctrngTimer.ObserveDuration()
+
+		if err != nil {
+			if ctx.Err() != nil {
+				logger.Info("Context canceled while fetching CTRNGs")
+				return
+			}
+			logger.Errorf("Failed to get cTRNGs for beacon %s: %v", metadata.Name, err)
+			ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
+			return
+		}
+
+		ctrngs := ctrngResp.GetValues()
+		if len(ctrngs) == 0 {
+			logger.Warnf("Beacon %s: Aptos returned empty values array", metadata.Name)
+			return
+		}
+		ctrngTotal.WithLabelValues(metadata.Name, "ok").Add(float64(len(ctrngs)))
+
+		// Non-blocking send, respect context
 		select {
 		case resp <- ctrngs:
 		case <-ctx.Done():
-			logger.Info("Context done, stopping CTRNG retrieval")
+			logger.Info("Context canceled before delivering CTRNGs")
 			return
 		}
 	})

@@ -16,20 +16,10 @@ type trngSeed struct {
 	Signature string `json:"signature"`
 }
 
-func (r *trngSeed) toCommonRandomSeed() *proto.TrngResponse {
-	return &proto.TrngResponse{
-		Value: r.Chunk,
-		Sig:   r.Signature,
-	}
-}
-
 // GetTrueRandomnessSeed retrieves a true randomness seed from the Aptos Orbital API.
 func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, numChunk uint) (*proto.TrngResponse, error) {
 	if !c.limiter.Allow() {
 		c.logger.Warn("rate limit exceeded")
-		// TODO: think about how to handle rate limit exceeded.
-		// currently the rate limiting is applied to the entire service
-		// as we don't distinguish between different callers
 		return nil, ErrRateLimitExceeded
 	}
 
@@ -42,6 +32,7 @@ func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, num
 		noSigInt = 1
 	}
 	urlStr := fmt.Sprintf("%s/services/v1/trng_seed?no_sig=%d&num_chunk=%d", c.opts.apiURL, noSigInt, numChunk)
+
 	resp, err := makeRequest[trngSeedResponse](ctx, c, "GET", urlStr, headers, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make trng_seed request: %v", err)
@@ -49,6 +40,19 @@ func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, num
 	if resp == nil || len(*resp) == 0 {
 		return nil, fmt.Errorf("empty response from trng_seed")
 	}
-	result := (*resp)[0].toCommonRandomSeed()
-	return result, nil
+
+	// Collect all chunks
+	values := make([]string, 0, len(*resp))
+	var sig string
+	for i, r := range *resp {
+		if i == 0 {
+			sig = r.Signature
+		}
+		values = append(values, r.Chunk)
+	}
+
+	return &proto.TrngResponse{
+		Values: values,
+		Sig:    sig,
+	}, nil
 }

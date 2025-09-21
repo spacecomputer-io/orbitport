@@ -41,9 +41,10 @@ func TestClientOptions(t *testing.T) {
 
 func TestExampleTRNGResponse(t *testing.T) {
 	tests := []struct {
-		name    string
-		resp    string
-		errored bool
+		name     string
+		resp     string
+		errored  bool
+		expected []string
 	}{
 		{
 			name:    "empty response",
@@ -52,6 +53,9 @@ func TestExampleTRNGResponse(t *testing.T) {
 		{
 			name: "valid response",
 			resp: `[{"chunk": "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", "signature": "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa"}]`,
+			expected: []string{
+				"aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa",
+			},
 		},
 	}
 
@@ -64,8 +68,12 @@ func TestExampleTRNGResponse(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			commonRandSeed := r[0].toCommonRandomSeed()
-			require.Equal(t, r[0].Chunk, commonRandSeed.Value)
+			values := make([]string, 0, len(r))
+			for _, seed := range r {
+				values = append(values, seed.Chunk)
+			}
+
+			require.Equal(t, tt.expected, values)
 		})
 	}
 }
@@ -88,8 +96,15 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 	t.Run("happy path", func(t *testing.T) {
 		seed, err := client.GetTrueRandomnessSeed(context.Background(), false, 1)
 		require.NoError(t, err)
-		require.Equal(t, "aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Value)
-		require.Equal(t, "aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa", seed.Sig)
+		require.Len(t, seed.Values, 1)
+		require.Equal(t,
+			"aaa2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa",
+			seed.Values[0],
+		)
+		require.Equal(t,
+			"aaa6022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890022100a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567aaa",
+			seed.Sig,
+		)
 	})
 
 	t.Run("rate limit exceeded", func(t *testing.T) {
