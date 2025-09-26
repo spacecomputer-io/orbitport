@@ -14,6 +14,6 @@ message TrngRequest {
 }
 
 message TrngResponse {
-    string value = 1;
+    repeated string values = 1; 
     string sig = 2;
 }
