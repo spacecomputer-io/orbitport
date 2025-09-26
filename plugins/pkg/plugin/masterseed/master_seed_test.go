@@ -1,4 +1,4 @@
-package aptosorbital
+package masterseed
 
 import (
 	"encoding/hex"

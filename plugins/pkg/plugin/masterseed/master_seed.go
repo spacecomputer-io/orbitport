@@ -1,4 +1,4 @@
-package aptosorbital
+package masterseed
 
 import (
 	"crypto/sha256"
@@ -10,19 +10,20 @@ import (
 )
 
 var (
-	TRNGSize       = 32 // default
-	MaxMasterSeeds = 10 // default
-
-	chainParams = &chaincfg.MainNetParams
+	TRNGSize        = 32 // default
+	MaxMasterSeeds  = 10 // default
+	MaserSeedPeriod = int64(3600)
+	chainParams     = &chaincfg.MainNetParams
 )
 
 type MasterSeed struct {
 	Seed string // hex used for BIP32
 }
 
-func LoadMasterSeedConfig(cfg *aptosOrbitalConfig) {
-	TRNGSize = cfg.AptosOrbitalTRNGSize
-	MaxMasterSeeds = cfg.AptosOrbitalMaxMasterSeeds
+func LoadMasterSeedConfig(cfg *masterSeedConfig) {
+	TRNGSize = cfg.MasterSeedTRNGSize
+	MaxMasterSeeds = cfg.MasterSeedMaxMasterSeeds
+	MaserSeedPeriod = cfg.MaserSeedPeriod
 }
 
 // derive single deterministic rng from master seed

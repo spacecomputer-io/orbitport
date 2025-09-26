@@ -31,7 +31,7 @@ func NewPlugin() (*Plugin, error) {
 	logger := utils.GetLogger("orbitport:beacon")
 	logger.Infof("Creating plugin with config: %+v", cfg)
 
-	err := health.WaitForDependencies(ctx, time.Second, time.Duration(60*time.Second), cfg.IPFSPlugin, cfg.CTRNGPlugin)
+	err := health.WaitForDependencies(ctx, time.Second, time.Duration(60*time.Second), cfg.IPFSPlugin, cfg.CTRNGPlugin, cfg.MasterSeedPlugin)
 	if err != nil {
 		return nil, fmt.Errorf("beacon plugin dependencies failed to start within the alloted timeframe, aborting: %w", err)
 	}
@@ -258,5 +258,14 @@ func getCtrngPluginClient(cfg Config) (*grpc.ClientConn, proto.RandomnessPluginC
 	}
 
 	client := proto.NewRandomnessPluginClient(conn)
+	return conn, client, nil
+}
+
+func getMasterSeedPluginClient(cfg Config) (*grpc.ClientConn, proto.MasterSeedPluginClient, error) {
+	conn, err := grpc.NewClient(cfg.MasterSeedPlugin, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to MasterSeed plugin: %w", err)
+	}
+	client := proto.NewMasterSeedPluginClient(conn)
 	return conn, client, nil
 }
