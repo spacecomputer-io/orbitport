@@ -326,7 +326,7 @@ pub async fn fetch_master_seeds(
                                 }
                             }
                         }
-                    }   // <-- missing closing brace for Ok(trng)
+                    }
                     Err(e) => {
                         tracing::error!("Failed to get trng: {}", e);
                     }

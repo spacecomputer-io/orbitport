@@ -148,7 +148,7 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 		Encoding:  "json",
 		BatchSize: 3,
 		Message:   msg,
-		Interval:  10 * time.Second,
+		Interval:  60 * time.Second,
 	}
 
 	finalBlock := Block{
