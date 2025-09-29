@@ -312,7 +312,7 @@ pub async fn fetch_master_seeds(
                 let trng = get_trng(client.clone()).await;
                 match trng {
                     Ok(trng) => {
-                        if let Some(first) = trng.values.get(0) {
+                        if let Some(first) = trng.values.first() {
                             let master_seed = MasterSeed(first.clone());
                             match master_seed.derive(0) {
                                 Ok(_) => {
