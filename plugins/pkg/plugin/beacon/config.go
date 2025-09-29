@@ -10,6 +10,7 @@ type Config struct {
 	MasterSeedPlugin string `json:"masterseed_plugin"`
 	BeaconRegistry   string `json:"beacon_registry"`
 	BeaconMsg        string `json:"beacon_msg"`
+	BeaconInterval   int32  `json:"beacon_interval"`
 	IPFSAddress      string `json:"ipfs_address"`
 }
 
@@ -22,6 +23,7 @@ func readFromEnv() Config {
 		MasterSeedPlugin: viper.GetString("MASTERSEED_PLUGIN"),
 		BeaconRegistry:   viper.GetString("BEACON_REGISTRY"),
 		BeaconMsg:        viper.GetString("BEACON_MSG"),
+		BeaconInterval:   viper.GetInt32("BEACON_UPDATE_INTERVAL"),
 		IPFSAddress:      viper.GetString("IPFS_ADDRESS"),
 	}
 }
@@ -32,5 +34,6 @@ func setDefaults() {
 	viper.SetDefault("ORBITPORT_MASTERSEED_PLUGIN", "plugin-masterseed:50003")
 	viper.SetDefault("BEACON_REGISTRY", "")
 	viper.SetDefault("BEACON_MSG", "Rm9ydHVuZQrotKLlr4wK157Xltec")
+	viper.SetDefault("BEACON_UPDATE_INTERVAL", 60)
 	viper.SetDefault("IPFS_ADDRESS", "http://ipfs-node:5001")
 }

@@ -108,7 +108,7 @@ func (s *Scheduler) checkAndTriggerBeacons() {
 		}
 
 		// Add the beacon to the queue for processing
-		logger.Infof("Scheduling beacon execution for: %s", beacon.Name)
+		logger.Infof("Scheduling beacon execution for: %s, with interval: %v", beacon.Name, beacon.Interval)
 		select {
 		case s.q <- beacon:
 			logger.Debugf("Beacon execution queued for: %s", beacon.Name)

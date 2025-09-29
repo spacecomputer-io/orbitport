@@ -105,7 +105,7 @@ func loadLastBeaconBlock(ctx context.Context, ipfsPluginClient proto.IpfsPluginC
 
 // creates a new beacon in ipfs and returns its ipns public key
 // Two-step genesis: A. pubKey acquisition, B. final genesis
-func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, beaconName string, msg string) (BeaconMetadata, error) {
+func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, beaconName string, msg string, interval int32) (BeaconMetadata, error) {
 	logger := utils.GetLogger("orbitport:beacon")
 
 	// A. temp genesis (no metadata)
@@ -140,7 +140,13 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 	pubKey := pubResp.IpnsName
 	logger.Infof("temp genesis published for %q; acquired pubkey %s", beaconName, pubKey)
 
-	// B. final genesis with metadata
+	var beaconInterval time.Duration
+	if interval > 0 {
+		beaconInterval = time.Duration(interval) * time.Second
+	} else {
+		beaconInterval = 60 * time.Second
+	}
+
 	meta := &BeaconMetadata{
 		Name:      beaconName,
 		PublicKey: pubKey,
@@ -148,7 +154,7 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 		Encoding:  "json",
 		BatchSize: 3,
 		Message:   msg,
-		Interval:  60 * time.Second,
+		Interval:  beaconInterval,
 	}
 
 	finalBlock := Block{
@@ -207,8 +213,9 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 	if len(cfg.BeaconRegistry) == 0 {
 		beaconName := "default-beacon2.4"
 		msg := cfg.BeaconMsg
+		interval := cfg.BeaconInterval
 		logger.Info("No beacon registry configured. Creating new registry with genesis block")
-		beaconMetadata, err := createBeacon(ctx, ipfsPluginClient, beaconName, msg)
+		beaconMetadata, err := createBeacon(ctx, ipfsPluginClient, beaconName, msg, interval)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create new beacon for new registry: %w", err)
 		}
