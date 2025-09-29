@@ -192,9 +192,9 @@ impl ServiceHandler for TrngService {
         match get_trng(self.aptos_orbital_client.clone()).await {
             Ok(trng) => {
                 let bulk_results = if svc_req.bulk.is_some() {
-                    let first_val = trng.values.first()
-                        .cloned()
-                        .ok_or_else(|| GatewayError::InternalError("no values in TRNG".to_string()))?;
+                    let first_val = trng.values.first().cloned().ok_or_else(|| {
+                        GatewayError::InternalError("no values in TRNG".to_string())
+                    })?;
                     let master_seed = MasterSeed(first_val);
                     derive_results(master_seed, svc_req.bulk.unwrap()).await?
                 } else {
@@ -221,9 +221,9 @@ impl ServiceHandler for TrngService {
                         .with_label_values(&["ok"])
                         .inc();
                     let bulk_results = if svc_req.bulk.is_some() {
-                        let first_val = trng.values.first()
-                            .cloned()
-                            .ok_or_else(|| GatewayError::InternalError("no values in TRNG".to_string()))?;
+                        let first_val = trng.values.first().cloned().ok_or_else(|| {
+                            GatewayError::InternalError("no values in TRNG".to_string())
+                        })?;
                         let master_seed = MasterSeed(first_val);
                         derive_results(master_seed, svc_req.bulk.unwrap()).await?
                     } else {
@@ -330,7 +330,7 @@ pub async fn fetch_master_seeds(
                     Err(e) => {
                         tracing::error!("Failed to get trng: {}", e);
                     }
-                }                
+                }
             }
         }
     }
@@ -387,30 +387,28 @@ fn process_response(
         Some(bulk_results)
     };
 
-    let first_val = trng.values.first()
-    .cloned()
-    .unwrap_or_default();
+    let first_val = trng.values.first().cloned().unwrap_or_default();
 
-let data = if let Some(enc_key) = enc_key {
-    match enc_key.scheme {
-        EncryptionScheme::None => first_val.clone(),
-        EncryptionScheme::Threshold => {
-            let pk = threshold::serialization::pubkey_from_hex(enc_key.key.as_str()).map_err(
-                |e| {
-                    tracing::error!("Failed to parse public key: {}", e);
-                    GatewayError::InvalidEncryptionKey
-                },
-            )?;
-            let cipher = CiphertextMsg::new(pk.encrypt(&first_val));
-            cipher.try_into().map_err(|e| {
-                tracing::error!("Failed to encrypt TRNG value: {}", e);
-                GatewayError::InternalError("Failed to encrypt TRNG value".to_string())
-            })?
+    let data = if let Some(enc_key) = enc_key {
+        match enc_key.scheme {
+            EncryptionScheme::None => first_val.clone(),
+            EncryptionScheme::Threshold => {
+                let pk = threshold::serialization::pubkey_from_hex(enc_key.key.as_str()).map_err(
+                    |e| {
+                        tracing::error!("Failed to parse public key: {}", e);
+                        GatewayError::InvalidEncryptionKey
+                    },
+                )?;
+                let cipher = CiphertextMsg::new(pk.encrypt(&first_val));
+                cipher.try_into().map_err(|e| {
+                    tracing::error!("Failed to encrypt TRNG value: {}", e);
+                    GatewayError::InternalError("Failed to encrypt TRNG value".to_string())
+                })?
+            }
         }
-    }
-} else {
-    first_val
-};
+    } else {
+        first_val
+    };
 
     let signature = None;
     // TODO: Uncomment once public key is available
