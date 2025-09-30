@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.31.1
-// source: plugins/proto/trng.proto
+// source: proto/trng.proto
 
 package proto
 
@@ -117,5 +117,5 @@ var RandomnessPlugin_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "plugins/proto/trng.proto",
+	Metadata: "proto/trng.proto",
 }

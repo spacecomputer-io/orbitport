@@ -14,6 +14,6 @@ message TrngRequest {
 }
 
 message TrngResponse {
-    repeated string values = 1; 
+    repeated string values = 1; //multiple derived vals
     string sig = 2;
 }
