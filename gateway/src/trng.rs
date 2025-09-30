@@ -152,8 +152,8 @@ impl TrngService {
 
     async fn fallback(&mut self) -> Result<TrngResponse, GatewayError> {
         metrics::TRNG_FALLBACKS_COUNTER
-        .with_label_values(&["derived"])
-        .inc();
+            .with_label_values(&["derived"])
+            .inc();
 
         if let Some(master_seed) = self.get_next_master_seed() {
             let mut rng = rand::rng();
@@ -162,8 +162,8 @@ impl TrngService {
                 Ok(key) => {
                     let trng = to_trng(key);
                     metrics::TRNG_FALLBACKS_COUNTER
-                    .with_label_values(&["ok"])
-                    .inc();
+                        .with_label_values(&["ok"])
+                        .inc();
 
                     let resp = TrngResponse {
                         values: vec![trng],
@@ -173,8 +173,8 @@ impl TrngService {
                 }
                 Err(e) => {
                     metrics::TRNG_FALLBACKS_COUNTER
-                    .with_label_values(&["err"])
-                    .inc();
+                        .with_label_values(&["err"])
+                        .inc();
 
                     tracing::error!("Failed to derive key from master seed: {}", e);
                     Err(GatewayError::InternalError(
@@ -184,8 +184,8 @@ impl TrngService {
             }
         } else {
             metrics::TRNG_FALLBACKS_COUNTER
-            .with_label_values(&["err"])
-            .inc();
+                .with_label_values(&["err"])
+                .inc();
 
             tracing::error!("No master seed available");
             Err(GatewayError::InternalError(
