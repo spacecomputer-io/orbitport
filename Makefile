@@ -7,6 +7,11 @@ protoc:
 	@cd plugins && make protoc
 	@cp plugins/proto/*.proto gateway/proto/
 
+protoc-dry-run:
+	@cd plugins && make protoc --dry-run
+	@echo "Checking for differences between plugins/proto and gateway/proto..."
+	@diff -sr --minimal plugins/proto gateway/proto | grep "\.proto$$" && (echo "Protobuf files are out of date. Run 'make protoc' to update." && exit 1) || echo "Protobuf files are up to date."
+	
 test:
 	@cd plugins && make test
 	@cd gateway && make test
