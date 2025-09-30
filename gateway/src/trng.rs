@@ -194,14 +194,18 @@ impl ServiceHandler for TrngService {
                 if trng.values.is_empty() {
                     tracing::warn!("TRNG returned empty values; attempting fallback");
                     if svc_req.src.contains(&SRC_DERIVED_TRNG.to_string()) {
-                        metrics::TRNG_FALLBACKS_COUNTER.with_label_values(&["derived"]).inc();
+                        metrics::TRNG_FALLBACKS_COUNTER
+                            .with_label_values(&["derived"])
+                            .inc();
                         trng = self.fallback().await?;
-                        metrics::TRNG_FALLBACKS_COUNTER.with_label_values(&["ok"]).inc();
+                        metrics::TRNG_FALLBACKS_COUNTER
+                            .with_label_values(&["ok"])
+                            .inc();
                     } else {
                         return Err(GatewayError::InternalError("no values in TRNG".to_string()));
                     }
                 }
-                
+
                 let bulk_results = if svc_req.bulk.is_some() {
                     let first_val = trng.values.first().cloned().ok_or_else(|| {
                         GatewayError::InternalError("no values in TRNG".to_string())
