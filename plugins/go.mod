@@ -4,6 +4,7 @@ go 1.24
 
 require (
 	github.com/auth0/go-jwt-middleware/v2 v2.3.0
+	github.com/btcsuite/btcd v0.20.1-beta
 	github.com/docker/docker v28.0.1+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/hashicorp/golang-lru v1.0.2
@@ -60,6 +61,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/btcsuite/btcutil v1.0.2
 	github.com/caddyserver/certmagic v0.21.6 // indirect
 	github.com/caddyserver/zerossl v0.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

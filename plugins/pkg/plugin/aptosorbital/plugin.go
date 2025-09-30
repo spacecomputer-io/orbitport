@@ -46,10 +46,22 @@ func NewPlugin() (*Plugin, error) {
 // It retrieves a true randomness seed from the Aptos Orbital API.
 // The request contains the number of chunks to retrieve and whether to ignore the signature.
 func (p *Plugin) GetTrng(ctx context.Context, req *proto.TrngRequest) (*proto.TrngResponse, error) {
-	numChunk := uint(req.Chunks)
-	// defaults to 1 if numChunk is 0
+	logger := utils.GetLogger("orbitport:aptosorbital:gettrng")
+	numChunk := int(req.Chunks)
 	if numChunk == 0 {
 		numChunk = 1
 	}
-	return p.aptosClient.GetTrueRandomnessSeed(ctx, req.IgnoreSig, numChunk)
+
+	// Try Aptos Orbital for fresh randomness
+	resp, err := p.aptosClient.GetTrueRandomnessSeed(ctx, req.IgnoreSig, uint(numChunk))
+	if err == nil && resp != nil && len(resp.GetValues()) > 0 {
+		ctrngFreshTotal.WithLabelValues("aptosorbital").Add(float64(len(resp.GetValues())))
+		return resp, nil
+	}
+
+	// Aptos failed or returned no values
+	logger.Warnf("Aptos failed to deliver fresh rng, falling back to master seeds: %v", err)
+
+	// Return empty values facilitating a fallback to MasterSeed
+	return &proto.TrngResponse{Values: []string{}, Sig: ""}, nil
 }

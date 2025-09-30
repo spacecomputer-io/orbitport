@@ -44,6 +44,20 @@ func (b *Builder) Start(_ context.Context) error {
 		}
 		return fmt.Errorf("failed to connect to CTRNG plugin: %v", err)
 	}
+
+	masterConn, masterSeedClient, err := getMasterSeedPluginClient(b.cfg)
+	if err != nil {
+		ipfsErr := ipfsConn.Close()
+		if ipfsErr != nil {
+			logger.Errorf("error closing ipfs client connection: %v", err)
+		}
+		ctrngErr := ctrngConn.Close()
+		if ctrngErr != nil {
+			logger.Errorf("error closing ctrng client connection: %v", err)
+		}
+		return fmt.Errorf("failed to connect to MasterSeed plugin: %v", err)
+	}
+
 	q := b.scheduler.Queue()
 	// execution loop for beacon updates/execution
 	b.threads.Go(func(ctx context.Context) {
@@ -56,9 +70,13 @@ func (b *Builder) Start(_ context.Context) error {
 			if err != nil {
 				logger.Errorf("error closing ctrng client connection: %v", err)
 			}
+			err = masterConn.Close()
+			if err != nil {
+				logger.Errorf("error closing masterseed client connection: %v", err)
+			}
 		}()
 
-		logger.Info("Connected to IPFS plugin, waiting for beacon updates...")
+		logger.Info("Connected to IPFS, cTRNG and MasterSeed plugins, waiting for beacon updates...")
 
 		for {
 			select {
@@ -67,7 +85,7 @@ func (b *Builder) Start(_ context.Context) error {
 				return
 			case event := <-q:
 				b.threads.GoCtx(ctx, func(ctx context.Context) {
-					err := b.executeBeacon(ctx, event, ctrngPluginClient, ipfsPluginClient)
+					err := b.executeBeacon(ctx, event, ctrngPluginClient, masterSeedClient, ipfsPluginClient)
 					if err != nil {
 						execTotal.WithLabelValues(event.Name, "failed").Inc()
 						logger.Errorf("Failed to execute beacon %s: %v", event.Name, err)
@@ -91,7 +109,7 @@ func (b *Builder) Close() error {
 	return nil
 }
 
-func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrngPluginClient proto.RandomnessPluginClient, ipfsPluginClient proto.IpfsPluginClient) error {
+func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrngPluginClient proto.RandomnessPluginClient, masterSeedClient proto.MasterSeedPluginClient, ipfsPluginClient proto.IpfsPluginClient) error {
 	ctx, cancel := context.WithTimeout(c, time.Minute*1)
 	defer cancel()
 
@@ -101,8 +119,7 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 
 	logger.Infof("Executing beacon for metadata: %+v", metadata)
 
-	ctrngTimer := prometheus.NewTimer(ctrngDuration.WithLabelValues(metadata.Name))
-	resp := loadCtrngs(ctx, b.threads, ctrngPluginClient, metadata)
+	resp := loadCtrngs(ctx, b.threads, ctrngPluginClient, masterSeedClient, metadata)
 
 	loadTimer := prometheus.NewTimer(loadLastDuration.WithLabelValues(metadata.Name))
 	lastCid, lastBlock, err := loadLastBeaconBlock(ctx, ipfsPluginClient, metadata.Name)
@@ -125,9 +142,15 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	logger.Infof("Last beacon (%s) block CID: %s, Sequence: %d", metadata.Name, lastCid, lastBlock.Sequence)
 
 	ctrngs := <-resp
-	ctrngTimer.ObserveDuration()
+	if len(ctrngs) == 0 {
+		logger.Warnf("Beacon %s: received empty CTRNG slice", metadata.Name)
+		return fmt.Errorf("no CTRNG values received for beacon %s", metadata.Name)
+	}
 
-	logger.Debugf("Loaded %d cTRNG values for beacon: %s", len(ctrngs), metadata.Name)
+	logger.Debugf("Loaded %d CTRNG values for beacon %s", len(ctrngs), metadata.Name)
+	for i, v := range ctrngs {
+		logger.Debugf("  CTRNG[%d]: %s", i, v)
+	}
 
 	beaconPayload := &BeaconPayload{
 		Sequence:  lastBlock.Sequence + 1,
@@ -188,7 +211,7 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 	return nil
 }
 
-func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginClient proto.RandomnessPluginClient, metadata BeaconMetadata) chan []string {
+func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginClient proto.RandomnessPluginClient, masterSeedClient proto.MasterSeedPluginClient, metadata BeaconMetadata) chan []string {
 	logger := utils.GetLogger("orbitport:beacon:ctrng_loader")
 
 	resp := make(chan []string, 1)
@@ -197,47 +220,58 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 		defer close(resp)
 
 		batchSize := metadata.BatchSize
-
-		ctrngs := make([]string, 0, batchSize)
-
-		for i := len(ctrngs); i < int(batchSize); i++ {
-			ctrngResp, err := ctrngPluginClient.GetTrng(ctx, &proto.TrngRequest{
-				IgnoreSig: true,
-				Chunks:    1,
-			})
-			if err != nil {
-				if ctx.Err() != nil {
-					logger.Info("Context done, stopping CTRNG retrieval")
-					select {
-					case resp <- ctrngs:
-					default:
-					}
-					return
-				}
-				logger.Errorf("Failed to get cTRNG from CTRNG plugin: %v", err)
-				ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
-				continue
-			}
-			ctrngs = append(ctrngs, ctrngResp.GetValue())
-			ctrngTotal.WithLabelValues(metadata.Name, "ok").Inc()
-
-			// timeout for each CTRNG retrieval to reduce pressure on the CTRNG plugin
-			select {
-			case <-ctx.Done():
-				logger.Info("Context done, stopping CTRNG retrieval")
-				select {
-				case resp <- ctrngs:
-				default:
-				}
-				return
-			case <-time.After(time.Millisecond * 100):
-			}
+		if batchSize <= 0 {
+			batchSize = 1
 		}
 
+		ctrngTimer := prometheus.NewTimer(ctrngDuration.WithLabelValues(metadata.Name))
+		ctrngResp, err := ctrngPluginClient.GetTrng(ctx, &proto.TrngRequest{
+			IgnoreSig: true,
+			Chunks:    uint32(batchSize),
+		})
+		ctrngTimer.ObserveDuration()
+
+		if err != nil {
+			if ctx.Err() != nil {
+				logger.Info("Context canceled while fetching CTRNGs")
+				return
+			}
+			logger.Errorf("Failed to get cTRNGs from aptos orbital for beacon %s: %v", metadata.Name, err)
+			ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
+		}
+
+		ctrngs := []string{}
+		if ctrngResp != nil {
+			ctrngs = ctrngResp.GetValues()
+		}
+
+		if len(ctrngs) == 0 {
+			// Fallback to RNGs from MasterSeed plugin
+			logger.Warnf("Beacon %s: falling back to value retrieval from MasterSeed plugin", metadata.Name)
+
+			msResp, msErr := masterSeedClient.GetSeeds(ctx, &proto.GetSeedsRequest{
+				Count: uint32(batchSize),
+			})
+			if msErr != nil {
+				logger.Errorf("Failed to fetch seeds from MasterSeed plugin for beacon %s: %v", metadata.Name, msErr)
+				ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
+				return
+			}
+			ctrngs = msResp.GetValues()
+			if len(ctrngs) == 0 {
+				logger.Warnf("Beacon %s: MasterSeed plugin returned no values", metadata.Name)
+				return
+			}
+			ctrngTotal.WithLabelValues(metadata.Name, "fallback").Add(float64(len(ctrngs)))
+		} else {
+			ctrngTotal.WithLabelValues(metadata.Name, "ok").Add(float64(len(ctrngs)))
+		}
+
+		// Non-blocking send, respect context
 		select {
 		case resp <- ctrngs:
 		case <-ctx.Done():
-			logger.Info("Context done, stopping CTRNG retrieval")
+			logger.Info("Context canceled before delivering CTRNGs")
 			return
 		}
 	})

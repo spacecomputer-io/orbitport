@@ -13,6 +13,7 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
@@ -77,6 +78,20 @@ func main() {
 			}
 		}()
 
+	case "masterseed":
+		plugin, err := masterseed.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterMasterSeedPluginServer(grpcServer, plugin)
+		logger.Info("MasterSeed plugin ready")
+
+		defer func() {
+			err := plugin.Close()
+			if err != nil {
+				logger.Errorf("error closing masterseed plugin: %v", err)
+			}
+		}()
 	default:
 		panic("unknown plugin")
 	}

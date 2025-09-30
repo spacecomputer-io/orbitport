@@ -34,6 +34,26 @@ services:
       - ORBITPORT_GRPC_PORT=50001
       - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=${ORBITPORT_APTOS_ORBITAL_CLIENT_ID}
       - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=${ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET}
+    ports:
+    - 9001:9000
+
+  plugin-masterseed:
+    <<: *plugin-base
+    container_name: plugin-masterseed
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=masterseed
+      - ORBITPORT_GRPC_PORT=50003
+      - ORBITPORT_APTOS_PLUGIN=plugin-aptos-orbital:50001
+      # Configurable defaults for seed management
+      - ORBITPORT_MASTERSEED_DEFAULT_SEED=${ORBITPORT_MASTERSEED_DEFAULT_SEED}
+      - ORBITPORT_MASTERSEED_TRNG_SIZE=32
+      - ORBITPORT_MASTERSEED_MAX_SEEDS=10
+      - ORBITPORT_MASTERSEED_PERIOD=3600
+    ports:
+      - 9003:9000
+    depends_on:
+      - plugin-aptos-orbital
 
   plugin-auth:
     <<: *plugin-base
@@ -83,3 +103,7 @@ services:
       - ORBITPORT_PLUGIN=beacon
       - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
       - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
+      - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
+      - ORBITPORT_BEACON_UPDATE_INTERVAL=60
+    ports:
+      - 9000:9000
