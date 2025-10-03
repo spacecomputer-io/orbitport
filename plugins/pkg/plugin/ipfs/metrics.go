@@ -14,13 +14,12 @@ var (
 		[]string{"status"},
 	)
 
-	addBytes = prometheus.NewHistogram(
-		prometheus.HistogramOpts{
+	addBytesTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
 			Namespace: "op",
 			Subsystem: "ipfs",
-			Name:      "add_bytes",
-			Help:      "Size of payloads added with Add RPC",
-			Buckets:   prometheus.ExponentialBuckets(256, 2, 12),
+			Name:      "add_bytes_total",
+			Help:      "Total bytes submitted to Add RPC",
 		},
 	)
 
@@ -45,15 +44,13 @@ var (
 		[]string{"source", "namespace", "status"}, // source=cache|ipfs, namespace=ipfs|ipns, status=ok|err
 	)
 
-	getBytes = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
+	getBytesTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
 			Namespace: "op",
 			Subsystem: "ipfs",
-			Name:      "get_bytes",
-			Help:      "Size of payloads returned by Get",
-			Buckets:   prometheus.ExponentialBuckets(256, 2, 12),
+			Name:      "get_bytes_total",
+			Help:      "Total bytes returned by Get",
 		},
-		[]string{"source", "namespace"},
 	)
 
 	getTotal = prometheus.NewCounterVec(
@@ -63,7 +60,7 @@ var (
 			Name:      "get_total",
 			Help:      "Total Get RPC attempts",
 		},
-		[]string{"source", "namespace", "status"},
+		[]string{"source", "namespace", "status"}, // source=cache|ipfs|ipns
 	)
 
 	publishDuration = prometheus.NewHistogramVec(
@@ -108,27 +105,6 @@ var (
 		[]string{"status"},
 	)
 
-	rpcDuration = prometheus.NewHistogramVec(
-		prometheus.HistogramOpts{
-			Namespace: "op",
-			Subsystem: "ipfs",
-			Name:      "rpc_duration_seconds",
-			Help:      "Latency of individual IPFS RPC calls",
-			Buckets:   prometheus.DefBuckets,
-		},
-		[]string{"rpc"}, // block_put|pin_add|name_resolve|block_get|name_publish|key_list|key_generate|pin_rm|block_rm
-	)
-
-	rpcTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "op",
-			Subsystem: "ipfs",
-			Name:      "rpc_total",
-			Help:      "Total IPFS RPC attempts",
-		},
-		[]string{"rpc", "status"},
-	)
-
 	cacheHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "op",
@@ -162,11 +138,10 @@ var (
 
 func init() {
 	prometheus.MustRegister(
-		addDuration, addBytes, addTotal,
-		getDuration, getBytes, getTotal,
+		addDuration, addBytesTotal, addTotal,
+		getDuration, getBytesTotal, getTotal,
 		publishDuration, publishTotal,
 		deleteDuration, deleteTotal,
-		rpcDuration, rpcTotal,
 		cacheHitsTotal, cacheMissesTotal, cacheItems,
 	)
 }

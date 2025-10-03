@@ -94,34 +94,21 @@ func (pi *Plugin) Add(ctx context.Context, req *pluginsproto.AddRequest) (*plugi
 		addTotal.WithLabelValues(status).Inc()
 	}()
 
-	addBytes.Observe(float64(len(req.Data)))
+	addBytesTotal.Add(float64(len(req.Data)))
 
-	t := time.Now()
 	block, err := pi.node.Block().Put(ctx, bytes.NewReader(req.Data))
-	rpc := "block_put"
 	if err != nil {
-		rpcTotal.WithLabelValues(rpc, "err").Inc()
-		rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 		status = "err"
 		logger.Warnf("failed to add data: %s", err)
 		return nil, err
 	}
 
-	rpcTotal.WithLabelValues(rpc, "ok").Inc()
-	rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
-
 	// pin the added block
-	t = time.Now()
 	if err := pi.node.Pin().Add(ctx, block.Path()); err != nil {
-		rpcTotal.WithLabelValues("pin_add", "err").Inc()
-		rpcDuration.WithLabelValues("pin_add").Observe(time.Since(t).Seconds())
 		status = "err"
 		logger.Warnf("failed to pin cid (%s): %s", block.Path().RootCid(), err)
 		return nil, err
 	}
-
-	rpcTotal.WithLabelValues("pin_add", "ok").Inc()
-	rpcDuration.WithLabelValues("pin_add").Observe(time.Since(t).Seconds())
 
 	path := block.Path()
 
@@ -170,20 +157,15 @@ func (pi *Plugin) Get(ctx context.Context, req *pluginsproto.GetRequest) (*plugi
 			p = resolved.(path.Path)
 		} else {
 			cacheMissesTotal.WithLabelValues("ipns").Inc()
-			t := time.Now()
+
 			// resolve by name
 			resolved, err := pi.node.Name().Resolve(ctx, name)
-			rpc := "name_resolve"
 			if err != nil {
-				rpcTotal.WithLabelValues(rpc, "err").Inc()
-				rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 				status = "err"
 				getTotal.WithLabelValues(source, req.Namespace, status).Inc()
 				logger.Warnf("failed to resolve name (does it exist?): %s", err)
 				return nil, err
 			}
-			rpcTotal.WithLabelValues(rpc, "ok").Inc()
-			rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 
 			p = resolved
 
@@ -206,6 +188,8 @@ func (pi *Plugin) Get(ctx context.Context, req *pluginsproto.GetRequest) (*plugi
 		return nil, err
 	}
 
+	getBytesTotal.Add(float64(len(data)))
+
 	return &pluginsproto.GetResponse{
 		Data: data,
 		Path: p.String(),
@@ -223,10 +207,7 @@ func (pi *Plugin) Publish(ctx context.Context, req *pluginsproto.PublishRequest)
 		publishTotal.WithLabelValues(status).Inc()
 	}()
 
-	t := time.Now()
 	key, err := pi.resolveOrGenerateKey(ctx, req.PublishName)
-	rpc := "key_list"
-	rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 	if err != nil {
 		status = "err"
 		return nil, err
@@ -238,18 +219,13 @@ func (pi *Plugin) Publish(ctx context.Context, req *pluginsproto.PublishRequest)
 		return nil, err
 	}
 
-	t = time.Now()
 	updatedName, err := pi.publish(ctx, path.FromCid(cid), key.Name())
-	rpc = "name_publish"
-	rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 	if err != nil {
-		rpcTotal.WithLabelValues(rpc, "err").Inc()
 		status = "err"
 
 		logger.Warnf("failed to publish (%s): %s", key.Name(), err)
 		return nil, err
 	}
-	rpcTotal.WithLabelValues(rpc, "ok").Inc()
 	logger.Infof("published %s", updatedName)
 	return &pluginsproto.PublishResponse{
 		IpnsName: updatedName.String(),
@@ -280,31 +256,21 @@ func (pi *Plugin) Delete(ctx context.Context, req *pluginsproto.DeleteRequest) (
 	path := path.FromCid(cid)
 
 	logger.Debugf("unpining path: %s", path.String())
-	t := time.Now()
 	err = pi.node.Pin().Rm(ctx, path)
 	if err != nil {
-		rpcTotal.WithLabelValues("pin_rm", "err").Inc()
-		rpcDuration.WithLabelValues("pin_rm").Observe(time.Since(t).Seconds())
 		status = "err"
 		logger.Warnf("failed to unpin cid (%s): %s", path.String(), err)
 		return nil, err
 	}
-	rpcTotal.WithLabelValues("pin_rm", "ok").Inc()
-	rpcDuration.WithLabelValues("pin_rm").Observe(time.Since(t).Seconds())
 
 	logger.Debugf("removing path from IPFS: %s", path.String())
 
-	t = time.Now()
 	err = pi.node.Block().Rm(ctx, path)
 	if err != nil {
-		rpcTotal.WithLabelValues("block_rm", "err").Inc()
-		rpcDuration.WithLabelValues("block_rm").Observe(time.Since(t).Seconds())
 		status = "err"
 		logger.Warnf("failed to delete data: %s", err)
 		return nil, err
 	}
-	rpcTotal.WithLabelValues("block_rm", "ok").Inc()
-	rpcDuration.WithLabelValues("block_rm").Observe(time.Since(t).Seconds())
 
 	logger.Debugf("removed path from cache: %b", pi.cache.Remove(path.String()))
 	cacheItems.WithLabelValues("data").Set(float64(pi.cache.Len()))
@@ -318,31 +284,18 @@ func (pi *Plugin) resolveOrGenerateKey(ctx context.Context, name string) (iface.
 	logger := utils.GetLogger("orbitport:ipfs")
 
 	// if key exists, update the mutable link
-	t := time.Now()
 	logger.Debugf("attmept to resolve key by name: %s", name)
 	key, err := pi.keyForName(ctx, name)
-	rpc := "key_list"
 	if err == nil {
-		rpcTotal.WithLabelValues(rpc, "err").Inc()
-		rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 		return key, nil
 	}
-	rpcTotal.WithLabelValues(rpc, "ok").Inc()
-	rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 
 	logger.Infof("name does not exist, creating new one: %s", name)
-	t = time.Now()
 	key, err = pi.node.Key().Generate(ctx, name)
-	rpc = "key_generate"
 	if err != nil {
-		rpcTotal.WithLabelValues(rpc, "err").Inc()
-		rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 		logger.Warnf("failed to generate key: %s", err)
 		return nil, err
 	}
-
-	rpcTotal.WithLabelValues(rpc, "ok").Inc()
-	rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 
 	return key, nil
 }
@@ -354,21 +307,16 @@ func (pi *Plugin) publish(ctx context.Context, p path.Path, name string) (*ipns.
 
 	logger.Infof("Publishing on IPNS (%s): %s", name, p)
 
-	t := time.Now()
 	published, err := pi.node.Name().Publish(ctx, p,
 		options.Name.Key(name),
 		options.Name.AllowOffline(true),
 		options.Name.ValidTime(pi.leaseDuration),
 	)
-	rpc := "name_publish"
+
 	if err != nil {
-		rpcTotal.WithLabelValues(rpc, "err").Inc()
-		rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 		logger.Warnf("failed to publish data: %s", err)
 		return nil, err
 	}
-	rpcTotal.WithLabelValues(rpc, "ok").Inc()
-	rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 
 	// cache the published name
 	_ = pi.ipnsCache.Add(name, p)
@@ -388,7 +336,6 @@ func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace strin
 		source := "cache"
 		status := "ok"
 		cacheDataBytes := cachedData.([]byte)
-		getBytes.WithLabelValues(source, namespace).Observe(float64(len(cacheDataBytes)))
 		cacheHitsTotal.WithLabelValues("ipfs").Inc()
 		getTotal.WithLabelValues(source, namespace, status).Inc()
 
@@ -399,21 +346,15 @@ func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace strin
 	cacheMissesTotal.WithLabelValues("ipfs").Inc()
 
 	source := "ipfs"
-	t := time.Now()
 	// get the data
 	reader, err := pi.node.Block().Get(ctx, path)
-	rpc := "block_get"
 	if err != nil {
-		rpcTotal.WithLabelValues(rpc, "err").Inc()
-		rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 		status := "err"
 		getTotal.WithLabelValues(source, namespace, status).Inc()
 
 		logger.Warnf("failed to get data: %s", err)
 		return nil, err
 	}
-	rpcTotal.WithLabelValues(rpc, "ok").Inc()
-	rpcDuration.WithLabelValues(rpc).Observe(time.Since(t).Seconds())
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
