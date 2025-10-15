@@ -211,7 +211,7 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 	}()
 
 	if len(cfg.BeaconRegistry) == 0 {
-		beaconName := "default-beacon2.4"
+		beaconName := cfg.DefaultBeaconName
 		msg := cfg.BeaconMsg
 		interval := cfg.BeaconInterval
 		logger.Info("No beacon registry configured. Creating new registry with genesis block")
