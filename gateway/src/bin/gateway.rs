@@ -14,11 +14,7 @@ struct Args {
     #[clap(long, env = "ORBITPORT_TRNG_PLUGIN")]
     trng_plugin: String,
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
-    masterseed_plugin: String,    
-    #[clap(long, env = "ORBITPORT_DEFAULT_MASTER_SEED")] // TODO: remove
-    default_master_seed: Option<String>,
-    #[clap(long, env = "ORBITPORT_MASTER_SEED_INTERVAL")] // TODO: remove
-    master_seed_interval: Option<u64>,
+    masterseed_plugin: String,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
