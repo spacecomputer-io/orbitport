@@ -9,8 +9,7 @@ use crate::proto::trng::{
 };
 
 use crate::proto::masterseed::{
-    master_seed_plugin_client::MasterSeedPluginClient,
-    GetSeedsRequest, GetSeedsResponse,
+    GetSeedsRequest, GetSeedsResponse, master_seed_plugin_client::MasterSeedPluginClient,
 };
 
 use crate::structures::service::ServiceResult;
@@ -59,7 +58,7 @@ impl TrngService {
                 tracing::error!("Failed to connect to randomness plugin: {}", e);
                 TrngError::GatewayError(GatewayError::ServiceConnectionError(e.to_string()))
             })?;
-        
+
         Ok(TrngService {
             aptos_orbital_client,
             masterseed_client,
@@ -81,7 +80,7 @@ impl TrngService {
                 GatewayError::InternalError("masterseed GetSeeds failed".to_string())
             })?
             .into_inner();
-        
+
         if resp.values.is_empty() {
             metrics::TRNG_FALLBACKS_COUNTER
                 .with_label_values(&["err"])

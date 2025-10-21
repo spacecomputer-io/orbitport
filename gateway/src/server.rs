@@ -247,9 +247,10 @@ async fn handle_get(
     };
     if let Some(b) = query.bulk {
         if b > bulk_max {
-            return Err(warp::reject::custom(GatewayError::BadRequest(
-                format!("Bulk size {} exceeds maximum {}", b, bulk_max),
-            )));
+            return Err(warp::reject::custom(GatewayError::BadRequest(format!(
+                "Bulk size {} exceeds maximum {}",
+                b, bulk_max
+            ))));
         } else {
             tracing::debug!("[req={}] Bulk size: {}", req_id, b);
         }
@@ -295,9 +296,10 @@ async fn handle_post(
     };
     if let Some(b) = bulk {
         if b > bulk_max {
-            return Err(warp::reject::custom(GatewayError::BadRequest(
-                format!("Bulk size {} exceeds maximum {}", b, bulk_max),
-            )));
+            return Err(warp::reject::custom(GatewayError::BadRequest(format!(
+                "Bulk size {} exceeds maximum {}",
+                b, bulk_max
+            ))));
         } else {
             tracing::debug!("[req={}] Bulk size: {}", req_id, b);
         }

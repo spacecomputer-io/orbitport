@@ -8,9 +8,9 @@ use tonic_health::pb::{
 };
 
 use crate::ctx;
+use crate::proto::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 use crate::trng::TrngService;
 use crate::types::{GatewayError, ServiceHandler, ServiceRequest, ServiceResponse};
-use crate::proto::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 
 use crate::proto::auth::auth_plugin_client::AuthPluginClient;
 
@@ -92,7 +92,8 @@ impl ServiceManager {
         trng_url: &str,
         masterseed_url: &str,
     ) -> Result<ServiceManager, GatewayError> {
-         let masterseed_client = MasterSeedPluginClient::connect(masterseed_url.to_string()).await
+        let masterseed_client = MasterSeedPluginClient::connect(masterseed_url.to_string())
+            .await
             .map_err(|e| GatewayError::ServiceConnectionError(e.to_string()))?;
 
         let trng_svc = TrngService::new(ctx.clone(), trng_url, masterseed_client)
