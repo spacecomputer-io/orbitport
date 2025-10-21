@@ -13,9 +13,11 @@ struct Args {
     auth_plugin: String,
     #[clap(long, env = "ORBITPORT_TRNG_PLUGIN")]
     trng_plugin: String,
-    #[clap(long, env = "ORBITPORT_DEFAULT_MASTER_SEED")]
+    #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
+    masterseed_plugin: String,    
+    #[clap(long, env = "ORBITPORT_DEFAULT_MASTER_SEED")] // TODO: remove
     default_master_seed: Option<String>,
-    #[clap(long, env = "ORBITPORT_MASTER_SEED_INTERVAL")]
+    #[clap(long, env = "ORBITPORT_MASTER_SEED_INTERVAL")] // TODO: remove
     master_seed_interval: Option<u64>,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
@@ -23,6 +25,8 @@ struct Args {
     rate_limit: u32,
     #[clap(long, env = "ORBITPORT_RATE_LIMIT_WINDOW", default_value = "10")]
     rate_limit_window: u64,
+    #[clap(long, env = "ORBITPORT_BULK_MAX", default_value = "10")]
+    bulk_max: usize,
 }
 
 impl Args {
@@ -56,8 +60,10 @@ async fn main() -> Result<(), GatewayError> {
             ).await.unwrap();
 
             let service_manager = service_manager::ServiceManager::new(
-                ctx_cloned, auth_plugin.as_str(), trng_plugin.as_str(),
-                args.master_seed_interval, args.default_master_seed,
+                ctx_cloned,
+                auth_plugin.as_str(),
+                trng_plugin.as_str(),
+                args.masterseed_plugin.as_str(),
             ).await.unwrap();
 
             let metrics_port = args.metric_port;
@@ -66,7 +72,7 @@ async fn main() -> Result<(), GatewayError> {
             });
 
             let service_manager = Arc::new(service_manager);
-            server::start(args.http_port, service_manager.clone(), args.rate_limit, args.rate_limit_window).await;
+            server::start(args.http_port, service_manager.clone(), args.rate_limit, args.rate_limit_window, args.bulk_max).await;
 
             let time_elapsed = start.elapsed();
             tracing::info!(
