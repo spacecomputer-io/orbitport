@@ -33,7 +33,7 @@ jobs:
 
       - name: Start devenv
         run: |
-          make devenv-up
+          make ENV_FILE=.dev.env.ci devenv-up
         continue-on-error: false
 
       - name: Run e2e tests
