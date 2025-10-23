@@ -182,15 +182,20 @@ pub async fn is_running(container_name: &str) -> Result<bool, E2EError> {
     }
 }
 
-
 /// Wait until gateway answers HTTP on :8080 (with a simple TRNG call).
-async fn wait_for_gateway_ready(base_url: &str, token: &str, timeout_secs: u64) -> Result<(), E2EError> {
+async fn wait_for_gateway_ready(
+    base_url: &str,
+    token: &str,
+    timeout_secs: u64,
+) -> Result<(), E2EError> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
     let client = reqwest::Client::new();
 
     loop {
         if std::time::Instant::now() > deadline {
-            return Err(E2EError::InternalError("Timeout waiting for gateway readiness".into()));
+            return Err(E2EError::InternalError(
+                "Timeout waiting for gateway readiness".into(),
+            ));
         }
 
         // use src=derived to avoid depending on Aptos mock being up
@@ -204,8 +209,8 @@ async fn wait_for_gateway_ready(base_url: &str, token: &str, timeout_secs: u64) 
 
         match res {
             Ok(rsp) if rsp.status().is_success() => return Ok(()),
-            Ok(_) => { }
-            Err(_) => { }
+            Ok(_) => {}
+            Err(_) => {}
         }
 
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
