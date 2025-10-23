@@ -86,6 +86,8 @@ services:
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
+      - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
+      - ORBITPORT_DEFAULT_MASTER_SEED=${ORBITPORT_DEFAULT_MASTER_SEED}
     depends_on:
       - plugin-aptos-orbital
       - plugin-auth

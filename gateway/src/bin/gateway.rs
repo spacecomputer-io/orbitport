@@ -48,10 +48,11 @@ async fn main() -> Result<(), GatewayError> {
     // let ctx_cloned = ctx.clone();
     let auth_plugin = args.auth_plugin.clone();
     let trng_plugin = args.trng_plugin.clone();
+    let masterseed_plugin = args.masterseed_plugin.clone();
     tokio::select! {
         _ = tokio::spawn(async move {
             service_manager::wait_for_deps(
-                vec![auth_plugin.clone(), trng_plugin.clone()],
+                vec![auth_plugin.clone(), trng_plugin.clone(), masterseed_plugin.clone()],
                 std::time::Duration::from_secs(60),
             ).await.unwrap();
 
@@ -59,7 +60,7 @@ async fn main() -> Result<(), GatewayError> {
                 ctx_cloned,
                 auth_plugin.as_str(),
                 trng_plugin.as_str(),
-                args.masterseed_plugin.as_str(),
+                masterseed_plugin.as_str(),
             ).await.unwrap();
 
             let metrics_port = args.metric_port;
