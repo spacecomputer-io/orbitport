@@ -11,6 +11,8 @@ async fn test_e2e_happy() {
     let base_url = env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string());
 
     tracing::info!("Starting e2e happy path test with base_url: {base_url}");
+    tracing::info!("Sleeping 60 seconds to let gateway and plugins fully start...");
+    tokio::time::sleep(std::time::Duration::from_secs(100)).await;
 
     #[cfg(feature = "localtest")]
     let started = common::pre_test("happy").await.unwrap();
