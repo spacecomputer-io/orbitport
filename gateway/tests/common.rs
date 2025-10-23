@@ -77,7 +77,6 @@ pub async fn get_trng(
 pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
     tracing::info!("Preparing test environment");
 
-    let mut started = false;
     if !is_running("gateway").await.unwrap_or(false) {
         tracing::info!("Starting orbitport");
         let env_file = env::var("OPTEST_DOTENV").unwrap_or(".dev.env".to_string());
@@ -101,30 +100,22 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
                 error_message
             )));
         }
-        started = true;
+        tracing::info!("Waiting for orbitport to start");
 
         std::env::set_current_dir("gateway").expect("Failed to change directory");
-    }
-    tracing::info!("Waiting for orbitport to start");
-    // Wait for container status first
-    tokio::time::timeout(std::time::Duration::from_secs(60), async {
-        loop {
-            if is_running("gateway").await.unwrap_or(false) {
-                break;
+        // Wait for the containers to be up for 10 sec
+        tokio::select! {
+            _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
+                return Err(E2EError::InternalError("Timeout waiting for containers to be up".to_string()));
             }
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-        }
-    })
-    .await
-    .map_err(|_| E2EError::InternalError("Timeout waiting for containers to be up".into()))?;
-
-    // wait for HTTP to be ready
-    let base_url = env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string());
-    let token = env::var("OPTEST_TOKEN").unwrap_or("test_access_token".to_string());
-    wait_for_gateway_ready(&base_url, &token, 60).await?;
-
-    tracing::info!("Orbitport is running and ready");
-    Ok(started)
+            _ = is_running("gateway") => {
+                tracing::info!("Orbitport is running");
+                return Ok(true);
+            }
+        };
+    }
+    tracing::info!("Orbitport is running");
+    Ok(false)
 }
 
 /// Stop the orbitport Docker containers if they are running.
@@ -179,40 +170,5 @@ pub async fn is_running(container_name: &str) -> Result<bool, E2EError> {
         Err(E2EError::CommandError(
             String::from_utf8_lossy(&output.stderr).to_string(),
         ))
-    }
-}
-
-/// Wait until gateway answers HTTP on :8080 (with a simple TRNG call).
-async fn wait_for_gateway_ready(
-    base_url: &str,
-    token: &str,
-    timeout_secs: u64,
-) -> Result<(), E2EError> {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-    let client = reqwest::Client::new();
-
-    loop {
-        if std::time::Instant::now() > deadline {
-            return Err(E2EError::InternalError(
-                "Timeout waiting for gateway readiness".into(),
-            ));
-        }
-
-        // use src=derived to avoid depending on Aptos mock being up
-        let url = format!("{}/api/v1/services/trng?src=derived", base_url);
-        let res = client
-            .get(&url)
-            .header("Accept", "application/json")
-            .bearer_auth(token)
-            .send()
-            .await;
-
-        match res {
-            Ok(rsp) if rsp.status().is_success() => return Ok(()),
-            Ok(_) => {}
-            Err(_) => {}
-        }
-
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 }
