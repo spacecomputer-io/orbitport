@@ -1,8 +1,6 @@
-use std::sync::Arc;
 use threshold::core::CiphertextMsg;
 use tonic::transport::Channel;
 
-use crate::ctx;
 use crate::metrics;
 use crate::proto::trng::{
     TrngRequest, TrngResponse, randomness_plugin_client::RandomnessPluginClient,
@@ -21,7 +19,7 @@ use thiserror::Error;
 
 /// The src used for aptos orbital services
 pub const SRC_APTOS_ORBITAL: &str = "aptosorbital";
-/// The src used for aptos orbital services
+/// The src used for masterseed-derived fallback
 pub const SRC_DERIVED_TRNG: &str = "derived";
 /// The service name for trng (true random number generator)
 pub const SERVICE_TRNG: &str = "trng";
@@ -48,7 +46,6 @@ unsafe impl Send for TrngService {}
 impl TrngService {
     /// Creates a new instance of the TrngService.
     pub async fn new(
-        _ctx: Arc<ctx::Context>,
         trng_url: &str,
         masterseed_client: MasterSeedPluginClient<Channel>,
     ) -> Result<Self, TrngError> {
@@ -65,18 +62,32 @@ impl TrngService {
         })
     }
 
-    async fn fallback_one(&mut self) -> Result<TrngResponse, GatewayError> {
+    fn vals_to_bulk(results: Vec<String>) -> Vec<ServiceResult> {
+        results
+            .into_iter()
+            .map(|v| ServiceResult {
+                service: SERVICE_TRNG.to_string(),
+                src: SRC_DERIVED_TRNG.to_string(),
+                data: v,
+                signature: None,
+                bulk: None,
+            })
+            .collect()
+    }
+
+    async fn fallback(&mut self, count: u32) -> Result<Vec<String>, GatewayError> {
         metrics::TRNG_FALLBACKS_COUNTER
             .with_label_values(&["derived"])
             .inc();
 
-        let req = tonic::Request::new(GetSeedsRequest { count: 1 });
+        let req = tonic::Request::new(GetSeedsRequest { count });
+
         let resp: GetSeedsResponse = self
             .masterseed_client
             .get_seeds(req)
             .await
             .map_err(|e| {
-                tracing::error!("Masterseed GetSeeds(1) failed: {}", e);
+                tracing::error!("Masterseed GetSeeds({}) failed: {}", count, e);
                 GatewayError::InternalError("masterseed GetSeeds failed".to_string())
             })?
             .into_inner();
@@ -85,53 +96,14 @@ impl TrngService {
             metrics::TRNG_FALLBACKS_COUNTER
                 .with_label_values(&["err"])
                 .inc();
-            return Err(GatewayError::InternalError(
-                "No values from masterseed".to_string(),
-            ));
+        } else {
+            metrics::TRNG_FALLBACKS_COUNTER
+                .with_label_values(&["ok"])
+                .inc();
         }
 
-        metrics::TRNG_FALLBACKS_COUNTER
-            .with_label_values(&["ok"])
-            .inc();
-
-        Ok(TrngResponse {
-            values: resp.values, // hex strings
-            sig: "".to_string(), // no signature
-        })
-    }
-
-    // handle N derived RNGs for bulk responses
-    async fn fallback_bulk(&mut self, count: usize) -> Result<Vec<ServiceResult>, GatewayError> {
-        let req = tonic::Request::new(GetSeedsRequest {
-            count: count as u32,
-        });
-
-        let resp: GetSeedsResponse = self
-            .masterseed_client
-            .get_seeds(req)
-            .await
-            .map_err(|e| {
-                tracing::error!("Masterseed GetSeeds({}) failed: {}", count, e);
-                GatewayError::InternalError("masterseed GetSeeds (bulk) failed".to_string())
-            })?
-            .into_inner();
-
-        if resp.values.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let mut out = Vec::with_capacity(resp.values.len());
-        for v in resp.values {
-            out.push(ServiceResult {
-                service: SERVICE_TRNG.to_string(),
-                src: SRC_DERIVED_TRNG.to_string(),
-                data: v,
-                signature: None,
-                bulk: None,
-            });
-        }
-        Ok(out)
-    }
+        Ok(resp.values)
+}
 }
 
 impl ServiceHandler for TrngService {
@@ -144,54 +116,96 @@ impl ServiceHandler for TrngService {
             svc_req.bulk,
             svc_req.enc_key
         );
+
         match get_trng(self.aptos_orbital_client.clone()).await {
             Ok(mut trng) => {
-                // aptos returns empty
+                // APTOS returned empty RNG values
                 if trng.values.is_empty() {
                     tracing::warn!("TRNG returned empty values; attempting fallback");
+
                     if svc_req.src.contains(&SRC_DERIVED_TRNG.to_string()) {
-                        trng = self.fallback_one().await?;
+                        let vals = self.fallback(1).await?;
+                        if vals.is_empty() {
+                            return Err(GatewayError::InternalError(
+                                "No values from masterseed".to_string(),
+                            ));
+                        }
+                        trng = TrngResponse {
+                            values: vals,
+                            sig: "".to_string(),
+                        };
                     } else {
-                        return Err(GatewayError::InternalError("no values in TRNG".to_string()));
+                        return Err(GatewayError::InternalError(
+                            "no values in TRNG".to_string(),
+                        ));
                     }
                 }
 
-                // bulk RNG case
+                // Bulk RNG case — degrade gracefully (empty vec) if fallback fails
                 let bulk_results = if let Some(b) = svc_req.bulk {
-                    self.fallback_bulk(b).await?
+                    let vals = match self.fallback(b as u32).await {
+                        Ok(v) => v,
+                        Err(err) => {
+                            tracing::error!("Bulk fallback failed: {}", err);
+                            vec![]
+                        }
+                    };
+                    TrngService::vals_to_bulk(vals)
                 } else {
                     vec![]
                 };
 
-                let response = process_response(
+                process_response(
                     svc_req.req_id,
                     svc_req.enc_key,
                     trng,
                     SRC_APTOS_ORBITAL,
                     bulk_results,
-                )?;
-                Ok(response)
+                )
             }
+
             Err(e) => {
                 tracing::warn!("Failed to get trng from aptos orbital: {}", e);
+
                 if svc_req.src.contains(&SRC_DERIVED_TRNG.to_string()) {
                     tracing::info!("Fallback to masterseed plugin");
-                    let trng = self.fallback_one().await?;
+
+                    let vals = self.fallback(1).await?;
+                    if vals.is_empty() {
+                        return Err(GatewayError::InternalError(
+                            "No values from masterseed".to_string(),
+                        ));
+                    }
+
+                    let trng = TrngResponse {
+                        values: vals,
+                        sig: "".to_string(),
+                    };
+
+                    // Bulk RNG case — degrade gracefully (empty vec) if fallback fails
                     let bulk_results = if let Some(b) = svc_req.bulk {
-                        self.fallback_bulk(b).await?
+                        let vals = match self.fallback(b as u32).await {
+                            Ok(v) => v,
+                            Err(err) => {
+                                tracing::error!("Bulk fallback failed: {}", err);
+                                vec![]
+                            }
+                        };
+                        TrngService::vals_to_bulk(vals)
                     } else {
                         vec![]
                     };
-                    let response = process_response(
+
+                    process_response(
                         svc_req.req_id,
                         svc_req.enc_key,
                         trng,
                         SRC_DERIVED_TRNG,
                         bulk_results,
-                    )?;
-                    return Ok(response);
+                    )
+                } else {
+                    Err(e)
                 }
-                Err(e)
             }
         }
     }
