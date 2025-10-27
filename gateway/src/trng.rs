@@ -76,6 +76,11 @@ impl TrngService {
     }
 
     async fn fallback(&mut self, count: u32) -> Result<Vec<String>, GatewayError> {
+        if count == 0 {
+            return Err(GatewayError::InvalidArgument(
+                "fallback: count must be greater than zero".to_string(),
+            ));
+        }
         metrics::TRNG_FALLBACKS_COUNTER
             .with_label_values(&["derived"])
             .inc();
