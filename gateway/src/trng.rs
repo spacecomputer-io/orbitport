@@ -93,6 +93,9 @@ impl TrngService {
             .await
             .map_err(|e| {
                 tracing::error!("Masterseed GetSeeds({}) failed: {}", count, e);
+                metrics::TRNG_FALLBACKS_COUNTER
+                    .with_label_values(&["err"])
+                    .inc();
                 GatewayError::InternalError("masterseed GetSeeds failed".to_string())
             })?
             .into_inner();
