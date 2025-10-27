@@ -99,7 +99,7 @@ impl TrngService {
 
         if resp.values.is_empty() {
             metrics::TRNG_FALLBACKS_COUNTER
-                .with_label_values(&["err"])
+                .with_label_values(&["none"])
                 .inc();
         } else {
             metrics::TRNG_FALLBACKS_COUNTER
