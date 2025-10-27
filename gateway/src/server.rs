@@ -25,8 +25,6 @@ impl Reject for GatewayError {}
 
 const BEARER: &str = "Bearer ";
 
-const MAX_BULK_SIZE: usize = 10;
-
 /// Rate limit structure
 pub type RateLimit = (u32, Instant);
 /// Rate limit items
@@ -190,20 +188,24 @@ pub async fn start(
     service_manager: Arc<ServiceManager>,
     limit: u32,
     limit_window: u64,
+    bulk_max: usize,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
 
     let rate_limiter = Arc::new(RateLimiter::new(limit, Duration::from_secs(limit_window))); // 100 requests per minute
 
+    let bulk_max_get = bulk_max;
     let get_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::get())
         .and(with_auth(service_manager.clone()))
         .and(with_rate_limiter(rate_limiter.clone()))
         .and(warp::query::<QueryParams>())
         .and(warp::any().map(move || service_manager_clone.clone()))
+        .and(warp::any().map(move || bulk_max_get))
         .and_then(handle_get);
 
+    let bulk_max_post = bulk_max;
     let post_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::post())
         .and(with_auth(service_manager.clone()))
@@ -212,6 +214,7 @@ pub async fn start(
         .and(warp::body::json())
         .and(warp::query::<QueryParams>())
         .and(warp::any().map(move || service_manager_post_clone.clone()))
+        .and(warp::any().map(move || bulk_max_post))
         .and_then(handle_post);
 
     //
@@ -229,6 +232,7 @@ async fn handle_get(
     _: (),
     query: QueryParams,
     service_manager: Arc<ServiceManager>,
+    bulk_max: usize,
 ) -> Result<impl Reply, Rejection> {
     let req_id = new_req_id();
     tracing::debug!(
@@ -242,10 +246,11 @@ async fn handle_get(
         vec![SRC_APTOS_ORBITAL.to_string(), SRC_DERIVED_TRNG.to_string()]
     };
     if let Some(b) = query.bulk {
-        if b > MAX_BULK_SIZE {
-            return Err(warp::reject::custom(GatewayError::BadRequest(
-                "Bulk size exceeds maximum limit".to_string(),
-            )));
+        if b > bulk_max {
+            return Err(warp::reject::custom(GatewayError::BadRequest(format!(
+                "Bulk size {} exceeds maximum {}",
+                b, bulk_max
+            ))));
         } else {
             tracing::debug!("[req={}] Bulk size: {}", req_id, b);
         }
@@ -276,6 +281,7 @@ async fn handle_post(
     body: PostBody,
     query: QueryParams,
     service_manager: Arc<ServiceManager>,
+    bulk_max: usize,
 ) -> Result<impl Reply, Rejection> {
     let req_id = new_req_id();
     let src = if let Some(s) = body.src {
@@ -289,10 +295,11 @@ async fn handle_post(
         query.bulk
     };
     if let Some(b) = bulk {
-        if b > MAX_BULK_SIZE {
-            return Err(warp::reject::custom(GatewayError::BadRequest(
-                "Bulk size exceeds maximum limit".to_string(),
-            )));
+        if b > bulk_max {
+            return Err(warp::reject::custom(GatewayError::BadRequest(format!(
+                "Bulk size {} exceeds maximum {}",
+                b, bulk_max
+            ))));
         } else {
             tracing::debug!("[req={}] Bulk size: {}", req_id, b);
         }

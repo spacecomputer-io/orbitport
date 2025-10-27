@@ -10,13 +10,14 @@ pub mod proto {
     pub mod ipfs {
         tonic::include_proto!("ipfs");
     }
+    pub mod masterseed {
+        tonic::include_proto!("masterseed");
+    }
 }
 
 pub mod types;
 
-pub mod ctx;
 pub mod logging;
-pub mod os_signals;
 
 pub mod metrics;
 pub mod server;

@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::sync::Arc;
 use std::time::Duration;
 use tonic::transport::Channel;
 use tonic_health::pb::{
@@ -7,7 +6,7 @@ use tonic_health::pb::{
     health_client::HealthClient,
 };
 
-use crate::ctx;
+use crate::proto::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 use crate::trng::TrngService;
 use crate::types::{GatewayError, ServiceHandler, ServiceRequest, ServiceResponse};
 
@@ -86,13 +85,15 @@ unsafe impl Send for ServiceManager {}
 
 impl ServiceManager {
     pub async fn new(
-        ctx: Arc<ctx::Context>,
         auth_url: &str,
         trng_url: &str,
-        master_seed_interval: Option<u64>,
-        master_seed: Option<String>,
+        masterseed_url: &str,
     ) -> Result<ServiceManager, GatewayError> {
-        let trng_svc = TrngService::new(ctx.clone(), trng_url, master_seed_interval, master_seed)
+        let masterseed_client = MasterSeedPluginClient::connect(masterseed_url.to_string())
+            .await
+            .map_err(|e| GatewayError::ServiceConnectionError(e.to_string()))?;
+
+        let trng_svc = TrngService::new(trng_url, masterseed_client)
             .await
             .map_err(|e| {
                 tracing::error!("Failed to create TRNG service: {}", e);
