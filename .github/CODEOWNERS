@@ -7,4 +7,4 @@ plugins/ @DaniDeltaT
 
 ## Infrastructure
 
-.github/workflows/ @infra
+.github/workflows/ @spacecomputer-io/infra
