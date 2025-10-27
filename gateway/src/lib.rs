@@ -17,9 +17,7 @@ pub mod proto {
 
 pub mod types;
 
-pub mod ctx;
 pub mod logging;
-pub mod os_signals;
 
 pub mod metrics;
 pub mod server;

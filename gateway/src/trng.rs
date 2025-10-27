@@ -103,7 +103,7 @@ impl TrngService {
         }
 
         Ok(resp.values)
-}
+    }
 }
 
 impl ServiceHandler for TrngService {
@@ -135,9 +135,7 @@ impl ServiceHandler for TrngService {
                             sig: "".to_string(),
                         };
                     } else {
-                        return Err(GatewayError::InternalError(
-                            "no values in TRNG".to_string(),
-                        ));
+                        return Err(GatewayError::InternalError("no values in TRNG".to_string()));
                     }
                 }
 

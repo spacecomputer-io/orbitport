@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::sync::Arc;
 
-use gateway::{ctx, logging, os_signals, server, service_manager, types::GatewayError};
+use gateway::{logging, server, service_manager, types::GatewayError};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -39,47 +39,47 @@ async fn main() -> Result<(), GatewayError> {
 
     let start = std::time::Instant::now();
 
-    let ctx = Arc::new(ctx::Context::new());
-    let ctx_cloned = ctx.clone();
-
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
 
-    // let ctx_cloned = ctx.clone();
-    let auth_plugin = args.auth_plugin.clone();
-    let trng_plugin = args.trng_plugin.clone();
-    let masterseed_plugin = args.masterseed_plugin.clone();
-    tokio::select! {
-        _ = tokio::spawn(async move {
-            service_manager::wait_for_deps(
-                vec![auth_plugin.clone(), trng_plugin.clone(), masterseed_plugin.clone()],
-                std::time::Duration::from_secs(60),
-            ).await.unwrap();
+    service_manager::wait_for_deps(
+        vec![
+            args.auth_plugin.clone(),
+            args.trng_plugin.clone(),
+            args.masterseed_plugin.clone(),
+        ],
+        std::time::Duration::from_secs(60),
+    )
+    .await
+    .unwrap();
 
-            let service_manager = service_manager::ServiceManager::new(
-                ctx_cloned,
-                auth_plugin.as_str(),
-                trng_plugin.as_str(),
-                masterseed_plugin.as_str(),
-            ).await.unwrap();
+    let service_manager = service_manager::ServiceManager::new(
+        args.auth_plugin.as_str(),
+        args.trng_plugin.as_str(),
+        args.masterseed_plugin.as_str(),
+    )
+    .await
+    .unwrap();
 
-            let metrics_port = args.metric_port;
-            tokio::spawn(async move {
-                gateway::metrics::start_server(metrics_port).await;
-            });
+    let metrics_port = args.metric_port;
+    tokio::spawn(async move {
+        gateway::metrics::start_server(metrics_port).await;
+    });
 
-            let service_manager = Arc::new(service_manager);
-            server::start(args.http_port, service_manager.clone(), args.rate_limit, args.rate_limit_window, args.bulk_max).await;
+    let service_manager = Arc::new(service_manager);
+    server::start(
+        args.http_port,
+        service_manager.clone(),
+        args.rate_limit,
+        args.rate_limit_window,
+        args.bulk_max,
+    )
+    .await;
 
-            let time_elapsed = start.elapsed();
-            tracing::info!(
-                "Orbitport finished after {} seconds",
-                time_elapsed.as_secs_f64()
-            );
-        }) => {}
-        _ = os_signals::wait_exit_signals() => {
-            ctx.stop();
-        }
-    }
+    let time_elapsed = start.elapsed();
+    tracing::info!(
+        "Orbitport finished after {} seconds",
+        time_elapsed.as_secs_f64()
+    );
     Ok(())
 }
