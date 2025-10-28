@@ -404,5 +404,5 @@ func convertToMultiaddr(httpAddr string) (string, error) {
 		}
 	}
 
-	return fmt.Sprintf("/dns/%s/tcp/%s", host, port), nil
+	return fmt.Sprintf("/dns/%s/tcp/%s/%s", host, port, u.Scheme), nil
 }
