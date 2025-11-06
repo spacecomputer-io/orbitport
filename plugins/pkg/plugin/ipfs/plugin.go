@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
@@ -125,6 +126,8 @@ func (pi *Plugin) Add(ctx context.Context, req *pluginsproto.AddRequest) (*plugi
 }
 
 // Get implements the Get RPC method.
+// normalization of alias, bare peerID or "/ipns/<peerID>" prevents DNSLink misroutes
+// normalized value is always canonical /ipns/<peerID>
 func (pi *Plugin) Get(ctx context.Context, req *pluginsproto.GetRequest) (*pluginsproto.GetResponse, error) {
 	logger := utils.GetLogger("orbitport:ipfs")
 	logger.Infof("Getting data from IPFS for key: %s. Namespace: %s", req.Key, req.Namespace)
@@ -148,40 +151,65 @@ func (pi *Plugin) Get(ctx context.Context, req *pluginsproto.GetRequest) (*plugi
 			return nil, err
 		}
 		p = path.FromCid(cid)
-	case "ipns": // resolve by name
-		name := req.Key
-		// check if the name is in the cache
-		if resolved, ok := pi.ipnsCache.Get(name); ok {
-			cacheHitsTotal.WithLabelValues("ipns").Inc()
-			logger.Debugf("found in cache: %s", name)
-			p = resolved.(path.Path)
-		} else {
+
+	case "ipns":
+		{
+			// value can be: alias, bare peerID or "/ipns/<peerID>", depending on caller
+			name := req.Key
+
+			// Fast path: cache on the exact key provided
+			if resolved, ok := pi.ipnsCache.Get(name); ok {
+				cacheHitsTotal.WithLabelValues("ipns").Inc()
+				p = resolved.(path.Path)
+				break
+			}
 			cacheMissesTotal.WithLabelValues("ipns").Inc()
 
-			// resolve by name
-			resolved, err := pi.node.Name().Resolve(ctx, name)
+			// Normalize to a "/ipns/<peerID>" path
+			normalized := name
+			if !strings.HasPrefix(normalized, "/ipns/") {
+				if key, err := pi.keyForName(ctx, normalized); err == nil {
+					// structure is "/ipns/<peerID>"
+					kpath := key.Path().String()
+					if kpath != "" {
+						normalized = kpath
+					} else {
+						// fallback: treat input as bare peerID
+						normalized = "/ipns/" + normalized
+					}
+				} else {
+					// not a local alias. treat as bare peerID
+					normalized = "/ipns/" + normalized
+				}
+			}
+
+			// Resolve to current /ipfs/<cid> head
+			resolved, err := pi.node.Name().Resolve(ctx, normalized)
 			if err != nil {
 				status = "err"
 				getTotal.WithLabelValues(source, req.Namespace, status).Inc()
-				logger.Warnf("failed to resolve name (does it exist?): %s", err)
+				logger.Warnf("failed to resolve name %q: %s", normalized, err)
 				return nil, err
 			}
-
 			p = resolved
 
+			// Caching under both the normalized path and the original request key assures consistency and high performance (fast lookup)
+			pi.ipnsCache.Add(normalized, p)
 			pi.ipnsCache.Add(name, p)
 			cacheItems.WithLabelValues("ipns").Set(float64(pi.ipnsCache.Len()))
-			logger.Debugf("resolved path for name: %s", name)
+			logger.Debugf("resolved path for name: %s", normalized)
 		}
+
 	default:
 		status = "err"
 		getTotal.WithLabelValues(source, req.Namespace, status).Inc()
 		logger.Warnf("unknown namespace: %s", req.Namespace)
 		return nil, fmt.Errorf("unknown namespace: %s", req.Namespace)
 	}
+
 	logger.Debugf("resolved path: %s", p.String())
 
-	// get the data
+	// get the data (will also hit the block cache if present)
 	data, err := pi.getByPath(ctx, p, req.Namespace)
 	if err != nil {
 		logger.Warnf("failed to get data with path <%s>: %s", p.String(), err)
@@ -405,4 +433,20 @@ func convertToMultiaddr(httpAddr string) (string, error) {
 	}
 
 	return fmt.Sprintf("/dns/%s/tcp/%s/%s", host, port, u.Scheme), nil
+}
+
+func (pi *Plugin) KeyInfo(ctx context.Context, req *pluginsproto.KeyInfoRequest) (*pluginsproto.KeyInfoResponse, error) {
+	logger := utils.GetLogger("orbitport:ipfs")
+	logger.Infof("KeyInfo lookup for alias: %s", req.PublishName)
+
+	key, err := pi.keyForName(ctx, req.PublishName)
+	if err != nil {
+		// Alias not found; return empty without error so callers can treat as "doesn't exist"
+		logger.Warnf("KeyInfo(%s): key not found", req.PublishName)
+		return &pluginsproto.KeyInfoResponse{IpnsName: ""}, nil
+	}
+
+	// ipnsName is "/ipns/<peerID>
+	ipnsName := key.Path().String()
+	return &pluginsproto.KeyInfoResponse{IpnsName: ipnsName}, nil
 }
