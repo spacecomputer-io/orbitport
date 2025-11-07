@@ -195,57 +195,59 @@ func createBeacon(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, 
 	return *meta, nil
 }
 
-// init initializes the plugin, loading beacons from the registry.
+// loadRegistry initializes the plugin, loading (or creating) the persisted registry.
 func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 	logger := utils.GetLogger("orbitport:beacon:registry_loader")
 
-	conn, ipfsPluginClient, err := getIpfsPluginClient(cfg)
+	conn, ipfs, err := getIpfsPluginClient(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to IPFS plugin: %w", err)
 	}
 	defer func() {
-		err = conn.Close()
-		if err != nil {
-			logger.Errorf("error closing ipfs plugin connection: %v", err)
+		if cerr := conn.Close(); cerr != nil {
+			logger.Errorf("error closing ipfs plugin connection: %v", cerr)
 		}
 	}()
 
-	if len(cfg.BeaconRegistry) == 0 {
-		beaconName := cfg.DefaultBeaconName
-		msg := cfg.BeaconMsg
-		interval := cfg.BeaconInterval
-		logger.Info("No beacon registry configured. Creating new registry with genesis block")
-		beaconMetadata, err := createBeacon(ctx, ipfsPluginClient, beaconName, msg, interval)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create new beacon for new registry: %w", err)
+	// persisted registry state identifier
+	registryAlias := cfg.BeaconRegistry
+	if registryAlias == "" {
+		return nil, fmt.Errorf("BEACON_REGISTRY must be set (e.g., \"orbitport-registry\")")
+	}
+
+	reg, _, exists, err := queryRegistry(ctx, ipfs, registryAlias)
+	if err != nil {
+		return nil, fmt.Errorf("fetch %v failed: %w", registryAlias, err)
+	}
+
+	beaconName := cfg.DefaultBeaconName
+
+	if exists {
+		// If the registry exists, reuse the beacon if present
+		if meta, ok := findBeaconInRegistry(reg, beaconName); ok {
+			logger.Infof("Found beacon %q in registry %q; resuming.", beaconName, registryAlias)
+			return &Registry{Beacons: []BeaconMetadata{meta}}, nil
 		}
-
-		logger.Infof("Registry created. Name: %s, PublicKey: %s", beaconMetadata.Name, beaconMetadata.PublicKey)
-		return &Registry{
-			Beacons: []BeaconMetadata{
-				beaconMetadata,
-			},
-		}, nil
+		logger.Infof("Beacon %q not in registry %q; creating and upserting.", beaconName, registryAlias)
+	} else {
+		logger.Infof("Registry %q not found; will create it.", registryAlias)
+		reg = &Registry{Beacons: []BeaconMetadata{}}
 	}
 
-	logger.Info("beacon registry key acquired from config")
-	getResp, err := ipfsPluginClient.Get(ctx, &proto.GetRequest{
-		Key:       cfg.BeaconRegistry,
-		Namespace: "ipns",
-	}, grpc.WaitForReady(true))
+	// Create the beacon (two-step genesis), then upsert into the registry and publish
+	meta, err := createBeacon(ctx, ipfs, beaconName, cfg.BeaconMsg, cfg.BeaconInterval)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get beacon registry from IPFS: %w", err)
+		return nil, fmt.Errorf("createBeacon(%q) failed: %w", beaconName, err)
 	}
-	logger.Info("Successfully retrieved beacon registry from IPFS")
 
-	registry := new(Registry)
-	err = registry.Unmarshal(getResp.GetData())
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal beacon registry: %w", err)
+	upsertBeacon(&reg.Beacons, meta)
+
+	if _, err := publishRegistry(ctx, ipfs, registryAlias, reg); err != nil {
+		return nil, fmt.Errorf("publishRegistry(%q) failed: %w", registryAlias, err)
 	}
-	logger.Infof("Loaded %d beacons from registry", len(registry.Beacons))
+	logger.Infof("Upserted beacon %q into registry %q", beaconName, registryAlias)
 
-	return registry, nil
+	return &Registry{Beacons: []BeaconMetadata{meta}}, nil
 }
 
 func getIpfsPluginClient(cfg Config) (*grpc.ClientConn, proto.IpfsPluginClient, error) {
@@ -275,4 +277,84 @@ func getMasterSeedPluginClient(cfg Config) (*grpc.ClientConn, proto.MasterSeedPl
 	}
 	client := proto.NewMasterSeedPluginClient(conn)
 	return conn, client, nil
+}
+
+// queryRegistry tries to fetch the Orbitport registry JSON from IPNS <alias>.
+func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string) (*Registry, string, bool, error) {
+	logger := utils.GetLogger("orbitport:beacon:registry_query")
+
+	gctx, gcancel := context.WithTimeout(ctx, 20*time.Second)
+	defer gcancel()
+
+	// Alias -> IPNS name (PeerID) via KeyInfo
+	ki, err := ipfs.KeyInfo(gctx, &proto.KeyInfoRequest{PublishName: alias}, grpc.WaitForReady(true))
+	if err != nil || ki == nil || ki.IpnsName == "" {
+		// Alias not present yet or never published
+		logger.Warnf("KeyInfo(%v) unavailable: %v", alias, err)
+		return nil, "", false, nil
+	}
+
+	// Resolve current head of the registry
+	resp, err := ipfs.Get(gctx, &proto.GetRequest{
+		// key is "/ipns/<peerID>"
+		Key:       ki.IpnsName,
+		Namespace: "ipns",
+	}, grpc.WaitForReady(true))
+	if err != nil {
+		// Alias exists but nothing published yet
+		logger.Warnf("Get(%s) failed: %v", ki.IpnsName, err)
+		return nil, "", false, nil
+	}
+
+	var reg Registry
+	if err := reg.Unmarshal(resp.GetData()); err != nil {
+		return nil, "", true, fmt.Errorf("unmarshal registry: %w", err)
+	}
+
+	return &reg, resp.GetPath(), true, nil
+}
+
+func findBeaconInRegistry(reg *Registry, name string) (BeaconMetadata, bool) {
+	for _, b := range reg.Beacons {
+		if b.Name == name {
+			return b, true
+		}
+	}
+	return BeaconMetadata{}, false
+}
+
+func upsertBeacon(list *[]BeaconMetadata, meta BeaconMetadata) {
+	for i := range *list {
+		if (*list)[i].Name == meta.Name {
+			(*list)[i] = meta
+			return
+		}
+	}
+	*list = append(*list, meta)
+}
+
+func publishRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string, reg *Registry) (string, error) {
+	logger := utils.GetLogger("orbitport:beacon:registry_publish")
+
+	bytes, err := reg.Marshal()
+	if err != nil {
+		return "", fmt.Errorf("marshal registry: %v", err)
+	}
+
+	addResp, err := ipfs.Add(ctx, &proto.AddRequest{Data: bytes})
+	if err != nil {
+		return "", fmt.Errorf("ipfs add registry: %v", err)
+	}
+
+	// create alias key if it doesn't exist, then publish the registry head
+	_, err = ipfs.Publish(ctx, &proto.PublishRequest{
+		Cid:         addResp.Cid,
+		PublishName: alias,
+	})
+	if err != nil {
+		return "", fmt.Errorf("publish registry %v: %v", alias, err)
+	}
+
+	logger.Infof("Published registry %v -> CID %s", alias, addResp.Cid)
+	return addResp.Cid, nil
 }
