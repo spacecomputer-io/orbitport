@@ -296,7 +296,7 @@ func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias strin
 
 	// Resolve current head of the registry
 	resp, err := ipfs.Get(gctx, &proto.GetRequest{
-		// key is  "/ipns/<peerID>"
+		// key is "/ipns/<peerID>"
 		Key:       ki.IpnsName,
 		Namespace: "ipns",
 	}, grpc.WaitForReady(true))

@@ -446,7 +446,7 @@ func (pi *Plugin) KeyInfo(ctx context.Context, req *pluginsproto.KeyInfoRequest)
 		return &pluginsproto.KeyInfoResponse{IpnsName: ""}, nil
 	}
 
-	// ipnsName is "/ipns/<peerID>
+	// ipnsName is "/ipns/<peerID>"
 	ipnsName := key.Path().String()
 	return &pluginsproto.KeyInfoResponse{IpnsName: ipnsName}, nil
 }
