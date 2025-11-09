@@ -40,6 +40,21 @@ jobs:
         run: |
           make e2e-all
 
+      - name: Go beacon e2e (happy)
+        run: make go-e2e
+
+      - name: Stop devenv
+        run: |
+          make devenv-down
+
+      - name: Restart devenv (offline)
+        run: |
+          make ENV_FILE=.dev.env.ci E2E_PROFILE=offline devenv-up
+
+      - name: Go beacon e2e (offline)
+        run: |
+          make go-e2e-offline
+
       - name: Stop devenv
         run: |
           make devenv-down

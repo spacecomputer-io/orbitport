@@ -125,7 +125,7 @@ services:
       - "8081:8080"  # IPFS Gateway Port
     volumes:
       - ./.data/ipfs_dev:/data/ipfs
-    command: ["daemon", "--migrate=true", "--offline"]
+    command: ["daemon", "--migrate=true"]
 
   gateway:
     container_name: gateway 
@@ -154,4 +154,6 @@ services:
       - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
       - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
-      - ORBITPORT_BEACON_UPDATE_INTERVAL=60
+      - ORBITPORT_BEACON_UPDATE_INTERVAL=10
+      - ORBITPORT_DEFAULT_BEACON_NAME=randomness-beacon-dev1.0
+      - ORBITPORT_BEACON_REGISTRY=orbitport-dev-registry

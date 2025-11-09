@@ -37,6 +37,14 @@ e2e-lazy:
 e2e-all:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_*
 
+go-e2e:
+	@cd plugins && go test ./pkg/plugin/beacon -run 'TestBeacon' -timeout 10m -v
+
+go-e2e-offline:
+	@cd plugins && E2E_PROFILE=offline go test ./pkg/plugin/beacon \
+		-run "TestBeacon.*Offline$$" \
+		-timeout 10m -v
+
 devenv:
 	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
 

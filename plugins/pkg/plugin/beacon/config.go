@@ -35,7 +35,7 @@ func setDefaults() {
 	viper.SetDefault("ORBITPORT_CTRNG_PLUGIN", "plugin-aptos-orbital:50001")
 	viper.SetDefault("ORBITPORT_MASTERSEED_PLUGIN", "plugin-masterseed:50003")
 	viper.SetDefault("BEACON_REGISTRY", "orbitport-registry")
-	viper.SetDefault("DEFAULT_BEACON_NAME", "randomness-beacon1.0")
+	viper.SetDefault("DEFAULT_BEACON_NAME", "randomness-beacon-default1.0")
 	viper.SetDefault("BEACON_MSG", "Rm9ydHVuZQrotKLlr4wK157Xltec")
 	viper.SetDefault("BEACON_UPDATE_INTERVAL", 60)
 	viper.SetDefault("IPFS_ADDRESS", "http://ipfs-node:5001")
