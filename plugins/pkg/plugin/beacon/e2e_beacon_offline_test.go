@@ -12,7 +12,11 @@ func TestBeaconProducesBlocksOffline(t *testing.T) {
 	requireE2EProfile(t, "offline")
 
 	conn, ipfs := newIpfsClient(t)
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("failed to close ipfs client conn: %v", err)
+		}
+	}()
 
 	// Wait for initial head (sequence >= 0).
 	seq0, cid0, payload0 := waitForBeaconSequence(t, ipfs, defaultBeacon, 0, 2*time.Minute)

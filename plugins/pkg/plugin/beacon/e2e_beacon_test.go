@@ -107,7 +107,11 @@ func TestBeaconRegistryCreated(t *testing.T) {
 
 	// inspect via IPFS plugin
 	conn, ipfs := newIpfsClient(t)
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("failed to close ipfs client conn: %v", err)
+		}
+	}()
 
 	getCtx, getCancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer getCancel()
@@ -152,7 +156,11 @@ func TestBeaconProducesBlocks(t *testing.T) {
 	requireE2EProfile(t, "happy")
 
 	conn, ipfs := newIpfsClient(t)
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("failed to close ipfs client conn: %v", err)
+		}
+	}()
 
 	// beaconName := "randomness-beacon-dev1.0"
 
@@ -183,7 +191,11 @@ func TestBeaconResumesFromRegistry(t *testing.T) {
 	// This test calls loadRegistry directly using a Config that points to the
 	// real ipfs plugin and existing registry.
 	conn, ipfs := newIpfsClient(t)
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("failed to close ipfs client conn: %v", err)
+		}
+	}()
 
 	// Sanity: registry already exists and contains the beacon (rely on previous test).
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
