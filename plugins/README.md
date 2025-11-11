@@ -7,7 +7,8 @@ Plugins are grpc services that runs in their own processes and encapsulate the l
 - [x] [Aptos Orbital](./pkg/plugin/aptosorbital)
 - [x] [Auth](./pkg/plugin/auth)
 - [x] [IPFS](./pkg/plugin/ipfs)
-- [ ] [Beacon](./pkg/plugin/beacon)
+- [x] [Beacon](./pkg/plugin/beacon)
+- [x] [Masterseed](./pkg/plugin/masterseed)
 
 ## Usage
 
@@ -27,4 +28,20 @@ Or in docker:
 
 ```sh
 make ENV_FILE=.auth.env docker-run
+```
+
+## Testing (e2e)
+for happy-path (testing aptos connectivity):
+```sh
+make ENV_FILE=.dev.env.ci E2E_PROFILE=happy devenv-up
+make e2e-all
+make go-e2e
+make devenv-down
+```
+
+for offline (testing lack of aptos connectivity - fallback):
+```sh
+make ENV_FILE=.dev.env.ci E2E_PROFILE=offline devenv-up
+make go-e2e-offline
+make devenv-down
 ```

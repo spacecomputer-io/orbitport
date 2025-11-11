@@ -1,25 +1,15 @@
 package beacon
 
 import (
-	"os"
 	"testing"
 	"time"
 )
-
-// skips the test unless E2E_PROFILE matches expected.
-func requireProfile(t *testing.T, expected string) {
-	t.Helper()
-	prf := os.Getenv("E2E_PROFILE")
-	if prf != expected {
-		t.Skipf("skipping offline e2e: require E2E_PROFILE=%s, got %s", expected, prf)
-	}
-}
 
 // TestBeaconProducesBlocksOffline ensures that with the "offline" profile
 // (Aptos Orbital unavailable), the beacon still produces blocks by
 // falling back to the MasterSeed plugin.
 func TestBeaconProducesBlocksOffline(t *testing.T) {
-	requireProfile(t, "offline")
+	requireE2EProfile(t, "offline")
 
 	conn, ipfs := newIpfsClient(t)
 	defer conn.Close()

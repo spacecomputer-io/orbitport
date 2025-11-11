@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -13,6 +14,14 @@ import (
 
 const registryAlias = "orbitport-dev-registry"
 const defaultBeacon = "randomness-beacon-dev1.0"
+
+func requireE2EProfile(t *testing.T, expected string) {
+	t.Helper()
+	got := os.Getenv("E2E_PROFILE")
+	if got != expected {
+		t.Skipf("skipping beacon e2e: require E2E_PROFILE=%s, got %q", expected, got)
+	}
+}
 
 func newIpfsClient(t *testing.T) (*grpc.ClientConn, proto.IpfsPluginClient) {
 	t.Helper()
@@ -69,6 +78,8 @@ func waitForBeaconSequence(t *testing.T, client proto.IpfsPluginClient, beaconKe
 }
 
 func TestBeaconRegistryCreated(t *testing.T) {
+	requireE2EProfile(t, "happy")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -138,6 +149,8 @@ func TestBeaconRegistryCreated(t *testing.T) {
 // - read the genesis/head
 // - after waiting > interval, sequence number increases and the link changes.
 func TestBeaconProducesBlocks(t *testing.T) {
+	requireE2EProfile(t, "happy")
+
 	conn, ipfs := newIpfsClient(t)
 	defer conn.Close()
 
@@ -165,6 +178,8 @@ func TestBeaconProducesBlocks(t *testing.T) {
 // TestBeaconResumesFromRegistry ensures that loadRegistry() reuses an existing
 // beacon from the registry instead of creating a new one, i.e., "resume" behavior.
 func TestBeaconResumesFromRegistry(t *testing.T) {
+	requireE2EProfile(t, "happy")
+
 	// This test calls loadRegistry directly using a Config that points to the
 	// real ipfs plugin and existing registry.
 	conn, ipfs := newIpfsClient(t)

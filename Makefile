@@ -38,7 +38,7 @@ e2e-all:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_*
 
 go-e2e:
-	@cd plugins && go test ./pkg/plugin/beacon -run 'TestBeacon' -timeout 10m -v
+	@cd plugins && E2E_PROFILE=happy go test ./pkg/plugin/beacon -run 'TestBeacon' -timeout 10m -v
 
 go-e2e-offline:
 	@cd plugins && E2E_PROFILE=offline go test ./pkg/plugin/beacon \
