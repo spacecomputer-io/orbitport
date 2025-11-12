@@ -174,7 +174,7 @@ async fn run_test(
     assert!(sent > 0, "No requests sent");
     if sent != received {
         assert!(
-            success_rate > 0.9,
+            success_rate >= 0.9,
             "More than 10% of requests failed or missed"
         );
     }
