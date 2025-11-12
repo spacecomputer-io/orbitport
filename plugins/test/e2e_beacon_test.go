@@ -1,4 +1,6 @@
-package beacon
+//go:build e2e
+
+package e2e
 
 import (
 	"context"
@@ -6,14 +8,17 @@ import (
 	"testing"
 	"time"
 
+	beaconpkg "github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
 
 const registryAlias = "orbitport-dev-registry"
 const defaultBeacon = "randomness-beacon-dev1.0"
+const ipfsAddress = "localhost:50002"
+const ctrngAddress = "localhost:50001"
+const masterseedAddress = "localhost:50003"
 
 func requireE2EProfile(t *testing.T, expected string) {
 	t.Helper()
@@ -26,16 +31,15 @@ func requireE2EProfile(t *testing.T, expected string) {
 func newIpfsClient(t *testing.T) (*grpc.ClientConn, proto.IpfsPluginClient) {
 	t.Helper()
 
-	addr := "localhost:50002"
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(ipfsAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		t.Fatalf("failed to dial ipfs plugin at %s: %v", addr, err)
+		t.Fatalf("failed to dial ipfs plugin at %s: %v", ipfsAddress, err)
 	}
 	return conn, proto.NewIpfsPluginClient(conn)
 }
 
 // waitForBeaconSequence waits until the beacon head has sequence >= minSeq.
-func waitForBeaconSequence(t *testing.T, client proto.IpfsPluginClient, beaconKey string, minSeq uint64, timeout time.Duration) (seq uint64, cid string, payload *BeaconPayload) {
+func waitForBeaconSequence(t *testing.T, client proto.IpfsPluginClient, beaconKey string, minSeq uint64, timeout time.Duration) (seq uint64, cid string, payload *beaconpkg.BeaconPayload) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -61,7 +65,7 @@ func waitForBeaconSequence(t *testing.T, client proto.IpfsPluginClient, beaconKe
 			continue
 		}
 
-		block, err := UnmarshalBeaconBlock(resp.GetData())
+		block, err := beaconpkg.UnmarshalBeaconBlock(resp.GetData())
 		if err != nil || block == nil || block.Data == nil {
 			t.Logf("beacon %v: failed to unmarshal block: %v", beaconKey, err)
 			time.Sleep(2 * time.Second)
@@ -83,10 +87,10 @@ func TestBeaconRegistryCreated(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	cfg := Config{
-		IPFSPlugin:        "localhost:50002",
-		CTRNGPlugin:       "localhost:50001",
-		MasterSeedPlugin:  "localhost:50003",
+	cfg := beaconpkg.Config{
+		IPFSPlugin:        ipfsAddress,
+		CTRNGPlugin:       ctrngAddress,
+		MasterSeedPlugin:  masterseedAddress,
 		BeaconRegistry:    registryAlias,
 		DefaultBeaconName: defaultBeacon,
 		BeaconMsg:         "Rm9ydHVuZQrotKLlr4wK157Xltec",
@@ -95,7 +99,7 @@ func TestBeaconRegistryCreated(t *testing.T) {
 	}
 
 	// Force creation / upsert of registry via beacon logic
-	reg, err := loadRegistry(ctx, cfg)
+	reg, err := beaconpkg.E2ELoadRegistry(ctx, cfg)
 	if err != nil {
 		t.Fatalf("loadRegistry(%s) failed: %v", registryAlias, err)
 	}
@@ -125,7 +129,7 @@ func TestBeaconRegistryCreated(t *testing.T) {
 		t.Fatalf("Get(%s, ipns) failed after loadRegistry: %v", registryAlias, err)
 	}
 
-	var regFromIpfs Registry
+	var regFromIpfs beaconpkg.Registry
 	if err := regFromIpfs.Unmarshal(getResp.GetData()); err != nil {
 		t.Fatalf("failed to unmarshal registry from IPFS: %v", err)
 	}
@@ -161,8 +165,6 @@ func TestBeaconProducesBlocks(t *testing.T) {
 			t.Logf("failed to close ipfs client conn: %v", err)
 		}
 	}()
-
-	// beaconName := "randomness-beacon-dev1.0"
 
 	// Wait for initial head (genesis) with sequence >= 0.
 	seq0, cid0, payload0 := waitForBeaconSequence(t, ipfs, defaultBeacon, 0, 2*time.Minute)
@@ -211,10 +213,10 @@ func TestBeaconResumesFromRegistry(t *testing.T) {
 	t.Logf("Sequence before calling loadRegistry: %d", seqBefore)
 
 	// Now call loadRegistry with a Config that points to the live plugin-ipfs.
-	cfg := Config{
-		IPFSPlugin:        "localhost:50002",
-		CTRNGPlugin:       "localhost:50001",
-		MasterSeedPlugin:  "localhost:50003",
+	cfg := beaconpkg.Config{
+		IPFSPlugin:        ipfsAddress,
+		CTRNGPlugin:       ctrngAddress,
+		MasterSeedPlugin:  masterseedAddress,
 		BeaconRegistry:    registryAlias,
 		DefaultBeaconName: defaultBeacon,
 		BeaconMsg:         "Rm9ydHVuZQrotKLlr4wK157Xltec",
@@ -222,7 +224,7 @@ func TestBeaconResumesFromRegistry(t *testing.T) {
 		IPFSAddress:       "http://localhost:5001",
 	}
 
-	reg, err := loadRegistry(ctx, cfg)
+	reg, err := beaconpkg.E2ELoadRegistry(ctx, cfg)
 	if err != nil {
 		t.Fatalf("loadRegistry failed: %v", err)
 	}
