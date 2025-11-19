@@ -49,11 +49,12 @@ func mixWithNonceHex(hexVal string, nonce int64) (string, error) {
 	_, _ = h.Write(nb[:])
 	sum := h.Sum(nil)
 
-	// keep TRNGSize bytes, hex-encode
-	if TRNGSize < 1 || TRNGSize > len(sum) {
-		TRNGSize = len(sum) // clamp to 32 if out of range
+	// avoid mutating the global TRNGSize
+	outLen := TRNGSize
+	if outLen < 1 || outLen > len(sum) {
+		outLen = len(sum) // 32
 	}
-	return hex.EncodeToString(sum[:TRNGSize]), nil
+	return hex.EncodeToString(sum[:outLen]), nil
 }
 
 func LoadMasterSeedConfig(cfg *masterSeedConfig) {
@@ -69,7 +70,6 @@ func (m MasterSeed) Derive(index uint32) (string, error) {
 		return "", fmt.Errorf("failed to decode master seed: %w", err)
 	}
 
-	// chainParams := chaincfg.Params{}
 	rootKey, err := hdkeychain.NewMaster(seedBytes, chainParams)
 	if err != nil {
 		return "", fmt.Errorf("failed to create root key: %w", err)
