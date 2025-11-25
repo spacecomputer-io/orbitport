@@ -1,0 +1,36 @@
+name: External - Basic Issue
+description: Create an external issue
+title: "[BUG] - <Short Description>"
+labels: ["external"]
+projects: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        *If you are an internal collaborator, use our internal issue form instead.*
+  - type: textarea
+    id: bug_description
+    attributes:
+      label: What is this bug and why do we need to address it?
+      placeholder: |
+        The description should be written for someone not familiar with this particular issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: other_details
+    attributes:
+      label: Are there any other details to include?
+      placeholder: | 
+        Include other details here such as: design tradeoffs, open questions, links to discussions about this issue, dependencies of this task, etc. 
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Complete the following items before submitting this issue: 
+        * Label this issue appropriately. This form will automatically label issues with the `external` label.  If you are submitting a bug report, please also add the `bug` label. 
+        * Ensure this issue is titled correctly.  The title should be in the form of [EXTERNAL] - Short task description.  
+
+        Thank you for submitting an issue ! 
