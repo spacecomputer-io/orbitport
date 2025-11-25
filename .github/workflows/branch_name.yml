@@ -1,0 +1,27 @@
+name: Enforce Branch Naming Convention
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "*" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Enforce branch naming convention
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          BRANCH_NAME=${GITHUB_HEAD_REF}
+        else
+          BRANCH_NAME="${{ github.ref_name }}"
+        fi 
+        if ! [[ "$BRANCH_NAME" =~ ^([a-z]+\/){0,1}[a-z]+([a-z0-9\-]+)*$ ]]; then
+            echo "Branch name '$BRANCH_NAME' is invalid: must be lowercase and can include hyphens. An optional prefix (feat/, fix/) followed by a slash is allowed."
+            exit 1
+        else
+            echo "Branch name '$BRANCH_NAME' conforms to the naming convention."
+        fi

@@ -1,0 +1,70 @@
+name: Task
+description: Track a task or work item
+title: "[TASK] - <Short Description>"
+labels: ["task"]
+projects: []
+body:
+  - type: textarea
+    id: task_description
+    attributes:
+      label: What is this task and why do we need to work on it?
+
+      placeholder: |
+        The description should be written for someone not familiar  with this particular issue.
+    validations:
+      required: true
+
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: What work will need to be done to complete this task?
+      placeholder: | 
+        If this is unknown, describe what information is needed to determine this. 
+      
+        If this is a MACRO task link the sub-issues here.
+        If this is a regular task use check boxes to list the sub-tasks
+        
+        E.g. 
+        - [ ] Task 1
+        - [ ] Task 2
+        
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: What are the acceptance criteria to close this task? 
+      placeholder: |
+        Include a list of acceptance criteria such as: required reviewers, new tests that must be added, documentation that must be added, etc. 
+
+  - type: input
+    id: branch
+    attributes:
+      label: Branch work will be merged to (if not the default branch)
+    validations:
+      required: false
+
+
+  - type: markdown
+    attributes:
+      value: |
+        ### Complete the following items before submitting this issue: 
+        * Label this issue appropriately. All issues must have a `sprint` label unless they are labeled `external`, `low-priority`, or `tech-debt`.  This form will automatically label issues with our current `sprint` label.  
+        * Ensure this issue is added to the appropriate projects.
+        * Ensure this issue is titled correctly.  
+          * For MACRO tasks, title the issue [MACRO] - <MACRO_SHORT_NAME> - Macro Task Short Description
+            * E.g. [MACRO] - VIEW_SYNC - Add NK20 View Sync algorithm 
+          * For non-MACRO tasks, title the issue [<MACRO_SHORT_NAME>] - Task Short Description
+            * E.g. [VIEW_SYNC] - Create new vote types for `PreCommit`, `Commit`, and `Finalize` view sync votes
+        * Ensure MACRO tasks have all their sub-issues linked 
+        * Ensure non-MACRO tasks have their associated MACRO task linked
+        * Assign this issue to the appropriate person, if applicable
+
+        ### Other considerations: 
+        * All non-macro tasks must link to a MACRO task unless the task falls into one of the following categories.  Use these categories in lieu of a MACRO_TASK_SHORT_NAME. 
+          * TECH_DEBT - Label for tech debt 
+          * CI - Label for CI-related issues
+          * REPO - Label for repository organization issues (such as updating these template files)
+          * DOCS - Label for issues related to documentation
+        * If a non-MACRO task has linked sub-issues, consider converting it into a MACRO task.  Non-macro tasks should be small enough in scope that they do not contain sub-issues.  They may contain sub-tasks, however. 
+
+
