@@ -124,6 +124,7 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 			return nil, fmt.Errorf("failed to generate %d unique indices after %d attempts", n, attempts)
 		}
 		attempts++
+
 		idx, err := randIndex()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get random index: %w", err)
