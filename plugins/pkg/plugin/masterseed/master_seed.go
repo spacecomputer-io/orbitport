@@ -114,23 +114,11 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 
 	blockNonce := time.Now().UnixNano()
 	results := make([]string, 0, n)
-	used := make(map[uint32]struct{}, n)
-
-	maxAttempts := n * 30
-	attempts := 0
 
 	for len(results) < n {
-		if attempts >= maxAttempts {
-			return nil, fmt.Errorf("failed to generate %d unique indices after %d attempts", n, attempts)
-		}
-		attempts++
-
 		idx, err := randIndex()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get random index: %w", err)
-		}
-		if _, seen := used[idx]; seen {
-			continue
 		}
 
 		baseHex, err := m.Derive(idx) // existing BIP32-based derivation
@@ -147,7 +135,6 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 			return nil, err
 		}
 
-		used[idx] = struct{}{}
 		results = append(results, mixedHex)
 	}
 	return results, nil
