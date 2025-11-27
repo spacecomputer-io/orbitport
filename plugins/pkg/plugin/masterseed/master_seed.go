@@ -20,6 +20,7 @@ var (
 )
 
 // BIP-32 subindex range limit (M = 2^31-1), a Mersenne prime
+// randIndex samples uniformly from [0, indexMod) using crypto/rand with rejection sampling.
 const indexMod uint64 = (1 << 31) - 1
 
 type MasterSeed struct {
@@ -27,13 +28,22 @@ type MasterSeed struct {
 }
 
 func randIndex() (uint32, error) {
-	var buf [8]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("crypto/rand failed: %w", err)
+	// Rejection sampling to avoid modulo bias.
+	const maxUint64 = ^uint64(0)
+	limit := maxUint64 - (maxUint64 % indexMod)
+
+	for {
+		var buf [8]byte
+		if _, err := rand.Read(buf[:]); err != nil {
+			return 0, fmt.Errorf("crypto/rand failed: %w", err)
+		}
+		r := binary.LittleEndian.Uint64(buf[:])
+
+		// Only accept values in [0, limit). makes r % indexMod uniform.
+		if r < limit {
+			return uint32(r % indexMod), nil
+		}
 	}
-	r := binary.LittleEndian.Uint64(buf[:])
-	ts := uint64(time.Now().UnixNano())
-	return uint32((r + ts) % indexMod), nil
 }
 
 func mixWithNonceHex(hexVal string, nonce int64) (string, error) {
@@ -106,7 +116,14 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 	results := make([]string, 0, n)
 	used := make(map[uint32]struct{}, n)
 
+	maxAttempts := n * 30
+	attempts := 0
+
 	for len(results) < n {
+		if attempts >= maxAttempts {
+			return nil, fmt.Errorf("failed to generate %d unique indices after %d attempts", n, attempts)
+		}
+		attempts++
 		idx, err := randIndex()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get random index: %w", err)
@@ -120,8 +137,11 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 			return nil, fmt.Errorf("failed to derive index %d: %w", idx, err)
 		}
 
-		// mix in the block-level nonce so this round’s outputs can’t repeat
-		mixedHex, err := mixWithNonceHex(baseHex, blockNonce)
+		// ensure uniqueness within batch
+		nonce := blockNonce + int64(len(results))
+
+		// mix in the value-level nonce so that values are unique even if baseHex collides
+		mixedHex, err := mixWithNonceHex(baseHex, nonce)
 		if err != nil {
 			return nil, err
 		}
