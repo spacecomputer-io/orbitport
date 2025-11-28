@@ -10,6 +10,8 @@ service MasterSeedPlugin {
 
 message GetSeedsRequest {
   uint32 count = 1; // how many derived seeds caller wants
+  string external_ctrng_seed = 2; // optional - external seed for derivation
+
 }
 
 message GetSeedsResponse {

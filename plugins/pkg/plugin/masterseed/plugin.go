@@ -3,6 +3,7 @@ package masterseed
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
@@ -113,6 +114,30 @@ func (p *Plugin) pickMasterSeed() *MasterSeed {
 func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*proto.GetSeedsResponse, error) {
 	logger := utils.GetLogger("orbitport:masterseed:getseeds")
 
+	count := int(req.GetCount())
+	if count <= 0 {
+		count = 1
+	}
+
+	// if external CTRNG seed is provided, use that to derive values
+	extSeed := strings.TrimSpace(req.GetExternalCtrngSeed())
+	if extSeed != "" {
+		logger.Debugf("Using external CTRNG seed to derive %d seeds", req.Count)
+
+		ms := MasterSeed{Seed: extSeed}
+		derived, err := ms.DeriveBulk(int(req.Count))
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive seeds from external CTRNG seed: %w", err)
+		}
+
+		logger.Debugf("Returning %d derived seeds (CTRNG-seeded)", len(derived))
+		return &proto.GetSeedsResponse{
+			Values: derived,
+		}, nil
+	}
+
+	// fallback, use stored master seeds
+	logger.Debugf("Deriving %d seeds from stored master seeds", req.Count)
 	if len(p.masterSeeds) == 0 {
 		return nil, fmt.Errorf("no master seeds available")
 	}
@@ -127,7 +152,7 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 		return nil, fmt.Errorf("failed to derive seeds: %w", err)
 	}
 
-	logger.Debugf("Returning %d derived seeds", len(derived))
+	logger.Debugf("Returning %d derived seeds (falling back to stored CTRNG seeds)", len(derived))
 	return &proto.GetSeedsResponse{
 		Values: derived,
 	}, nil
