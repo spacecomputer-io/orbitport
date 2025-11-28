@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil/hdkeychain"
@@ -95,16 +96,14 @@ func (m MasterSeed) Derive(index uint32) (string, error) {
 }
 
 // derive multiple (n) deterministic rngs from master seed (produces n values by deriving indices randomly)
-// block nonce is mixed in to prevent repeats across multiple calls
+// RNG value nonce is generated and incremented to avoid duplicates within batch
+// RNG value nonce is mixed with seed to prevent duplicates across batches
 func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 	if n <= 0 || uint64(n) >= indexMod {
 		return []string{}, nil
 	}
 
 	results := make([]string, 0, n)
-	var nonceBytes [8]byte
-	rand.Read(nonceBytes[:])
-	blockNonce := int64(binary.LittleEndian.Uint64(nonceBytes[:]))
 
 	for len(results) < n {
 		idx, err := randIndex()
@@ -117,8 +116,8 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 			return nil, fmt.Errorf("failed to derive index %d: %w", idx, err)
 		}
 
-		// ensure uniqueness within batch with block nonce + incrementing.
-		nonce := blockNonce + int64(len(results))
+		// ensure uniqueness of each individual nonce value within batch scope
+		nonce := time.Now().UnixNano() + int64(len(results))
 
 		// mix in the value-level nonce so that values are unique even if baseHex collides
 		mixedHex, err := mixWithNonceHex(baseHex, nonce)
