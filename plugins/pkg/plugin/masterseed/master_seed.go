@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"time"
 
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcutil/hdkeychain"
@@ -20,7 +19,7 @@ var (
 )
 
 // BIP-32 subindex range limit (M = 2^31-1), a Mersenne prime
-// randIndex samples uniformly from [0, indexMod) using crypto/rand with rejection sampling.
+// randIndex samples uniformly from [0, indexMod)
 const indexMod uint64 = (1 << 31) - 1
 
 type MasterSeed struct {
@@ -28,22 +27,12 @@ type MasterSeed struct {
 }
 
 func randIndex() (uint32, error) {
-	// Rejection sampling to avoid modulo bias.
-	const maxUint64 = ^uint64(0)
-	limit := maxUint64 - (maxUint64 % indexMod)
-
-	for {
-		var buf [8]byte
-		if _, err := rand.Read(buf[:]); err != nil {
-			return 0, fmt.Errorf("crypto/rand failed: %w", err)
-		}
-		r := binary.LittleEndian.Uint64(buf[:])
-
-		// Only accept values in [0, limit). makes r % indexMod uniform.
-		if r < limit {
-			return uint32(r % indexMod), nil
-		}
+	var buf [4]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("crypto/rand failed: %w", err)
 	}
+	// 31-bit value in [0, 2^31-1]
+	return binary.LittleEndian.Uint32(buf[:]) & ((1 << 31) - 1), nil
 }
 
 func mixWithNonceHex(hexVal string, nonce int64) (string, error) {
@@ -112,8 +101,10 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 		return []string{}, nil
 	}
 
-	blockNonce := time.Now().UnixNano()
 	results := make([]string, 0, n)
+	var nonceBytes [8]byte
+	rand.Read(nonceBytes[:])
+	blockNonce := int64(binary.LittleEndian.Uint64(nonceBytes[:]))
 
 	for len(results) < n {
 		idx, err := randIndex()
@@ -126,7 +117,7 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 			return nil, fmt.Errorf("failed to derive index %d: %w", idx, err)
 		}
 
-		// ensure uniqueness within batch
+		// ensure uniqueness within batch with block nonce + incrementing.
 		nonce := blockNonce + int64(len(results))
 
 		// mix in the value-level nonce so that values are unique even if baseHex collides
