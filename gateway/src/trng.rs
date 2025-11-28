@@ -85,7 +85,10 @@ impl TrngService {
             .with_label_values(&["derived"])
             .inc();
 
-        let req = tonic::Request::new(GetSeedsRequest { count });
+        let req = tonic::Request::new(GetSeedsRequest {
+            count,
+            ..Default::default()
+        });
 
         let resp: GetSeedsResponse = self
             .masterseed_client
