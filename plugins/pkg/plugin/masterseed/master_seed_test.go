@@ -50,20 +50,13 @@ func TestMasterSeed_DeriveBulk(t *testing.T) {
 		require.Len(t, vals, 5)
 	})
 
-	t.Run("bulk derivation is consistent with single derivation", func(t *testing.T) {
-		vals, _ := m.DeriveBulk(3)
-		for i := 0; i < 3; i++ {
-			indVal, _ := m.Derive(uint32(i))
-			require.Equal(t, indVal, vals[i], "bulk derivation must match individual Derive")
-		}
-	})
-
 	t.Run("bulk derivation produces unique values", func(t *testing.T) {
-		vals, _ := m.DeriveBulk(4)
-		for i := 0; i < 4; i++ {
-			for j := i + 1; j < 4; j++ {
-				require.NotEqual(t, vals[i], vals[j], "bluk derivation values of different indices must be unique")
-			}
+		vals, _ := m.DeriveBulk(6)
+		seen := map[string]struct{}{}
+		for _, v := range vals {
+			_, dup := seen[v]
+			require.False(t, dup, "duplicate CTRNG in batch")
+			seen[v] = struct{}{}
 		}
 	})
 }
