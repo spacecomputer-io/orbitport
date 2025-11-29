@@ -122,10 +122,10 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 	// if external CTRNG seed is provided, use that to derive values
 	extSeed := strings.TrimSpace(req.GetExternalCtrngSeed())
 	if extSeed != "" {
-		logger.Debugf("Using external CTRNG seed to derive %d seeds", req.Count)
+		logger.Debugf("Using external CTRNG seed to derive %d seeds", count)
 
 		ms := MasterSeed{Seed: extSeed}
-		derived, err := ms.DeriveBulk(int(req.Count))
+		derived, err := ms.DeriveBulk(count)
 		if err != nil {
 			return nil, fmt.Errorf("failed to derive seeds from external CTRNG seed: %w", err)
 		}
@@ -137,7 +137,7 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 	}
 
 	// fallback, use stored master seeds
-	logger.Debugf("Deriving %d seeds from stored master seeds", req.Count)
+	logger.Debugf("Deriving %d seeds from stored master seeds", count)
 	if len(p.masterSeeds) == 0 {
 		return nil, fmt.Errorf("no master seeds available")
 	}
@@ -147,7 +147,7 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 		return nil, fmt.Errorf("failed to pick master seed")
 	}
 
-	derived, err := master.DeriveBulk(int(req.Count))
+	derived, err := master.DeriveBulk(count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive seeds: %w", err)
 	}
