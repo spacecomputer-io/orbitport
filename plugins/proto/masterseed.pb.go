@@ -22,11 +22,10 @@ const (
 )
 
 type GetSeedsRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Count             uint32                 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`                                                   // how many derived seeds caller wants
-	ExternalCtrngSeed string                 `protobuf:"bytes,2,opt,name=external_ctrng_seed,json=externalCtrngSeed,proto3" json:"external_ctrng_seed,omitempty"` // optional - external seed for derivation
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Count         uint32                 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"` // how many derived seeds caller wants
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetSeedsRequest) Reset() {
@@ -64,13 +63,6 @@ func (x *GetSeedsRequest) GetCount() uint32 {
 		return x.Count
 	}
 	return 0
-}
-
-func (x *GetSeedsRequest) GetExternalCtrngSeed() string {
-	if x != nil {
-		return x.ExternalCtrngSeed
-	}
-	return ""
 }
 
 type GetSeedsResponse struct {
@@ -122,10 +114,9 @@ var File_proto_masterseed_proto protoreflect.FileDescriptor
 const file_proto_masterseed_proto_rawDesc = "" +
 	"\n" +
 	"\x16proto/masterseed.proto\x12\n" +
-	"masterseed\"W\n" +
+	"masterseed\"'\n" +
 	"\x0fGetSeedsRequest\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\rR\x05count\x12.\n" +
-	"\x13external_ctrng_seed\x18\x02 \x01(\tR\x11externalCtrngSeed\"*\n" +
+	"\x05count\x18\x01 \x01(\rR\x05count\"*\n" +
 	"\x10GetSeedsResponse\x12\x16\n" +
 	"\x06values\x18\x01 \x03(\tR\x06values2Y\n" +
 	"\x10MasterSeedPlugin\x12E\n" +
