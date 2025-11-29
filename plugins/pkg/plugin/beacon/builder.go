@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	ms "github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
@@ -254,18 +255,15 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 			// "Seeded" path: use CTRNG as seed for deriving batchSize amount of values
 			logger.Infof("Beacon %s: using CTRNG to seed MasterSeed plugin", metadata.Name)
 
-			msResp, msErr := masterSeedClient.GetSeeds(ctx, &proto.GetSeedsRequest{
-				Count:             uint32(batchSize),
-				ExternalCtrngSeed: ctrngSeed,
-			})
-			if msErr != nil {
-				logger.Errorf("Failed to derive TRNGs from cTRNG via MasterSeed plugin for beacon %s: %v", metadata.Name, msErr)
-				ctrngTotal.WithLabelValues(metadata.Name, "error_ms_seeded").Inc()
+			ctrngs, err := ms.DeriveBulkFromSeedHex(ctrngSeed, int(batchSize))
+			if err != nil {
+				logger.Errorf("Failed to derive TRNGs from cTRNG via MasterSeed plugin for beacon %s: %v", metadata.Name, err)
+				ctrngTotal.WithLabelValues(metadata.Name, "error_ms_seeded_local").Inc()
 				return
 			}
-			ctrngs = msResp.GetValues()
+
 			if len(ctrngs) == 0 {
-				logger.Warnf("Beacon %s: MasterSeed plugin returned no values for CTRNG-seeded request", metadata.Name)
+				logger.Warnf("Beacon %s: local MasterSeed derivation returned no values for CTRNG-seeded request", metadata.Name)
 				return
 			}
 			ctrngTotal.WithLabelValues(metadata.Name, "ok").Add(float64(len(ctrngs)))

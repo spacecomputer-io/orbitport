@@ -21,7 +21,7 @@ func readFromEnv() *masterSeedConfig {
 	setDefaults()
 
 	return &masterSeedConfig{
-		MasterSeedDefaultMasterSeed: viper.GetString("MASTERSEED_DEFAULT_SEED"),
+		MasterSeedDefaultMasterSeed: viper.GetString("DEFAULT_MASTER_SEED"),
 		MasterSeedTRNGSize:          viper.GetInt("MASTER_SEED_TRNG_SIZE"),
 		MasterSeedMaxMasterSeeds:    viper.GetInt("MASTER_SEED_MAX_MASTER_SEEDS"),
 		MaserSeedPeriod:             viper.GetInt64("MASTER_SEED_SEED_PERIOD"),
@@ -30,7 +30,7 @@ func readFromEnv() *masterSeedConfig {
 }
 
 func setDefaults() {
-	viper.SetDefault("MASTERSEED_DEFAULT_SEED", "")
+	viper.SetDefault("DEFAULT_MASTER_SEED", "")
 	viper.SetDefault("MASTER_SEED_TRNG_SIZE", 32)
 	viper.SetDefault("MASTER_SEED_MAX_MASTER_SEEDS", 10)
 	viper.SetDefault("MASTER_SEED_SEED_PERIOD", 3600)

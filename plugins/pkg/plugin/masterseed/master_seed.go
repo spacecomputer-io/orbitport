@@ -129,3 +129,8 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 	}
 	return results, nil
 }
+
+func DeriveBulkFromSeedHex(seedHex string, n int) ([]string, error) {
+	ms := MasterSeed{Seed: seedHex}
+	return ms.DeriveBulk(n)
+}
