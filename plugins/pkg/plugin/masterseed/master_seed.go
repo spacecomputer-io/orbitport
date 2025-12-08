@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	TRNGSize        = 32 // default
-	MaxMasterSeeds  = 10 // default
+	TRNGSize        = 32  // default
+	MaxMasterSeeds  = 100 // default
 	MaserSeedPeriod = int64(3600)
 	chainParams     = &chaincfg.MainNetParams
 )

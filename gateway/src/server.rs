@@ -18,7 +18,7 @@ use crate::proto::auth::{
     TokenValidationRequest, TokenValidationResponse, auth_plugin_client::AuthPluginClient,
 };
 use crate::service_manager::ServiceManager;
-use crate::trng::{SRC_APTOS_ORBITAL, SRC_DERIVED_TRNG};
+use crate::trng::SRC_DERIVED_TRNG;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
 impl Reject for GatewayError {}
@@ -243,7 +243,7 @@ async fn handle_get(
     let src = if let Some(s) = query.src {
         vec![s.clone()]
     } else {
-        vec![SRC_APTOS_ORBITAL.to_string(), SRC_DERIVED_TRNG.to_string()]
+        vec![SRC_DERIVED_TRNG.to_string()]
     };
     if let Some(b) = query.bulk {
         if b > bulk_max {
@@ -287,8 +287,9 @@ async fn handle_post(
     let src = if let Some(s) = body.src {
         s.clone()
     } else {
-        query.src.unwrap_or(SRC_APTOS_ORBITAL.to_string()).clone()
+        query.src.unwrap_or(SRC_DERIVED_TRNG.to_string()).clone()
     };
+
     let bulk = if let Some(b) = body.bulk {
         Some(b)
     } else {

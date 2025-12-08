@@ -84,21 +84,16 @@ pub struct ServiceManager {
 unsafe impl Send for ServiceManager {}
 
 impl ServiceManager {
-    pub async fn new(
-        auth_url: &str,
-        trng_url: &str,
-        masterseed_url: &str,
-    ) -> Result<ServiceManager, GatewayError> {
+    pub async fn new(auth_url: &str, masterseed_url: &str) -> Result<ServiceManager, GatewayError> {
         let masterseed_client = MasterSeedPluginClient::connect(masterseed_url.to_string())
             .await
             .map_err(|e| GatewayError::ServiceConnectionError(e.to_string()))?;
 
-        let trng_svc = TrngService::new(trng_url, masterseed_client)
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to create TRNG service: {}", e);
-                GatewayError::ServiceConnectionError(e.to_string())
-            })?;
+        let trng_svc = TrngService::new(masterseed_client).await.map_err(|e| {
+            tracing::error!("Failed to create TRNG service: {}", e);
+            GatewayError::ServiceConnectionError(e.to_string())
+        })?;
+
         let auth_client = AuthPluginClient::connect(auth_url.to_string())
             .await
             .map_err(|e| {

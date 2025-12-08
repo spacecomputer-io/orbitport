@@ -101,11 +101,20 @@ func (p *Plugin) addMasterSeed(seed string) {
 	}
 }
 
+// crypto/rang ensures unfirom distribution during seed selection
 func (p *Plugin) pickMasterSeed() *MasterSeed {
 	if len(p.masterSeeds) == 0 {
 		return nil
 	}
-	idx := time.Now().UnixNano() % int64(len(p.masterSeeds))
+
+	rnd, err := randIndex()
+	if err != nil {
+		// fallback to simple time-based modulo
+		idx := time.Now().UnixNano() % int64(len(p.masterSeeds))
+		return &p.masterSeeds[idx]
+	}
+
+	idx := int(rnd) % len(p.masterSeeds)
 	return &p.masterSeeds[idx]
 }
 
@@ -134,7 +143,7 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 		return nil, fmt.Errorf("failed to derive seeds: %w", err)
 	}
 
-	logger.Debugf("Returning %d derived seeds (falling back to stored CTRNG seeds)", len(derived))
+	logger.Debugf("Returning %d derived seeds (derived from stored CTRNG seeds)", len(derived))
 	return &proto.GetSeedsResponse{
 		Values: derived,
 	}, nil
