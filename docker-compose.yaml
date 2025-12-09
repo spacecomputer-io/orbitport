@@ -107,5 +107,6 @@ services:
       - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
       - ORBITPORT_BEACON_UPDATE_INTERVAL=60
+      - ORBITPORT_REGISTRY_RETRIEVAL_TIMEOUT=90
     ports:
       - 9000:9000

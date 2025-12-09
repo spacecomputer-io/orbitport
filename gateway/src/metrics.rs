@@ -5,14 +5,9 @@ use lazy_static::lazy_static;
 use warp::{Filter, Reply};
 
 lazy_static! {
-    pub static ref TRNG_MASTER_SEEDS: IntGauge = prometheus::register_int_gauge!(
-        "op_trng_master_seed_total",
-        "Number of master seeds used for derivation of randomness"
-    )
-    .unwrap();
-    pub static ref TRNG_FALLBACKS_COUNTER: IntCounterVec = prometheus::register_int_counter_vec!(
-        "op_trng_fallbacks_total",
-        "Number of times the fallback mechanism was used",
+    pub static ref TRNG_MASTER_SEED_COUNTER: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_master_seed_total",
+        "Number of times masterseed derivation was used",
         &["status"]
     )
     .unwrap();

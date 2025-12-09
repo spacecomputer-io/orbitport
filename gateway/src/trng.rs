@@ -69,8 +69,8 @@ impl TrngService {
             .await
             .map_err(|e| {
                 tracing::error!("Masterseed GetSeeds({}) failed: {}", count, e);
-                metrics::TRNG_FALLBACKS_COUNTER
-                    .with_label_values(&["masterseed", "error"])
+                metrics::TRNG_MASTER_SEED_COUNTER
+                    .with_label_values(&["error"])
                     .inc();
                 GatewayError::InternalError(
                     "Failed to get seeds from masterseed plugin".to_string(),
@@ -80,13 +80,17 @@ impl TrngService {
 
         if resp.values.is_empty() {
             tracing::warn!("Masterseed returned empty seeds");
-            metrics::TRNG_FALLBACKS_COUNTER
-                .with_label_values(&["masterseed", "empty"])
+            metrics::TRNG_MASTER_SEED_COUNTER
+                .with_label_values(&["empty"])
                 .inc();
             return Err(GatewayError::InternalError(
                 "Masterseed returned empty values".to_string(),
             ));
         }
+
+        metrics::TRNG_MASTER_SEED_COUNTER
+            .with_label_values(&["success"])
+            .inc();
 
         Ok(resp.values)
     }

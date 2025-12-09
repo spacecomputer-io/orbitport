@@ -224,7 +224,7 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 	for i := 0; i < maxRetries; i++ {
 		var queryErr error
 
-		reg, _, exists, queryErr = queryRegistry(ctx, ipfs, registryAlias)
+		reg, _, exists, queryErr = queryRegistry(ctx, ipfs, registryAlias, cfg)
 		if queryErr == nil {
 			break
 		}
@@ -309,10 +309,10 @@ func getMasterSeedPluginClient(cfg Config) (*grpc.ClientConn, proto.MasterSeedPl
 // queryRegistry tries to fetch the Orbitport registry JSON from IPNS <alias>.
 // - If Key is missing: Safe to create
 // - If Key exists but Network/Timeout: returns Error (trigger retry)
-func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string) (*Registry, string, bool, error) {
+func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string, cfg Config) (*Registry, string, bool, error) {
 	logger := utils.GetLogger("orbitport:beacon:registry_query")
 
-	gctx, gcancel := context.WithTimeout(ctx, 90*time.Second)
+	gctx, gcancel := context.WithTimeout(ctx, time.Duration(cfg.RegistryRetrievalTimeout)*time.Second)
 	defer gcancel()
 
 	// Alias -> IPNS name (PeerID) via KeyInfo
