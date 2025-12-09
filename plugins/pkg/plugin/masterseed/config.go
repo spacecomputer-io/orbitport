@@ -32,7 +32,7 @@ func readFromEnv() *masterSeedConfig {
 func setDefaults() {
 	viper.SetDefault("DEFAULT_MASTER_SEED", "")
 	viper.SetDefault("MASTER_SEED_TRNG_SIZE", 32)
-	viper.SetDefault("MASTER_SEED_MAX_MASTER_SEEDS", 10)
+	viper.SetDefault("MASTER_SEED_MAX_MASTER_SEEDS", 100)
 	viper.SetDefault("MASTER_SEED_SEED_PERIOD", 3600)
 	viper.SetDefault("APTOS_PLUGIN", "plugin-aptos-orbital:50001")
 }
