@@ -41,9 +41,7 @@ unsafe impl Send for TrngService {}
 impl TrngService {
     /// Creates a new instance of the TrngService.
     pub fn new(masterseed_client: MasterSeedPluginClient<Channel>) -> Self {
-        TrngService {
-            masterseed_client,
-        }
+        TrngService { masterseed_client }
     }
 
     fn vals_to_bulk(results: Vec<String>) -> Vec<ServiceResult> {
