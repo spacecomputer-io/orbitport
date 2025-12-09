@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -217,7 +216,7 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 	}
 
 	const maxRetries = 5
-	const baseWait = 2 * time.Second
+	waitDuration := 2 * time.Second
 
 	var reg *Registry
 	var exists bool
@@ -229,8 +228,6 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 		if queryErr == nil {
 			break
 		}
-
-		waitDuration := baseWait * time.Duration(math.Pow(2, float64(i)))
 
 		logger.Warnf("Attempt %d/%d to load registry failed: %v. Retrying in %v...", i+1, maxRetries, queryErr, waitDuration)
 
@@ -244,6 +241,7 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-time.After(waitDuration):
+			waitDuration *= 2
 			continue
 		}
 	}
