@@ -101,7 +101,7 @@ func (p *Plugin) addMasterSeed(seed string) {
 	}
 }
 
-// crypto/rang ensures unfirom distribution during seed selection
+// crypto/rang ensures uniform distribution during seed selection
 func (p *Plugin) pickMasterSeed() (*MasterSeed, error) {
 	if len(p.masterSeeds) == 0 {
 		return nil, fmt.Errorf("no master seed available")

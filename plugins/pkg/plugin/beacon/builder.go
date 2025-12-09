@@ -255,7 +255,7 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 			// "Seeded" path: use CTRNG as seed for deriving batchSize amount of values
 			logger.Infof("Beacon %s: using CTRNG to seed MasterSeed plugin", metadata.Name)
 
-			ctrngs, err := ms.DeriveBulkFromSeedHex(ctrngSeed, int(batchSize))
+			ctrngs, err = ms.DeriveBulkFromSeedHex(ctrngSeed, int(batchSize))
 			if err != nil {
 				logger.Errorf("Failed to derive TRNGs from cTRNG via MasterSeed plugin for beacon %s: %v", metadata.Name, err)
 				ctrngTotal.WithLabelValues(metadata.Name, "error_ms_seeded_local").Inc()
