@@ -46,13 +46,10 @@ async fn test_e2e_load() {
             let base_url = base_url.clone();
             let rps = rps;
             let total_req = total_req;
-            let access_token = if access_token == TEST_TOKEN.to_string() {
-                format!("test_access_token_{}", i + 1)
-            } else {
-                access_token
-            };
+            let unique_token = format!("{}_{}", access_token, i);
+
             let handle = tokio::spawn(async move {
-                if let Err(e) = run_test(access_token, base_url, rps, total_req).await {
+                if let Err(e) = run_test(unique_token, base_url, rps, total_req).await {
                     tracing::error!("Thread {i} failed: {:?}", e);
                     return Err(e);
                 }
