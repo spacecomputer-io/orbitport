@@ -1,4 +1,4 @@
-use prometheus::{self, HistogramVec, IntCounterVec, IntGauge};
+use prometheus::{self, HistogramVec, IntCounterVec};
 use std::convert::Infallible;
 
 use lazy_static::lazy_static;
