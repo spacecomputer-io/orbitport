@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	ms "github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
 )
@@ -213,7 +214,6 @@ func (b *Builder) executeBeacon(c context.Context, metadata BeaconMetadata, ctrn
 
 func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginClient proto.RandomnessPluginClient, masterSeedClient proto.MasterSeedPluginClient, metadata BeaconMetadata) chan []string {
 	logger := utils.GetLogger("orbitport:beacon:ctrng_loader")
-
 	resp := make(chan []string, 1)
 
 	threads.GoCtx(ctx, func(ctx context.Context) {
@@ -224,10 +224,12 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 			batchSize = 1
 		}
 
+		var ctrngSeed string
+
 		ctrngTimer := prometheus.NewTimer(ctrngDuration.WithLabelValues(metadata.Name))
 		ctrngResp, err := ctrngPluginClient.GetTrng(ctx, &proto.TrngRequest{
 			IgnoreSig: true,
-			Chunks:    uint32(batchSize),
+			Chunks:    1,
 		})
 		ctrngTimer.ObserveDuration()
 
@@ -240,31 +242,49 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 			ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
 		}
 
-		ctrngs := []string{}
 		if ctrngResp != nil {
-			ctrngs = ctrngResp.GetValues()
+			values := ctrngResp.GetValues()
+			if len(values) > 0 {
+				ctrngSeed = values[0]
+			}
 		}
 
-		if len(ctrngs) == 0 {
-			// Fallback to RNGs from MasterSeed plugin
-			logger.Warnf("Beacon %s: falling back to value retrieval from MasterSeed plugin", metadata.Name)
+		var ctrngs []string
+
+		if ctrngSeed != "" {
+			// "Seeded" path: use CTRNG as seed for deriving batchSize amount of values
+			logger.Infof("Beacon %s: using CTRNG to seed MasterSeed plugin", metadata.Name)
+
+			ctrngs, err = ms.DeriveBulkFromSeedHex(ctrngSeed, int(batchSize))
+			if err != nil {
+				logger.Errorf("Failed to derive TRNGs from cTRNG via MasterSeed plugin for beacon %s: %v", metadata.Name, err)
+				ctrngTotal.WithLabelValues(metadata.Name, "error_ms_seeded_local").Inc()
+				return
+			}
+
+			if len(ctrngs) == 0 {
+				logger.Warnf("Beacon %s: local MasterSeed derivation returned no values for CTRNG-seeded request", metadata.Name)
+				return
+			}
+			ctrngTotal.WithLabelValues(metadata.Name, "ok").Add(float64(len(ctrngs)))
+		} else {
+			// Fallback to using only pre-stored master seeds
+			logger.Warnf("Beacon %s: no CTRNG available, falling back to MasterSeed plugin only", metadata.Name)
 
 			msResp, msErr := masterSeedClient.GetSeeds(ctx, &proto.GetSeedsRequest{
 				Count: uint32(batchSize),
 			})
 			if msErr != nil {
-				logger.Errorf("Failed to fetch seeds from MasterSeed plugin for beacon %s: %v", metadata.Name, msErr)
-				ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
+				logger.Errorf("Failed to fetch RNGs from MasterSeed plugin for beacon %s: %v", metadata.Name, msErr)
+				ctrngTotal.WithLabelValues(metadata.Name, "error_ms_fallback").Inc()
 				return
 			}
 			ctrngs = msResp.GetValues()
 			if len(ctrngs) == 0 {
-				logger.Warnf("Beacon %s: MasterSeed plugin returned no values", metadata.Name)
+				logger.Warnf("Beacon %s: MasterSeed plugin returned no values in fallback path", metadata.Name)
 				return
 			}
 			ctrngTotal.WithLabelValues(metadata.Name, "fallback").Add(float64(len(ctrngs)))
-		} else {
-			ctrngTotal.WithLabelValues(metadata.Name, "ok").Add(float64(len(ctrngs)))
 		}
 
 		// Non-blocking send, respect context

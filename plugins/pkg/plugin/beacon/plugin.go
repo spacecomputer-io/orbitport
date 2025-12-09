@@ -215,9 +215,35 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 		return nil, fmt.Errorf("BEACON_REGISTRY must be set (e.g., \"orbitport-registry\")")
 	}
 
-	reg, _, exists, err := queryRegistry(ctx, ipfs, registryAlias)
-	if err != nil {
-		return nil, fmt.Errorf("fetch %v failed: %w", registryAlias, err)
+	const maxRetries = 5
+	waitDuration := 2 * time.Second
+
+	var reg *Registry
+	var exists bool
+
+	for i := 0; i < maxRetries; i++ {
+		var queryErr error
+
+		reg, _, exists, queryErr = queryRegistry(ctx, ipfs, registryAlias, cfg)
+		if queryErr == nil {
+			break
+		}
+
+		logger.Warnf("Attempt %d/%d to load registry failed: %v. Retrying in %v...", i+1, maxRetries, queryErr, waitDuration)
+
+		if i == maxRetries-1 {
+			// key exists but resolution failed after retries
+			// failing to prevent overwriting previous registry linked to this key.
+			return nil, fmt.Errorf("registry key %q exists locally, but IPNS resolution failed after retries: %w", registryAlias, queryErr)
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(waitDuration):
+			waitDuration *= 2
+			continue
+		}
 	}
 
 	beaconName := cfg.DefaultBeaconName
@@ -230,7 +256,8 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 		}
 		logger.Infof("Beacon %q not in registry %q; creating and upserting.", beaconName, registryAlias)
 	} else {
-		logger.Infof("Registry %q not found; will create it.", registryAlias)
+		// Fresh Install or Renamed Registry - create registry
+		logger.Infof("Registry %q not found (Key missing locally); initializing new registry.", registryAlias)
 		reg = &Registry{Beacons: []BeaconMetadata{}}
 	}
 
@@ -280,10 +307,12 @@ func getMasterSeedPluginClient(cfg Config) (*grpc.ClientConn, proto.MasterSeedPl
 }
 
 // queryRegistry tries to fetch the Orbitport registry JSON from IPNS <alias>.
-func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string) (*Registry, string, bool, error) {
+// - If Key is missing: Safe to create
+// - If Key exists but Network/Timeout: returns Error (trigger retry)
+func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string, cfg Config) (*Registry, string, bool, error) {
 	logger := utils.GetLogger("orbitport:beacon:registry_query")
 
-	gctx, gcancel := context.WithTimeout(ctx, 20*time.Second)
+	gctx, gcancel := context.WithTimeout(ctx, time.Duration(cfg.RegistryRetrievalTimeout)*time.Second)
 	defer gcancel()
 
 	// Alias -> IPNS name (PeerID) via KeyInfo
@@ -303,7 +332,8 @@ func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias strin
 	if err != nil {
 		// Alias exists but nothing published yet
 		logger.Warnf("Get(%s) failed: %v", ki.IpnsName, err)
-		return nil, "", false, nil
+		// force retry
+		return nil, "", false, fmt.Errorf("key exists (%s) but IPNS Get failed: %w", ki.IpnsName, err)
 	}
 
 	var reg Registry

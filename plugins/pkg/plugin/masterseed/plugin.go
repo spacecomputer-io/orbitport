@@ -101,33 +101,49 @@ func (p *Plugin) addMasterSeed(seed string) {
 	}
 }
 
-func (p *Plugin) pickMasterSeed() *MasterSeed {
+// crypto/rang ensures uniform distribution during seed selection
+func (p *Plugin) pickMasterSeed() (*MasterSeed, error) {
 	if len(p.masterSeeds) == 0 {
-		return nil
+		return nil, fmt.Errorf("no master seed available")
 	}
-	idx := time.Now().UnixNano() % int64(len(p.masterSeeds))
-	return &p.masterSeeds[idx]
+
+	rnd, err := randIndex()
+	if err != nil {
+		// fallback to simple time-based modulo
+		return nil, fmt.Errorf("failed to generate secure random index: %w", err)
+	}
+
+	idx := int(rnd) % len(p.masterSeeds)
+	return &p.masterSeeds[idx], nil
 }
 
 // GetSeeds implements the MasterSeedPlugin gRPC service.
 func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*proto.GetSeedsResponse, error) {
 	logger := utils.GetLogger("orbitport:masterseed:getseeds")
 
+	count := int(req.GetCount())
+	if count <= 0 {
+		count = 1
+	}
+
+	// fallback, use stored master seeds
+	logger.Debugf("Deriving %d seeds from stored master seeds", count)
 	if len(p.masterSeeds) == 0 {
 		return nil, fmt.Errorf("no master seeds available")
 	}
 
-	master := p.pickMasterSeed()
-	if master == nil {
-		return nil, fmt.Errorf("failed to pick master seed")
+	master, err := p.pickMasterSeed()
+	if err != nil {
+		logger.Errorf("pickMasterSeed failed: %v", err)
+		return nil, err
 	}
 
-	derived, err := master.DeriveBulk(int(req.Count))
+	derived, err := master.DeriveBulk(count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive seeds: %w", err)
 	}
 
-	logger.Debugf("Returning %d derived seeds", len(derived))
+	logger.Debugf("Returning %d derived seeds (derived from stored CTRNG seeds)", len(derived))
 	return &proto.GetSeedsResponse{
 		Values: derived,
 	}, nil

@@ -16,6 +16,8 @@ pub enum E2EError {
     ParseError(String),
     #[error("Failed to make request: {0}")]
     RequestError(String),
+    #[error("Assertion failed: {0}")]
+    AssertionFailed(String),
 }
 
 /// Get the TRNG service from the orbitport gateway.
@@ -54,6 +56,16 @@ pub async fn get_trng(
         .send()
         .await
         .map_err(|e| E2EError::RequestError(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        tracing::error!("Gateway returned Error: {} | Body: {}", status, text);
+        return Err(E2EError::AssertionFailed(format!(
+            "Server returned error {}: {}",
+            status, text
+        )));
+    }
 
     let raw = response
         .text()

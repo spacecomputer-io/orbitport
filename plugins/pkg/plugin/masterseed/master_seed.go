@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	TRNGSize        = 32 // default
-	MaxMasterSeeds  = 10 // default
+	TRNGSize        = 32  // default
+	MaxMasterSeeds  = 100 // default
 	MaserSeedPeriod = int64(3600)
 	chainParams     = &chaincfg.MainNetParams
 )
@@ -128,4 +128,9 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 		results = append(results, mixedHex)
 	}
 	return results, nil
+}
+
+func DeriveBulkFromSeedHex(seedHex string, n int) ([]string, error) {
+	ms := MasterSeed{Seed: seedHex}
+	return ms.DeriveBulk(n)
 }

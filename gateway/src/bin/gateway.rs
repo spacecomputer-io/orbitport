@@ -11,8 +11,6 @@ struct Args {
     metric_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
     auth_plugin: String,
-    #[clap(long, env = "ORBITPORT_TRNG_PLUGIN")]
-    trng_plugin: String,
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
     masterseed_plugin: String,
     /// Rate limit per access token, 4 requests per second
@@ -43,11 +41,7 @@ async fn main() -> Result<(), GatewayError> {
     tracing::info!("Starting orbitport with args: {:?}", args);
 
     service_manager::wait_for_deps(
-        vec![
-            args.auth_plugin.clone(),
-            args.trng_plugin.clone(),
-            args.masterseed_plugin.clone(),
-        ],
+        vec![args.auth_plugin.clone(), args.masterseed_plugin.clone()],
         std::time::Duration::from_secs(60),
     )
     .await
@@ -55,7 +49,6 @@ async fn main() -> Result<(), GatewayError> {
 
     let service_manager = service_manager::ServiceManager::new(
         args.auth_plugin.as_str(),
-        args.trng_plugin.as_str(),
         args.masterseed_plugin.as_str(),
     )
     .await
