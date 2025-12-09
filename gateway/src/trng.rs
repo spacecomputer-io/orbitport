@@ -40,10 +40,10 @@ unsafe impl Send for TrngService {}
 
 impl TrngService {
     /// Creates a new instance of the TrngService.
-    pub async fn new(
-        masterseed_client: MasterSeedPluginClient<Channel>,
-    ) -> Result<Self, TrngError> {
-        Ok(TrngService { masterseed_client })
+    pub fn new(masterseed_client: MasterSeedPluginClient<Channel>) -> Self {
+        TrngService {
+            masterseed_client,
+        }
     }
 
     fn vals_to_bulk(results: Vec<String>) -> Vec<ServiceResult> {

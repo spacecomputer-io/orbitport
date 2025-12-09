@@ -89,10 +89,7 @@ impl ServiceManager {
             .await
             .map_err(|e| GatewayError::ServiceConnectionError(e.to_string()))?;
 
-        let trng_svc = TrngService::new(masterseed_client).await.map_err(|e| {
-            tracing::error!("Failed to create TRNG service: {}", e);
-            GatewayError::ServiceConnectionError(e.to_string())
-        })?;
+        let trng_svc = TrngService::new(masterseed_client);
 
         let auth_client = AuthPluginClient::connect(auth_url.to_string())
             .await
