@@ -1,13 +1,15 @@
 package masterseed
 
 import (
+	"strings"
+
 	"github.com/spf13/viper"
 )
 
 // aptosOrbitalConfig is the configuration for the Aptos Orbital plugin.
 type masterSeedConfig struct {
-	// MasterSeedDefaultMasterSeed is the default master seed for testing and for complete connectivity failure fallback
-	MasterSeedDefaultMasterSeed string
+	// MasterSeedDefaultMasterSeeds is an array of  default master seeds complete connectivity failure fallback and cold-start
+	MasterSeedDefaultMasterSeeds []string
 	// MasterSeedTRNGSize is the expected size of each cTRNGN
 	MasterSeedTRNGSize int
 	// MasterSeedMaxMasterSeeds is the maximum number of master seeds that will be kept in the ring buffer
@@ -17,20 +19,37 @@ type masterSeedConfig struct {
 	AptosPlugin     string `json:"aptos_plugin"`
 }
 
+func extractSeeds() []string {
+	rawSeeds := viper.GetString("DEFAULT_MASTER_SEEDS")
+	var seeds []string
+	if rawSeeds != "" {
+		parts := strings.Split(rawSeeds, ",")
+		for _, s := range parts {
+			cleaned := strings.TrimSpace(s)
+			if cleaned != "" {
+				seeds = append(seeds, cleaned)
+			}
+		}
+	}
+	return seeds
+}
+
 func readFromEnv() *masterSeedConfig {
 	setDefaults()
 
+	seeds := extractSeeds()
+
 	return &masterSeedConfig{
-		MasterSeedDefaultMasterSeed: viper.GetString("DEFAULT_MASTER_SEED"),
-		MasterSeedTRNGSize:          viper.GetInt("MASTER_SEED_TRNG_SIZE"),
-		MasterSeedMaxMasterSeeds:    viper.GetInt("MASTER_SEED_MAX_MASTER_SEEDS"),
-		MaserSeedPeriod:             viper.GetInt64("MASTER_SEED_SEED_PERIOD"),
-		AptosPlugin:                 viper.GetString("APTOS_PLUGIN"),
+		MasterSeedDefaultMasterSeeds: seeds,
+		MasterSeedTRNGSize:           viper.GetInt("MASTER_SEED_TRNG_SIZE"),
+		MasterSeedMaxMasterSeeds:     viper.GetInt("MASTER_SEED_MAX_MASTER_SEEDS"),
+		MaserSeedPeriod:              viper.GetInt64("MASTER_SEED_SEED_PERIOD"),
+		AptosPlugin:                  viper.GetString("APTOS_PLUGIN"),
 	}
 }
 
 func setDefaults() {
-	viper.SetDefault("DEFAULT_MASTER_SEED", "")
+	viper.SetDefault("DEFAULT_MASTER_SEEDS", "")
 	viper.SetDefault("MASTER_SEED_TRNG_SIZE", 32)
 	viper.SetDefault("MASTER_SEED_MAX_MASTER_SEEDS", 100)
 	viper.SetDefault("MASTER_SEED_SEED_PERIOD", 3600)
