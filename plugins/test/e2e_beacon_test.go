@@ -84,18 +84,19 @@ func waitForBeaconSequence(t *testing.T, client proto.IpfsPluginClient, beaconKe
 func TestBeaconRegistryCreated(t *testing.T) {
 	requireE2EProfile(t, "happy")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	cfg := beaconpkg.Config{
-		IPFSPlugin:        ipfsAddress,
-		CTRNGPlugin:       ctrngAddress,
-		MasterSeedPlugin:  masterseedAddress,
-		BeaconRegistry:    registryAlias,
-		DefaultBeaconName: defaultBeacon,
-		BeaconMsg:         "Rm9ydHVuZQrotKLlr4wK157Xltec",
-		BeaconInterval:    10,
-		IPFSAddress:       "http://localhost:5001",
+		IPFSPlugin:               ipfsAddress,
+		CTRNGPlugin:              ctrngAddress,
+		MasterSeedPlugin:         masterseedAddress,
+		BeaconRegistry:           registryAlias,
+		DefaultBeaconName:        defaultBeacon,
+		BeaconMsg:                "Rm9ydHVuZQrotKLlr4wK157Xltec",
+		BeaconInterval:           10,
+		IPFSAddress:              "http://localhost:5001",
+		RegistryRetrievalTimeout: 90,
 	}
 
 	// Force creation / upsert of registry via beacon logic
@@ -214,14 +215,15 @@ func TestBeaconResumesFromRegistry(t *testing.T) {
 
 	// Now call loadRegistry with a Config that points to the live plugin-ipfs.
 	cfg := beaconpkg.Config{
-		IPFSPlugin:        ipfsAddress,
-		CTRNGPlugin:       ctrngAddress,
-		MasterSeedPlugin:  masterseedAddress,
-		BeaconRegistry:    registryAlias,
-		DefaultBeaconName: defaultBeacon,
-		BeaconMsg:         "Rm9ydHVuZQrotKLlr4wK157Xltec",
-		BeaconInterval:    10,
-		IPFSAddress:       "http://localhost:5001",
+		IPFSPlugin:               ipfsAddress,
+		CTRNGPlugin:              ctrngAddress,
+		MasterSeedPlugin:         masterseedAddress,
+		BeaconRegistry:           registryAlias,
+		DefaultBeaconName:        defaultBeacon,
+		BeaconMsg:                "Rm9ydHVuZQrotKLlr4wK157Xltec",
+		BeaconInterval:           10,
+		IPFSAddress:              "http://localhost:5001",
+		RegistryRetrievalTimeout: 90,
 	}
 
 	reg, err := beaconpkg.E2ELoadRegistry(ctx, cfg)

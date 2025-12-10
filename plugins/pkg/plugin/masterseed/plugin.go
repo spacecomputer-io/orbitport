@@ -22,7 +22,7 @@ type Plugin struct {
 func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
 	LoadMasterSeedConfig(cfg)
-	defaultMasterSeed := cfg.MasterSeedDefaultMasterSeed
+	defaultMasterSeeds := cfg.MasterSeedDefaultMasterSeeds
 
 	conn, aptosClient, err := getAptosPluginClient(*cfg)
 	if err != nil {
@@ -37,7 +37,7 @@ func NewPlugin() (*Plugin, error) {
 	}
 
 	// start background fetch loop
-	p.startSeedFetch(context.Background(), defaultMasterSeed)
+	p.startSeedFetch(context.Background(), defaultMasterSeeds)
 	return p, nil
 }
 
@@ -54,12 +54,16 @@ func (p *Plugin) Close() error {
 	return nil
 }
 
-func (p *Plugin) startSeedFetch(ctx context.Context, defaulMastertSeed string) {
+func (p *Plugin) startSeedFetch(ctx context.Context, defaulMastertSeeds []string) {
 	logger := utils.GetLogger("orbitport:masterseed")
 	logger.Infof("Starting master seed fetcher with interval %d sec", p.seedInterval)
 
-	logger.Debugf("Inserting Default Master Seed %s", defaulMastertSeed)
-	p.addMasterSeed(defaulMastertSeed)
+	logger.Infof("Inserting %d Default Master Seeds...", len(defaulMastertSeeds))
+	for _, s := range defaulMastertSeeds {
+		p.addMasterSeed(s)
+	}
+
+	logger.Infof("Master seed plugin initialized with %d default master seeds", len(p.masterSeeds))
 
 	go func() {
 		ticker := time.NewTicker(time.Duration(p.seedInterval) * time.Second)
@@ -126,7 +130,7 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 		count = 1
 	}
 
-	// fallback, use stored master seeds
+	// use stored master seeds
 	logger.Debugf("Deriving %d seeds from stored master seeds", count)
 	if len(p.masterSeeds) == 0 {
 		return nil, fmt.Errorf("no master seeds available")
@@ -137,6 +141,7 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 		logger.Errorf("pickMasterSeed failed: %v", err)
 		return nil, err
 	}
+	logger.Debugf("Using master seed: %.4s...", master.Seed)
 
 	derived, err := master.DeriveBulk(count)
 	if err != nil {

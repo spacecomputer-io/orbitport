@@ -312,14 +312,24 @@ func getMasterSeedPluginClient(cfg Config) (*grpc.ClientConn, proto.MasterSeedPl
 func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string, cfg Config) (*Registry, string, bool, error) {
 	logger := utils.GetLogger("orbitport:beacon:registry_query")
 
-	gctx, gcancel := context.WithTimeout(ctx, time.Duration(cfg.RegistryRetrievalTimeout)*time.Second)
+	timeoutVal := cfg.RegistryRetrievalTimeout
+	if timeoutVal <= 0 {
+		timeoutVal = 90
+	}
+
+	gctx, gcancel := context.WithTimeout(ctx, time.Duration(timeoutVal)*time.Second)
 	defer gcancel()
 
 	// Alias -> IPNS name (PeerID) via KeyInfo
 	ki, err := ipfs.KeyInfo(gctx, &proto.KeyInfoRequest{PublishName: alias}, grpc.WaitForReady(true))
-	if err != nil || ki == nil || ki.IpnsName == "" {
+	if err != nil {
+		// failure to check to propagate error to trigger retry
+		return nil, "", false, fmt.Errorf("KeyInfo check failed: %w", err)
+	}
+
+	if ki == nil || ki.IpnsName == "" {
 		// Alias not present yet or never published
-		logger.Warnf("KeyInfo(%v) unavailable: %v", alias, err)
+		logger.Debugf("KeyInfo(%v) returned empty. Assuming fresh registry.", alias)
 		return nil, "", false, nil
 	}
 
