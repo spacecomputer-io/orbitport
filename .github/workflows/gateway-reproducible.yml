@@ -2,7 +2,7 @@ name: Test & Build Reproducible Gateway
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "feat/reproducible-dockerfiles" ]
   pull_request:
     branches: [ "*" ]
 
