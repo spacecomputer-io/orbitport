@@ -1,0 +1,65 @@
+name: Build Reproducible Docker Images as Artifacts
+
+on:
+  push:
+    branches:
+      - 'feat/**'
+  pull_request:
+    branches:
+      - 'feat/**'
+
+env:
+  SOURCE_DATE_EPOCH: 0
+  GW_NAME: op-gateway
+  PLUGIN_NAME: op-plugin
+
+jobs:
+  build-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU (only needed if you build non-native arch)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Optional but strongly recommended for reproducibility:
+      # - pin base image digests in Dockerfiles
+      # - avoid floating apt repos / curl latest, etc.
+
+      - name: Build GW image to OCI layout artifact
+        run: |
+          mkdir -p out
+          docker buildx build \
+            --progress=plain \
+            --build-arg SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+            --output type=oci,dest=out/${GW_NAME}.oci \
+            ./gateway
+
+          tar -cf out/${GW_NAME}.oci.tar -C out ${GW_NAME}.oci
+          sha256sum out/${GW_NAME}.oci.tar | tee out/${GW_NAME}.sha256
+
+      - name: Build Plugin image to OCI layout artifact
+        run: |
+          mkdir -p out
+          docker buildx build \
+            --progress=plain \
+            --build-arg SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+            --output type=oci,dest=out/${PLUGIN_NAME}.oci \
+            ./plugins
+
+          tar -cf out/${PLUGIN_NAME}.oci.tar -C out ${PLUGIN_NAME}.oci
+          sha256sum out/${PLUGIN_NAME}.oci.tar | tee out/${PLUGIN_NAME}.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: images-oci
+          path: |
+            out/*.oci.tar
+            out/*.sha256
+          if-no-files-found: error
