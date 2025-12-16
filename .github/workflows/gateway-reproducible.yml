@@ -1,0 +1,36 @@
+name: Test & Build Gateway 
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "*" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  SOURCE_DATE_EPOCH: 0
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install protoc
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: Format
+      working-directory: ./gateway
+      run: cargo fmt -- --check
+    - name: Clippy
+      working-directory: ./gateway
+      run: cargo clippy -- -D warnings
+    - name: Build
+      working-directory: ./gateway
+      run: cargo build --verbose
+    - name: Run unit tests
+      working-directory: ./gateway
+      run: make test
+    - name: Check Protobufs are up to date
+      run: make protoc-dry-run
