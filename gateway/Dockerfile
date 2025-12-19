@@ -4,7 +4,7 @@
 
 ARG RUST_VERSION=1.85
 
-FROM rust:${RUST_VERSION}-slim-bullseye AS build
+FROM dhi.io/rust:${RUST_VERSION}-slim-bullseye AS build
 
 WORKDIR /app
 
@@ -35,7 +35,7 @@ EOF
 
 ################################################################################
 
-FROM debian:bullseye-slim AS final
+FROM dhi.io/debian-base:bullseye-slim AS final
 
 
 COPY --from=build /bin/gateway /bin/gateway
