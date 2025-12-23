@@ -4,7 +4,7 @@
 
 ARG RUST_VERSION=1.92
 
-FROM dhi.io/rust:${RUST_VERSION}-debian13 AS build
+FROM dhi.io/rust:${RUST_VERSION}-debian13-dev AS build
 
 WORKDIR /app
 
