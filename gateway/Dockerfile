@@ -2,9 +2,9 @@
 
 ################################################################################
 
-ARG RUST_VERSION=1.85
+ARG RUST_VERSION=1.92
 
-FROM rust:${RUST_VERSION}-slim-bullseye AS build
+FROM rust:${RUST_VERSION}-slim-trixie AS build
 
 WORKDIR /app
 
@@ -35,7 +35,7 @@ EOF
 
 ################################################################################
 
-FROM debian:bullseye-slim AS final
+FROM debian:trixie-slim AS final
 
 
 COPY --from=build /bin/gateway /bin/gateway
