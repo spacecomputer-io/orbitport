@@ -1,0 +1,87 @@
+name: Build and Test Images
+
+on:
+  push:
+    branches: [ 'feat/version-upgrades' ]
+  pull_request:
+    branches: [ 'feat/version-upgrades' ]
+
+env:
+  SOURCE_DATE_EPOCH: 0
+  GW_NAME: op-gateway
+  PLUGIN_NAME: op-plugin
+
+jobs:
+  build-artifacts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx (pin BuildKit v0.13.2)
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: |
+            image=moby/buildkit:v0.13.2
+
+      - name: Build GW image to OCI layout + deterministic tar
+        env:
+          SOURCE_DATE_EPOCH: 0
+          TZ: UTC
+          LC_ALL: C
+          LANG: C.UTF-8
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          docker buildx build \
+            --progress=plain \
+            --platform linux/amd64 \
+            --build-arg SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+            --output type=oci,dest=out/${GW_NAME}.oci \
+            ./gateway
+
+          # Deterministic tar of the OCI directory
+          tar --sort=name \
+              --mtime='@0' \
+              --owner=0 --group=0 --numeric-owner \
+              --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime \
+              -cf out/${GW_NAME}.oci.tar -C out ${GW_NAME}.oci
+
+          sha256sum out/${GW_NAME}.oci.tar | tee out/${GW_NAME}.sha256
+
+      - name: Build Plugin image to OCI layout + deterministic tar
+        env:
+          SOURCE_DATE_EPOCH: 0
+          TZ: UTC
+          LC_ALL: C
+          LANG: C.UTF-8
+        run: |
+          set -euo pipefail
+          mkdir -p out
+
+          docker buildx build \
+            --progress=plain \
+            --platform linux/amd64 \
+            --build-arg SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH} \
+            --output type=oci,dest=out/${PLUGIN_NAME}.oci \
+            ./plugins
+
+          # Deterministic tar of the OCI directory
+          tar --sort=name \
+              --mtime='@0' \
+              --owner=0 --group=0 --numeric-owner \
+              --pax-option=exthdr.name=%d/PaxHeaders/%f,delete=atime,delete=ctime \
+              -cf out/${PLUGIN_NAME}.oci.tar -C out ${PLUGIN_NAME}.oci
+
+          sha256sum out/${PLUGIN_NAME}.oci.tar | tee out/${PLUGIN_NAME}.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: images-oci
+          path: |
+            out/*.oci.tar
+            out/*.sha256
+          if-no-files-found: error

@@ -3,8 +3,9 @@
 ################################################################################
 
 ARG GO_VERSION=1.24
+ARG ALPINE_VERSION=3.22
 
-FROM golang:${GO_VERSION}-alpine AS builder
+FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 ARG BUILD_TARGET=plugin
 
@@ -20,7 +21,7 @@ RUN go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-FROM alpine:latest
+FROM alpine:${ALPINE_VERSION}
 
 ARG BUILD_TARGET=plugin
 
