@@ -2,9 +2,9 @@
 
 ################################################################################
 
-ARG RUST_VERSION=1.85
+ARG RUST_VERSION=1.92
 
-FROM dhi.io/rust:${RUST_VERSION}-bookworm AS build
+FROM dhi.io/rust:${RUST_VERSION}-debian13 AS build
 
 WORKDIR /app
 
@@ -35,7 +35,7 @@ EOF
 
 ################################################################################
 
-FROM dhi.io/debian-base:bookworm AS final
+FROM dhi.io/debian-base:trixie AS final
 
 
 COPY --from=build /bin/gateway /bin/gateway
