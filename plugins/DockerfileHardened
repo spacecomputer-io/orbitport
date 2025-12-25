@@ -21,7 +21,7 @@ RUN go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-FROM dhi.io/alpine:${APLINE_VERSION}
+FROM dhi.io/alpine${APLINE_VERSION}
 
 ARG BUILD_TARGET=plugin
 
