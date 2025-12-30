@@ -1,16 +1,10 @@
 name: Build Reproducible Docker Images as Artifacts
 
 on:
-  workflow_dispatch:
-    inputs:
-      dockerfile_variant:
-        description: "Which Dockerfiles to use"
-        required: true
-        default: "hardened"
-        type: choice
-        options:
-          - hardened
-          - normal
+  push:
+    branches: [ 'feat/docker-hardened-images' ]
+  pull_request:
+    branches: [ 'feat/docker-hardened-images' ]
 
 env:
   GW_NAME: op-gateway
@@ -27,21 +21,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # important so git log works reliably
 
       - name: Set SOURCE_DATE_EPOCH from latest commit timestamp
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
-
-      - name: Pick Dockerfiles
-        run: |
-          set -euo pipefail
-          if [ "${{ inputs.dockerfile_variant }}" = "hardened" ]; then
-            echo "GW_DOCKERFILE=./gateway/DockerfileHardned" >> "$GITHUB_ENV"
-            echo "PLUGIN_DOCKERFILE=./plugins/DockerfileHardned" >> "$GITHUB_ENV"
-          else
-            echo "GW_DOCKERFILE=./gateway/Dockerfile" >> "$GITHUB_ENV"
-            echo "PLUGIN_DOCKERFILE=./plugins/Dockerfile" >> "$GITHUB_ENV"
-          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -59,7 +42,7 @@ jobs:
           driver-opts: |
             image=moby/buildkit:v0.13.2
 
-      - name: Build GW image to OCI layout + deterministic tar
+      - name: Build GW (DockerfileHardned) to OCI layout + deterministic tar
         run: |
           set -euo pipefail
           mkdir -p out
@@ -67,7 +50,7 @@ jobs:
           docker buildx build \
             --progress=plain \
             --platform linux/amd64 \
-            -f "${GW_DOCKERFILE}" \
+            -f ./gateway/DockerfileHardned \
             --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
             --output type=oci,dest="out/${GW_NAME}.oci" \
             ./gateway
@@ -80,7 +63,7 @@ jobs:
 
           sha256sum "out/${GW_NAME}.oci.tar" | tee "out/${GW_NAME}.sha256"
 
-      - name: Build Plugin image to OCI layout + deterministic tar
+      - name: Build Plugin (DockerfileHardned) to OCI layout + deterministic tar
         run: |
           set -euo pipefail
           mkdir -p out
@@ -88,7 +71,7 @@ jobs:
           docker buildx build \
             --progress=plain \
             --platform linux/amd64 \
-            -f "${PLUGIN_DOCKERFILE}" \
+            -f ./plugins/DockerfileHardned \
             --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
             --output type=oci,dest="out/${PLUGIN_NAME}.oci" \
             ./plugins
