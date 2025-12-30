@@ -7,6 +7,9 @@ ARG ALPINE_VERSION=3.22
 
 FROM dhi.io/golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
+
 ARG BUILD_TARGET=plugin
 
 WORKDIR /app
@@ -22,6 +25,9 @@ RUN go build -o bin/ ./cmd/${BUILD_TARGET}/...
 ################################################################################
 
 FROM alpine:${ALPINE_VERSION}
+
+ARG SOURCE_DATE_EPOCH
+ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 ARG BUILD_TARGET=plugin
 
