@@ -50,7 +50,7 @@ jobs:
           docker buildx build \
             --progress=plain \
             --platform linux/amd64 \
-            -f ./gateway/DockerfileHardned \
+            -f ./gateway/DockerfileHardened \
             --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
             --output type=oci,dest="out/${GW_NAME}.oci" \
             ./gateway
@@ -71,7 +71,7 @@ jobs:
           docker buildx build \
             --progress=plain \
             --platform linux/amd64 \
-            -f ./plugins/DockerfileHardned \
+            -f ./plugins/DockerfileHardened \
             --build-arg SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH}" \
             --output type=oci,dest="out/${PLUGIN_NAME}.oci" \
             ./plugins
