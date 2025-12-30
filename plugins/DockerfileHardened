@@ -3,9 +3,9 @@
 ################################################################################
 
 ARG GO_VERSION=1.24
-ARG APLINE_VERSION=3.22
+ARG ALPINE_VERSION=3.22
 
-FROM dhi.io/golang:${GO_VERSION}-alpine${APLINE_VERSION} AS builder
+FROM dhi.io/golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
 ARG BUILD_TARGET=plugin
 
@@ -21,7 +21,7 @@ RUN go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-FROM dhi.io/alpine${APLINE_VERSION}
+FROM dhi.io/${ALPINE_VERSION}-alpine${ALPINE_VERSION}
 
 ARG BUILD_TARGET=plugin
 
