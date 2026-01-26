@@ -1,0 +1,82 @@
+[
+  {
+    "name": "A_domain_separation_then_chacha_3x32",
+    "mode": "derive_seed(execution_id,party_id,counter,block) -> ChaCha20",
+    "execution_id_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "party_id": 4660,
+    "counter": 42,
+    "trng_block_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "seed_hex": "d2ff31396230e70af8cbc667efc30d499edfd3280bbddf4fac87a724275a4ea3",
+    "trng_size": 32,
+    "count": 3,
+    "outputs_hex": [
+      "5703ffef43735bc7e96e3c4cd3ee34436a3c10d09ee5130848e168a1d74da78b",
+      "202d16729c18d0ca46f6ab98dc469c4539c9eb4b0900ae56607162ef9f8477d5",
+      "d5497ab97e32ff3f1b0b257f64e988ea7dfccb08cfcb5f9672aa1d873c11f1e8"
+    ]
+  },
+  {
+    "name": "B_tagged_domain_separation_then_chacha_3x32",
+    "mode": "SHA256(orbitport_tag || derive_seed(...)) -> ChaCha20",
+    "execution_id_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "party_id": 4660,
+    "counter": 42,
+    "trng_block_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "seed_hex": "b86d2ede87e68847249bd984cfa916eb9091190f2d73efb4b67ceca5c56275a4",
+    "trng_size": 32,
+    "count": 3,
+    "outputs_hex": [
+      "128335ae0319e9e965a22927ad2f9e508c8b33f246e415848873d1c83db5e954",
+      "16569f7e52def8efe8d3567dcca50d6c8ba88f8b82643e9844bee98b136e1f71",
+      "20ee27b013a4884ab4ef063b69e9cc7c237b70436c967a10cc78bfbff584d8e1"
+    ]
+  },
+  {
+    "name": "C_crypto_ctrng_drbg_tag_then_chacha_3x32",
+    "mode": "SHA256(crypto-ctrng-drbg-seed-v1 || block) -> ChaCha20",
+    "execution_id_hex": null,
+    "party_id": null,
+    "counter": null,
+    "trng_block_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "seed_hex": "2fad85a3e355946d602fde810511a8bbb918a3ffe3ed6ba9c6321cda356c08c5",
+    "trng_size": 32,
+    "count": 3,
+    "outputs_hex": [
+      "2af918b7632b19d8adbbddbbde96f5a661d48c7b03845d3678b05070a3948d15",
+      "f08ccc26c27b60ac94c59ceffc59f73e68e3eb9aab4e596b561d97f03bfbc673",
+      "50466f0eb0c12449ef789cb5c0c59f10adb0dad5b8896ecf8e3fe3821e5a988f"
+    ]
+  },
+  {
+    "name": "D_direct_block_seed_then_chacha_3x32",
+    "mode": "seed = block -> ChaCha20",
+    "execution_id_hex": null,
+    "party_id": null,
+    "counter": null,
+    "trng_block_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "seed_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "trng_size": 32,
+    "count": 3,
+    "outputs_hex": [
+      "7579d24e9d0e58ced67c55d57c6f60ad8d1c5d04f72134d82798391263e65595",
+      "10578b1de5166d33ff575d81ca60999b83551701e6b7f14c0909cb2988791e14",
+      "89e7bd45f921edc7d0e5d1e7968f6b998672bf05fbc0b9b807afb165732257f8"
+    ]
+  },
+  {
+    "name": "E_block_nonce_seq_sha256_then_chacha_3x32",
+    "mode": "SHA256(block || BE(nonceNanos) || BE(seq)) -> ChaCha20",
+    "execution_id_hex": null,
+    "party_id": null,
+    "counter": null,
+    "trng_block_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "seed_hex": "967aaf759a32bad55ca3ab79f94bbf5b3a6ae6e14e9cd453e615ce851603ebe9",
+    "trng_size": 32,
+    "count": 3,
+    "outputs_hex": [
+      "411b3bc984c8a4d7dff1bfd1a6688e8b00b35393f53f0c916fe1a971c11f1dc9",
+      "ac3443e561d8a9b8a328875addef6436e1cd2e461ae73b157d14d7f38ad30b36",
+      "6ac3973d6e28a5d17e2a3674a981789ad9b18fae4f3244b497c35ff59c5db0e5"
+    ]
+  }
+]
