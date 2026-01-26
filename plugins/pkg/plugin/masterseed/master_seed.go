@@ -1,60 +1,20 @@
 package masterseed
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"time"
-
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/btcsuite/btcutil/hdkeychain"
 )
 
 var (
 	TRNGSize        = 32  // default
 	MaxMasterSeeds  = 100 // default
 	MaserSeedPeriod = int64(3600)
-	chainParams     = &chaincfg.MainNetParams
 )
 
-// BIP-32 subindex range limit (M = 2^31-1), a Mersenne prime
-// randIndex samples uniformly from [0, indexMod)
-const indexMod uint64 = (1 << 31) - 1
-
 type MasterSeed struct {
-	Seed string // hex used for BIP32
-}
-
-func randIndex() (uint32, error) {
-	var buf [4]byte
-	if _, err := rand.Read(buf[:]); err != nil {
-		return 0, fmt.Errorf("crypto/rand failed: %w", err)
-	}
-	// 31-bit value in [0, 2^31-1]
-	return binary.LittleEndian.Uint32(buf[:]) & ((1 << 31) - 1), nil
-}
-
-func mixWithNonceHex(hexVal string, nonce int64) (string, error) {
-	raw, err := hex.DecodeString(hexVal)
-	if err != nil {
-		return "", fmt.Errorf("bad hex to mix: %w", err)
-	}
-	var nb [8]byte
-	binary.LittleEndian.PutUint64(nb[:], uint64(nonce))
-
-	h := sha256.New()
-	_, _ = h.Write(raw)
-	_, _ = h.Write(nb[:])
-	sum := h.Sum(nil)
-
-	// avoid mutating the global TRNGSize
-	outLen := TRNGSize
-	if outLen < 1 || outLen > len(sum) {
-		outLen = len(sum) // 32
-	}
-	return hex.EncodeToString(sum[:outLen]), nil
+	Seed string // hex-encoded 32-byte cTRNG block
 }
 
 func LoadMasterSeedConfig(cfg *masterSeedConfig) {
@@ -63,74 +23,133 @@ func LoadMasterSeedConfig(cfg *masterSeedConfig) {
 	MaserSeedPeriod = cfg.MaserSeedPeriod
 }
 
-// derive single deterministic rng from master seed
-func (m MasterSeed) Derive(index uint32) (string, error) {
-	seedBytes, err := hex.DecodeString(m.Seed)
+// parseTRNGBlock decodes the master seed hex string into a fixed [32]byte block.
+// This block is used directly as ChaCha20Rng::from_seed(seed_block), matching Rust.
+func (m MasterSeed) parseTRNGBlock() ([32]byte, error) {
+	var block [32]byte
+
+	raw, err := hex.DecodeString(m.Seed)
 	if err != nil {
-		return "", fmt.Errorf("failed to decode master seed: %w", err)
+		return block, fmt.Errorf("failed to decode master seed hex: %w", err)
+	}
+	if len(raw) != 32 {
+		return block, fmt.Errorf("master seed length is %d bytes (hex len %d), expected 32 bytes (hex len 64)",
+			len(raw), len(m.Seed))
 	}
 
-	rootKey, err := hdkeychain.NewMaster(seedBytes, chainParams)
-	if err != nil {
-		return "", fmt.Errorf("failed to create root key: %w", err)
-	}
-
-	childKey, err := rootKey.Child(hdkeychain.HardenedKeyStart + index)
-	if err != nil {
-		return "", fmt.Errorf("failed to derive child key: %w", err)
-	}
-
-	// public key bytes serve as deterministic randomess
-	pubKey, err := childKey.ECPubKey()
-	if err != nil {
-		return "", fmt.Errorf("failed to get pubkey: %w", err)
-	}
-
-	// 33-byte compressed format
-	pubBytes := pubKey.SerializeCompressed()
-
-	hash := sha256.Sum256(pubBytes)
-	rndBytes := hash[:TRNGSize]
-
-	return hex.EncodeToString(rndBytes), nil
+	copy(block[:], raw)
+	return block, nil
 }
 
-// derive multiple (n) deterministic rngs from master seed (produces n values by deriving indices randomly)
-// RNG value nonce is generated and incremented to avoid duplicates within batch
-// RNG value nonce is mixed with seed to prevent duplicates across batches
+// DeriveBulk derives n deterministic outputs from a single 32-byte cTRNG block,
+// by treating the block as the ChaCha20Rng seed (no extra hashing/context).
+//
+// This is the direct Go equivalent of:
+//
+//	rng = ChaCha20Rng::from_seed(seed_block)
+//	rng.fill_bytes(&mut output)
+//
+// and it is the mode that should match Rust rand_chacha outputs exactly.
 func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
-	if n <= 0 || uint64(n) >= indexMod {
+	if n <= 0 {
 		return []string{}, nil
 	}
 
+	seedBlock, err := m.parseTRNGBlock()
+	if err != nil {
+		return nil, err
+	}
+
+	rng := FromSeed(seedBlock)
+
+	outLen := TRNGSize
+	if outLen <= 0 || outLen > 1024 {
+		outLen = 32
+	}
+
+	buf := make([]byte, n*outLen)
+	rng.FillBytes(buf)
+
 	results := make([]string, 0, n)
-
-	for len(results) < n {
-		idx, err := randIndex()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get random index: %w", err)
-		}
-
-		baseHex, err := m.Derive(idx) // existing BIP32-based derivation
-		if err != nil {
-			return nil, fmt.Errorf("failed to derive index %d: %w", idx, err)
-		}
-
-		// ensure uniqueness of each individual nonce value within batch scope
-		nonce := time.Now().UnixNano() + int64(len(results))
-
-		// mix in the value-level nonce so that values are unique even if baseHex collides
-		mixedHex, err := mixWithNonceHex(baseHex, nonce)
-		if err != nil {
-			return nil, err
-		}
-
-		results = append(results, mixedHex)
+	for i := 0; i < n; i++ {
+		start := i * outLen
+		end := start + outLen
+		results = append(results, hex.EncodeToString(buf[start:end]))
 	}
 	return results, nil
 }
 
+// DeriveOneFromSeedHex derives one output value from a hex-encoded 32-byte seed block.
+func DeriveOneFromSeedHex(seedHex string) (string, error) {
+	ms := MasterSeed{Seed: seedHex}
+	vals, err := ms.DeriveBulk(1)
+	if err != nil {
+		return "", err
+	}
+	if len(vals) == 0 {
+		return "", fmt.Errorf("no value produced")
+	}
+	return vals[0], nil
+}
+
+// DeriveBulkFromSeedHex derives n output values from a hex-encoded 32-byte seed block.
 func DeriveBulkFromSeedHex(seedHex string, n int) ([]string, error) {
 	ms := MasterSeed{Seed: seedHex}
 	return ms.DeriveBulk(n)
+}
+
+// DeriveBulkWithNonce derives n outputs like DeriveBulk, but makes them unique per call
+// by deriving the ChaCha seed from (seedBlock + nonce + seq).
+// This guarantees that even if the same 32-byte cTRNG block is used repeatedly/concurrently,
+// outputs will differ as long as (nonceNanos, seq) is unique.
+func (m MasterSeed) DeriveBulkWithNonce(n int, nonceNanos int64, seq uint64) ([]string, error) {
+	if n <= 0 {
+		return []string{}, nil
+	}
+
+	seedBlock, err := m.parseTRNGBlock()
+	if err != nil {
+		return nil, err
+	}
+
+	derivedSeed := deriveSeedFromBlockAndNonce(seedBlock, nonceNanos, seq)
+
+	rng := FromSeed(derivedSeed)
+
+	outLen := TRNGSize
+	if outLen <= 0 || outLen > 1024 {
+		outLen = 32
+	}
+
+	buf := make([]byte, n*outLen)
+	rng.FillBytes(buf)
+
+	results := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		start := i * outLen
+		end := start + outLen
+		results = append(results, hex.EncodeToString(buf[start:end]))
+	}
+	return results, nil
+}
+
+// deriveSeedFromBlockAndNonce produces a 32-byte ChaCha seed from:
+// SHA256(seedBlock || BE(nonceNanos) || BE(seq))
+func deriveSeedFromBlockAndNonce(seedBlock [32]byte, nonceNanos int64, seq uint64) [32]byte {
+	h := sha256.New()
+	h.Write(seedBlock[:])
+
+	var nb [8]byte
+	binary.BigEndian.PutUint64(nb[:], uint64(nonceNanos))
+	h.Write(nb[:])
+
+	var sb [8]byte
+	binary.BigEndian.PutUint64(sb[:], seq)
+	h.Write(sb[:])
+
+	sum := h.Sum(nil)
+
+	var out [32]byte
+	copy(out[:], sum[:32])
+	return out
 }
