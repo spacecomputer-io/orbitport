@@ -3,10 +3,11 @@ package masterseed
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
@@ -21,7 +22,6 @@ type Plugin struct {
 	masterSeeds  []MasterSeed
 	mu           sync.RWMutex
 	seedInterval time.Duration
-	deriveSeq    atomic.Uint64
 }
 
 // NewPlugin creates a new masterseed plugin instance.
@@ -39,7 +39,7 @@ func NewPlugin() (*Plugin, error) {
 		aptosConn:    conn,
 		aptosClient:  aptosClient,
 		masterSeeds:  make([]MasterSeed, 0, MaxMasterSeeds),
-		seedInterval: time.Duration(cfg.MaserSeedPeriod),
+		seedInterval: time.Duration(cfg.MaserSeedPeriod) * time.Second,
 	}
 
 	// start background fetch loop
@@ -62,17 +62,25 @@ func (p *Plugin) Close() error {
 
 func (p *Plugin) startSeedFetch(ctx context.Context, defaulMastertSeeds []string) {
 	logger := utils.GetLogger("orbitport:masterseed")
-	logger.Infof("Starting master seed fetcher with interval %d sec", p.seedInterval)
+	logger.Infof("Starting master seed fetcher with interval %d sec", int(p.seedInterval/time.Second))
 
-	logger.Infof("Inserting %d Default Master Seeds...", len(defaulMastertSeeds))
+	bootNonceNanos := time.Now().UnixNano()
+
+	logger.Infof("Inserting %d Default Master Seeds (boot-salted)...", len(defaulMastertSeeds))
 	for _, s := range defaulMastertSeeds {
-		p.addMasterSeed(s)
+		salted, err := saltDefaultSeed(s, bootNonceNanos)
+		if err != nil {
+			logger.Warnf("Failed to salt default seed: %v", err)
+			continue
+		}
+		p.addMasterSeed(salted)
 	}
 
 	logger.Infof("Master seed plugin initialized with %d default master seeds", len(p.masterSeeds))
 
 	go func() {
-		ticker := time.NewTicker(time.Duration(p.seedInterval) * time.Second)
+		ticker := time.NewTicker(p.seedInterval)
+		logger.Infof("Starting master seed fetcher with interval %d sec", int(p.seedInterval/time.Second))
 		defer ticker.Stop()
 		for {
 			select {
@@ -91,17 +99,23 @@ func (p *Plugin) startSeedFetch(ctx context.Context, defaulMastertSeeds []string
 
 				seed := resp.GetValues()[0]
 				p.addMasterSeed(seed)
-				logger.Debugf("Fetched new master seed (%d total)", len(p.masterSeeds))
+				logger.Debugf("Fetched new master seed (%d total)", p.masterSeedCount())
 			}
 		}
 	}()
+}
+
+func (p *Plugin) masterSeedCount() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return len(p.masterSeeds)
 }
 
 func (p *Plugin) addMasterSeed(seed string) {
 	if seed == "" {
 		return
 	}
-	m := MasterSeed{Seed: seed}
+	m := MasterSeed{Seed: seed, Offset: 0}
 
 	if _, err := m.parseTRNGBlock(); err != nil {
 		return
@@ -111,8 +125,34 @@ func (p *Plugin) addMasterSeed(seed string) {
 	defer p.mu.Unlock()
 	p.masterSeeds = append(p.masterSeeds, m)
 	if len(p.masterSeeds) > MaxMasterSeeds {
-		p.masterSeeds = p.masterSeeds[1:]
+		copy(p.masterSeeds[0:], p.masterSeeds[1:])
+		// zero out the last element so old references are dropped
+		p.masterSeeds[len(p.masterSeeds)-1] = MasterSeed{}
+		p.masterSeeds = p.masterSeeds[:len(p.masterSeeds)-1]
 	}
+}
+
+// saltDefaultSeed takes a hex seed block (32 bytes) and produces a new 32-byte seed block:
+// SHA256(seedBlock || BE(bootNonceNanos)).
+// used for default seeds so that each boot instance igests different default seeds.
+func saltDefaultSeed(seedHex string, bootNonceNanos int64) (string, error) {
+	raw, err := hex.DecodeString(seedHex)
+	if err != nil {
+		return "", fmt.Errorf("default seed is not valid hex: %w", err)
+	}
+	if len(raw) != 32 {
+		return "", fmt.Errorf("default seed length is %d bytes; expected 32", len(raw))
+	}
+
+	h := sha256.New()
+	h.Write(raw)
+
+	var nb [8]byte
+	binary.BigEndian.PutUint64(nb[:], uint64(bootNonceNanos))
+	h.Write(nb[:])
+
+	sum := h.Sum(nil) // 32 bytes for SHA-256
+	return hex.EncodeToString(sum[:32]), nil
 }
 
 // cryptoRandIndex returns a uniform random integer in [0, n), using rejection sampling to avoid modulo bias.
@@ -137,25 +177,36 @@ func cryptoRandIndex(n int) (int, error) {
 	}
 }
 
-// crypto/rang ensures uniform distribution during seed selection
-func (p *Plugin) pickMasterSeed() (MasterSeed, error) {
-	p.mu.RLock()
-	count := len(p.masterSeeds)
-	p.mu.RUnlock()
+// reserveSeedOffset reserves a block of bytes from one of the stored master seeds,
+// returning the seed hex and the starting offset for derivation.
+// The caller is responsible for deriving the required number of outputs
+// from the returned seed and offset.
+// This method updates the internal offset cursor for the selected master seed.
+// It uses crypto/rand to select a random master seed to ensure uniform distribution
+// when multiple clients are requesting seeds concurrently.
+func (p *Plugin) reserveSeedOffset(count int) (seedHex string, startOffset uint64, err error) {
+	outLen := TRNGSize
+	if outLen <= 0 || outLen > 1024 {
+		outLen = 32
+	}
+	need := uint64(count) * uint64(outLen)
 
-	if count == 0 {
-		return MasterSeed{}, fmt.Errorf("no master seed available")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if len(p.masterSeeds) == 0 {
+		return "", 0, fmt.Errorf("no master seed available")
 	}
 
-	idx, err := cryptoRandIndex(count)
+	idx, err := cryptoRandIndex(len(p.masterSeeds))
 	if err != nil {
-		return MasterSeed{}, fmt.Errorf("failed to generate secure random index: %w", err)
+		return "", 0, err
 	}
 
-	p.mu.RLock()
-	m := p.masterSeeds[idx]
-	p.mu.RUnlock()
-	return m, nil
+	start := p.masterSeeds[idx].Offset
+	p.masterSeeds[idx].Offset += need
+
+	return p.masterSeeds[idx].Seed, start, nil
 }
 
 // GetSeeds implements the MasterSeedPlugin gRPC service.
@@ -167,27 +218,19 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 		count = 1
 	}
 
-	// Context required for Mode A domain separation
-	logger.Debugf("Deriving %d seeds from stored master seeds", count)
-
-	master, err := p.pickMasterSeed()
+	seedHex, startOff, err := p.reserveSeedOffset(count)
 	if err != nil {
-		logger.Errorf("pickMasterSeed failed: %v", err)
+		logger.Errorf("reserveSeedOffset failed: %v", err)
 		return nil, err
 	}
-	logger.Debugf("Using master seed: %.4s...", master.Seed)
+	logger.Debugf("Using master seed: %.4s... offset=%d", seedHex, startOff)
+	logger.Debugf("Deriving %d seeds from stored master seeds", count)
 
-	// Uniqueness inputs
-	nonceNanos := time.Now().UnixNano()
-	seq := p.deriveSeq.Add(1)
-
-	derived, err := master.DeriveBulkWithNonce(count, nonceNanos, seq)
+	ms := MasterSeed{Seed: seedHex} // Offset field unused here
+	derived, err := ms.DeriveBulkAtOffset(count, startOff)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive seeds: %w", err)
 	}
 
-	logger.Debugf("Returning %d derived seeds (derived from stored CTRNG seeds)", len(derived))
-	return &proto.GetSeedsResponse{
-		Values: derived,
-	}, nil
+	return &proto.GetSeedsResponse{Values: derived}, nil
 }

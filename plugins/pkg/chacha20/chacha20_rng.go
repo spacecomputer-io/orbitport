@@ -17,7 +17,7 @@ Implementation includes:
 - Block generation with ChaCha20 block function
 */
 
-package masterseed
+package chacha20
 
 import "encoding/binary"
 
@@ -27,9 +27,10 @@ type ChaCha20Rng struct {
 	bufPos int
 }
 
-func NewChaCha20Rng(seed [32]byte) *ChaCha20Rng {
+func New(seed [32]byte) *ChaCha20Rng {
 	var r ChaCha20Rng
 
+	// "expand 32-byte k"
 	r.state[0] = 0x61707865
 	r.state[1] = 0x3320646e
 	r.state[2] = 0x79622d32
@@ -147,6 +148,51 @@ func rotl32(v uint32, n uint) uint32 {
 	return (v << n) | (v >> (32 - n))
 }
 
-func FromSeed(seed [32]byte) *ChaCha20Rng {
-	return NewChaCha20Rng(seed)
+// Counter returns the current 64-bit block counter (little-endian word order in state).
+func (r *ChaCha20Rng) Counter() uint64 {
+	return (uint64(r.state[13]) << 32) | uint64(r.state[12])
+}
+
+// SetCounter sets the 64-bit block counter. This is the key primitive for fast skipping.
+// It also invalidates the current buffer so the next refill produces bytes from the new counter.
+func (r *ChaCha20Rng) SetCounter(counter uint64) {
+	r.state[12] = uint32(counter)
+	r.state[13] = uint32(counter >> 32)
+	r.bufPos = len(r.buf) // force refill from new position
+}
+
+// DiscardBytesFast skips `n` bytes in the keystream efficiently:
+// - If there are buffered bytes remaining, consumes them first.
+// - Then jumps full 64-byte blocks by adjusting the 64-bit counter.
+// - Then consumes the remainder by generating one block and moving bufPos.
+func (r *ChaCha20Rng) DiscardBytesFast(n uint64) {
+	if n == 0 {
+		return
+	}
+
+	// 1) consume from current buffer if partially used
+	if r.bufPos < len(r.buf) {
+		avail := uint64(len(r.buf) - r.bufPos)
+		if n < avail {
+			r.bufPos += int(n)
+			return
+		}
+		// consume remaining buffered bytes
+		r.bufPos = len(r.buf)
+		n -= avail
+	}
+
+	// 2) now block-aligned (next refill starts at a block boundary)
+	blocks := n / 64
+	rem := n % 64
+
+	if blocks > 0 {
+		r.SetCounter(r.Counter() + blocks)
+	}
+
+	// 3) consume remainder bytes within a block
+	if rem > 0 {
+		r.refillBlock()
+		r.bufPos = int(rem) // consume rem bytes from the start
+	}
 }

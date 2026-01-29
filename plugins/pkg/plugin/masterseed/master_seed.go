@@ -1,10 +1,10 @@
 package masterseed
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/chacha20"
 )
 
 var (
@@ -14,7 +14,8 @@ var (
 )
 
 type MasterSeed struct {
-	Seed string // hex-encoded 32-byte cTRNG block
+	Seed   string // hex-encoded 32-byte cTRNG block
+	Offset uint64 // current byte offset in the ChaCha keystream
 }
 
 func LoadMasterSeedConfig(cfg *masterSeedConfig) {
@@ -41,16 +42,10 @@ func (m MasterSeed) parseTRNGBlock() ([32]byte, error) {
 	return block, nil
 }
 
-// DeriveBulk derives n deterministic outputs from a single 32-byte cTRNG block,
-// by treating the block as the ChaCha20Rng seed (no extra hashing/context).
-//
-// This is the direct Go equivalent of:
-//
-//	rng = ChaCha20Rng::from_seed(seed_block)
-//	rng.fill_bytes(&mut output)
-//
-// and it is the mode that should match Rust rand_chacha outputs exactly.
-func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
+// DeriveBulkAtOffset derives n outputs from this seed, starting at a specific byte offset
+// in the ChaCha keystream (offset=0 means the very beginning).
+// This is the primitive used with a per-seed cursor: plugin decides the offset, from which bytes are producted.
+func (m MasterSeed) DeriveBulkAtOffset(n int, offsetBytes uint64) ([]string, error) {
 	if n <= 0 {
 		return []string{}, nil
 	}
@@ -60,14 +55,17 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 		return nil, err
 	}
 
-	rng := FromSeed(seedBlock)
-
 	outLen := TRNGSize
 	if outLen <= 0 || outLen > 1024 {
 		outLen = 32
 	}
 
-	buf := make([]byte, n*outLen)
+	need := uint64(n) * uint64(outLen)
+
+	rng := chacha20.New(seedBlock)
+	rng.DiscardBytesFast(offsetBytes)
+
+	buf := make([]byte, int(need))
 	rng.FillBytes(buf)
 
 	results := make([]string, 0, n)
@@ -77,6 +75,12 @@ func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
 		results = append(results, hex.EncodeToString(buf[start:end]))
 	}
 	return results, nil
+}
+
+// DeriveBulk keeps the original deterministic behavior starting from offset 0.
+// Useful for tests and for matching Rust exactly when uniqueness/cursor behavior is not required.
+func (m MasterSeed) DeriveBulk(n int) ([]string, error) {
+	return m.DeriveBulkAtOffset(n, 0)
 }
 
 // DeriveOneFromSeedHex derives one output value from a hex-encoded 32-byte seed block.
@@ -96,60 +100,4 @@ func DeriveOneFromSeedHex(seedHex string) (string, error) {
 func DeriveBulkFromSeedHex(seedHex string, n int) ([]string, error) {
 	ms := MasterSeed{Seed: seedHex}
 	return ms.DeriveBulk(n)
-}
-
-// DeriveBulkWithNonce derives n outputs like DeriveBulk, but makes them unique per call
-// by deriving the ChaCha seed from (seedBlock + nonce + seq).
-// This guarantees that even if the same 32-byte cTRNG block is used repeatedly/concurrently,
-// outputs will differ as long as (nonceNanos, seq) is unique.
-func (m MasterSeed) DeriveBulkWithNonce(n int, nonceNanos int64, seq uint64) ([]string, error) {
-	if n <= 0 {
-		return []string{}, nil
-	}
-
-	seedBlock, err := m.parseTRNGBlock()
-	if err != nil {
-		return nil, err
-	}
-
-	derivedSeed := deriveSeedFromBlockAndNonce(seedBlock, nonceNanos, seq)
-
-	rng := FromSeed(derivedSeed)
-
-	outLen := TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
-
-	buf := make([]byte, n*outLen)
-	rng.FillBytes(buf)
-
-	results := make([]string, 0, n)
-	for i := 0; i < n; i++ {
-		start := i * outLen
-		end := start + outLen
-		results = append(results, hex.EncodeToString(buf[start:end]))
-	}
-	return results, nil
-}
-
-// deriveSeedFromBlockAndNonce produces a 32-byte ChaCha seed from:
-// SHA256(seedBlock || BE(nonceNanos) || BE(seq))
-func deriveSeedFromBlockAndNonce(seedBlock [32]byte, nonceNanos int64, seq uint64) [32]byte {
-	h := sha256.New()
-	h.Write(seedBlock[:])
-
-	var nb [8]byte
-	binary.BigEndian.PutUint64(nb[:], uint64(nonceNanos))
-	h.Write(nb[:])
-
-	var sb [8]byte
-	binary.BigEndian.PutUint64(sb[:], seq)
-	h.Write(sb[:])
-
-	sum := h.Sum(nil)
-
-	var out [32]byte
-	copy(out[:], sum[:32])
-	return out
 }

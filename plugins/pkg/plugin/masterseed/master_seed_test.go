@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -85,49 +84,64 @@ func TestMasterSeed_DeriveBulk(t *testing.T) {
 	})
 }
 
-func TestMasterSeed_DeriveBulkWithNonce(t *testing.T) {
+func TestMasterSeed_DeriveBulkAtOffset(t *testing.T) {
 	m := MasterSeed{Seed: fixedSeed32Hex()}
 
-	t.Run("same nonce+seq yields deterministic results", func(t *testing.T) {
-		nonce := int64(123456789)
-		seq := uint64(42)
+	outLen := TRNGSize
+	if outLen <= 0 || outLen > 1024 {
+		outLen = 32
+	}
 
-		vals1, err1 := m.DeriveBulkWithNonce(10, nonce, seq)
-		vals2, err2 := m.DeriveBulkWithNonce(10, nonce, seq)
+	t.Run("same offset yields deterministic results", func(t *testing.T) {
+		const n = 10
+		const off = uint64(0)
+
+		vals1, err1 := m.DeriveBulkAtOffset(n, off)
+		vals2, err2 := m.DeriveBulkAtOffset(n, off)
 		require.NoError(t, err1)
 		require.NoError(t, err2)
 		require.Equal(t, vals1, vals2)
 	})
 
-	t.Run("different seq changes results (even with same nonce)", func(t *testing.T) {
-		nonce := int64(123456789)
+	t.Run("different offsets change results", func(t *testing.T) {
+		const n = 10
 
-		vals1, err1 := m.DeriveBulkWithNonce(10, nonce, 1)
-		vals2, err2 := m.DeriveBulkWithNonce(10, nonce, 2)
+		vals0, err0 := m.DeriveBulkAtOffset(n, 0)
+		require.NoError(t, err0)
+
+		// shift by 1 byte (valid; stream is byte-addressable)
+		vals1, err1 := m.DeriveBulkAtOffset(n, 1)
 		require.NoError(t, err1)
-		require.NoError(t, err2)
-		require.NotEqual(t, vals1, vals2)
+
+		require.NotEqual(t, vals0, vals1)
 	})
 
-	t.Run("different nonce changes results (even with same seq)", func(t *testing.T) {
-		seq := uint64(99)
+	t.Run("offset chaining does not repeat the first output", func(t *testing.T) {
+		// Derive 5 outputs at offset 0, then derive 5 more starting immediately after.
+		const n = 5
+		startOff := uint64(0)
 
-		vals1, err1 := m.DeriveBulkWithNonce(10, 111, seq)
-		vals2, err2 := m.DeriveBulkWithNonce(10, 222, seq)
-		require.NoError(t, err1)
-		require.NoError(t, err2)
-		require.NotEqual(t, vals1, vals2)
-	})
-
-	t.Run("nonce mode still unique within a batch", func(t *testing.T) {
-		vals, err := m.DeriveBulkWithNonce(200, time.Now().UnixNano(), 7)
+		first, err := m.DeriveBulkAtOffset(n, startOff)
 		require.NoError(t, err)
+		require.Len(t, first, n)
 
+		// Advance offset by exactly the bytes served.
+		needBytes := uint64(n * outLen)
+		second, err := m.DeriveBulkAtOffset(n, startOff+needBytes)
+		require.NoError(t, err)
+		require.Len(t, second, n)
+
+		// At minimum, the first element should differ.
+		require.NotEqual(t, first[0], second[0])
+
+		// Stronger: no overlap between the two batches (should hold).
 		seen := map[string]struct{}{}
-		for _, v := range vals {
-			_, dup := seen[v]
-			require.False(t, dup, "duplicate value in batch")
+		for _, v := range first {
 			seen[v] = struct{}{}
+		}
+		for _, v := range second {
+			_, dup := seen[v]
+			require.False(t, dup, "unexpected overlap between batches derived from adjacent offsets")
 		}
 	})
 }

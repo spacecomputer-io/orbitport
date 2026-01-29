@@ -4,22 +4,21 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 type goldenVector struct {
-	Name           string   `json:"name"`
-	Mode           string   `json:"mode"`
-	ExecutionIDHex *string  `json:"execution_id_hex"`
-	PartyID        *uint16  `json:"party_id"`
-	Counter        *uint64  `json:"counter"`
-	TrngBlockHex   string   `json:"trng_block_hex"`
-	SeedHex        string   `json:"seed_hex"`
-	TrngSize       int      `json:"trng_size"`
-	Count          int      `json:"count"`
-	OutputsHex     []string `json:"outputs_hex"`
+	Name         string   `json:"name"`
+	Mode         string   `json:"mode"`
+	TrngBlockHex string   `json:"trng_block_hex"`
+	SeedHex      string   `json:"seed_hex"`
+	OffsetBytes  uint64   `json:"offset_bytes"`
+	TrngSize     int      `json:"trng_size"`
+	Count        int      `json:"count"`
+	OutputsHex   []string `json:"outputs_hex"`
 }
 
 func loadGoldenVectors(t *testing.T) []goldenVector {
@@ -30,9 +29,11 @@ func loadGoldenVectors(t *testing.T) []goldenVector {
 		"golden_vectors.json",
 	}
 
-	var data []byte
-	var err error
-	var used string
+	var (
+		data []byte
+		err  error
+		used string
+	)
 
 	for _, p := range candidates {
 		data, err = os.ReadFile(p)
@@ -55,7 +56,7 @@ func findVectorByPrefix(t *testing.T, vecs []goldenVector, prefix string) golden
 	t.Helper()
 
 	for _, v := range vecs {
-		if len(v.Name) >= len(prefix) && v.Name[:len(prefix)] == prefix {
+		if strings.HasPrefix(v.Name, prefix) {
 			return v
 		}
 	}
@@ -63,40 +64,40 @@ func findVectorByPrefix(t *testing.T, vecs []goldenVector, prefix string) golden
 	return goldenVector{}
 }
 
-func TestGoldenVector_D_DirectBlockSeed(t *testing.T) {
+func TestGoldenVector_D_DirectBlockSeed_Offset0(t *testing.T) {
 	vecs := loadGoldenVectors(t)
 	v := findVectorByPrefix(t, vecs, "D_")
 
 	require.Equal(t, 32, v.TrngSize, "this test assumes 32-byte outputs")
+	require.Equal(t, uint64(0), v.OffsetBytes, "vector D should be offset 0")
 	require.Greater(t, v.Count, 0)
 	require.Len(t, v.OutputsHex, v.Count)
 
-	// Ensure runtime config matches the vector expectations.
+	// Ensure runtime config matches vector expectations.
 	TRNGSize = v.TrngSize
 
-	got, err := DeriveBulkFromSeedHex(v.TrngBlockHex, v.Count)
+	ms := MasterSeed{Seed: v.TrngBlockHex}
+	got, err := ms.DeriveBulkAtOffset(v.Count, v.OffsetBytes)
 	require.NoError(t, err)
-	require.Equal(t, v.OutputsHex, got, "vector %q mismatch (mode=%q)", v.Name, v.Mode)
+
+	require.Equal(t, v.OutputsHex, got, "vector %q mismatch (mode=%q, offset=%d)", v.Name, v.Mode, v.OffsetBytes)
 }
 
-func TestGoldenVector_E_BlockNonceSeqSha256(t *testing.T) {
+func TestGoldenVector_E_OffsetBasedStream(t *testing.T) {
 	vecs := loadGoldenVectors(t)
 	v := findVectorByPrefix(t, vecs, "E_")
 
 	require.Equal(t, 32, v.TrngSize, "this test assumes 32-byte outputs")
+	require.Greater(t, v.OffsetBytes, uint64(0), "vector E should have a non-zero offset")
 	require.Greater(t, v.Count, 0)
 	require.Len(t, v.OutputsHex, v.Count)
 
-	// Ensure runtime config matches the vector expectations.
+	// Ensure runtime config matches vector expectations.
 	TRNGSize = v.TrngSize
 
-	// These MUST match the constants in your Rust generator.
-	const nonceNanos int64 = 1700000000000000000
-	const seq uint64 = 7
-
 	ms := MasterSeed{Seed: v.TrngBlockHex}
-	got, err := ms.DeriveBulkWithNonce(v.Count, nonceNanos, seq)
+	got, err := ms.DeriveBulkAtOffset(v.Count, v.OffsetBytes)
 	require.NoError(t, err)
 
-	require.Equal(t, v.OutputsHex, got, "vector %q mismatch (mode=%q)", v.Name, v.Mode)
+	require.Equal(t, v.OutputsHex, got, "vector %q mismatch (mode=%q, offset=%d)", v.Name, v.Mode, v.OffsetBytes)
 }
