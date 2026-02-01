@@ -7,13 +7,11 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/chacha20"
 )
 
-const defaultMaxCountPerRequest = 25000
-
 var (
 	TRNGSize           = 32  // default
 	MaxMasterSeeds     = 100 // default
 	MaserSeedPeriod    = int64(3600)
-	MaxCountPerRequest = defaultMaxCountPerRequest
+	MaxCountPerRequest = 25000
 )
 
 type MasterSeed struct {
@@ -25,7 +23,7 @@ func LoadMasterSeedConfig(cfg *masterSeedConfig) {
 	TRNGSize = cfg.MasterSeedTRNGSize
 	MaxMasterSeeds = cfg.MasterSeedMaxMasterSeeds
 	MaserSeedPeriod = cfg.MaserSeedPeriod
-	if cfg.MasterSeedMaxCountPerRequest > 0 && cfg.MasterSeedMaxCountPerRequest <= defaultMaxCountPerRequest {
+	if cfg.MasterSeedMaxCountPerRequest > 0 && cfg.MasterSeedMaxCountPerRequest <= MaxCountPerRequest {
 		MaxCountPerRequest = cfg.MasterSeedMaxCountPerRequest
 	}
 }

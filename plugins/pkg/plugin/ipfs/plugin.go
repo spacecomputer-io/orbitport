@@ -194,22 +194,7 @@ func (pi *Plugin) Get(ctx context.Context, req *pluginsproto.GetRequest) (*plugi
 					name, normalized, err.Error(), err,
 				)
 
-				// Walk the unwrap chain (useful when the real HTTP error is wrapped)
-				unwrapped := err
-				for depth := 0; depth < 10; depth++ {
-					next := errors.Unwrap(unwrapped)
-					if next == nil {
-						break
-					}
-					logger.Warnf("  unwrap[%d]: type=%T err=%s", depth, next, next.Error())
-					unwrapped = next
-				}
-
-				// If the error implements extra methods - prints without importing internal types.
-				type hasStatus interface{ StatusCode() int }
-				if se, ok := err.(hasStatus); ok {
-					logger.Warnf("  statusCode=%d", se.StatusCode())
-				}
+				logErrorChain(logger, err)
 
 				return nil, err
 			}
@@ -471,4 +456,30 @@ func (pi *Plugin) KeyInfo(ctx context.Context, req *pluginsproto.KeyInfoRequest)
 	// ipnsName is "/ipns/<peerID>"
 	ipnsName := key.Path().String()
 	return &pluginsproto.KeyInfoResponse{IpnsName: ipnsName}, nil
+}
+
+// logErrorChain prints useful diagnostics for wrapped errors (HTTP status, unwrap chain).
+func logErrorChain(logger interface {
+	Warnf(format string, args ...any)
+}, err error) {
+	if err == nil {
+		return
+	}
+
+	// Walk unwrap chain (prints wrapped HTTP/root-cause errors).
+	unwrapped := err
+	for depth := 0; depth < 10; depth++ {
+		next := errors.Unwrap(unwrapped)
+		if next == nil {
+			break
+		}
+		logger.Warnf("  unwrap[%d]: type=%T err=%s", depth, next, next.Error())
+		unwrapped = next
+	}
+
+	// If the error exposes a status code, print it (no internal imports).
+	type hasStatus interface{ StatusCode() int }
+	if se, ok := err.(hasStatus); ok {
+		logger.Warnf("  statusCode=%d", se.StatusCode())
+	}
 }
