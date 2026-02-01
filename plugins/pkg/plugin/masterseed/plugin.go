@@ -185,11 +185,25 @@ func cryptoRandIndex(n int) (int, error) {
 // It uses crypto/rand to select a random master seed to ensure uniform distribution
 // when multiple clients are requesting seeds concurrently.
 func (p *Plugin) reserveSeedOffset(count int) (seedHex string, startOffset uint64, err error) {
+	logger := utils.GetLogger("orbitport:masterseed:reserve")
+
 	outLen := TRNGSize
 	if outLen <= 0 || outLen > 1024 {
 		outLen = 32
 	}
-	need := uint64(count) * uint64(outLen)
+	if count <= 0 {
+		return "", 0, fmt.Errorf("invalid count=%d", count)
+	}
+
+	// Hard cap to prevent runaway CPU/memory and gRPC response explosions.
+	if count > MaxCountPerRequest {
+		return "", 0, fmt.Errorf("count too large: %d (max %d)", count, MaxCountPerRequest)
+	}
+
+	need, ok := mulUint64Checked(uint64(count), uint64(outLen))
+	if !ok {
+		return "", 0, fmt.Errorf("byte requirement overflow: count=%d outLen=%d", count, outLen)
+	}
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -203,10 +217,21 @@ func (p *Plugin) reserveSeedOffset(count int) (seedHex string, startOffset uint6
 		return "", 0, err
 	}
 
+	seedHex = p.masterSeeds[idx].Seed
 	start := p.masterSeeds[idx].Offset
-	p.masterSeeds[idx].Offset += need
+	end, ok := addUint64Checked(start, need)
+	if !ok {
+		return "", 0, fmt.Errorf("seed offset overflow: start=%d need=%d", start, need)
+	}
 
-	return p.masterSeeds[idx].Seed, start, nil
+	p.masterSeeds[idx].Offset = end
+
+	logger.Debugf(
+		"Reserved seed %.4s... idx=%d range=[%d,%d) need=%d bytes (count=%d outLen=%d)",
+		seedHex, idx, start, end, need, count, outLen,
+	)
+
+	return seedHex, start, nil
 }
 
 // GetSeeds implements the MasterSeedPlugin gRPC service.
@@ -233,4 +258,24 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 	}
 
 	return &proto.GetSeedsResponse{Values: derived}, nil
+}
+
+// helpers that check for uint64 multiplication overflow and addition overflow.
+const maxUint64 = ^uint64(0)
+
+func mulUint64Checked(a, b uint64) (uint64, bool) {
+	if a == 0 || b == 0 {
+		return 0, true
+	}
+	if a > maxUint64/b {
+		return 0, false
+	}
+	return a * b, true
+}
+
+func addUint64Checked(a, b uint64) (uint64, bool) {
+	if a > maxUint64-b {
+		return 0, false
+	}
+	return a + b, true
 }

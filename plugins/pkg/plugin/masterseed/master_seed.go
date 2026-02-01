@@ -7,10 +7,13 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/chacha20"
 )
 
+const defaultMaxCountPerRequest = 25000
+
 var (
-	TRNGSize        = 32  // default
-	MaxMasterSeeds  = 100 // default
-	MaserSeedPeriod = int64(3600)
+	TRNGSize           = 32  // default
+	MaxMasterSeeds     = 100 // default
+	MaserSeedPeriod    = int64(3600)
+	MaxCountPerRequest = defaultMaxCountPerRequest
 )
 
 type MasterSeed struct {
@@ -22,6 +25,9 @@ func LoadMasterSeedConfig(cfg *masterSeedConfig) {
 	TRNGSize = cfg.MasterSeedTRNGSize
 	MaxMasterSeeds = cfg.MasterSeedMaxMasterSeeds
 	MaserSeedPeriod = cfg.MaserSeedPeriod
+	if cfg.MasterSeedMaxCountPerRequest > 0 && cfg.MasterSeedMaxCountPerRequest <= defaultMaxCountPerRequest {
+		MaxCountPerRequest = cfg.MasterSeedMaxCountPerRequest
+	}
 }
 
 // parseTRNGBlock decodes the master seed hex string into a fixed [32]byte block.
@@ -50,17 +56,30 @@ func (m MasterSeed) DeriveBulkAtOffset(n int, offsetBytes uint64) ([]string, err
 		return []string{}, nil
 	}
 
-	seedBlock, err := m.parseTRNGBlock()
-	if err != nil {
-		return nil, err
-	}
-
 	outLen := TRNGSize
 	if outLen <= 0 || outLen > 1024 {
 		outLen = 32
 	}
 
-	need := uint64(n) * uint64(outLen)
+	if n > MaxCountPerRequest {
+		return nil, fmt.Errorf("n too large: %d (max %d)", n, MaxCountPerRequest)
+	}
+
+	need, ok := mulUint64Checked(uint64(n), uint64(outLen))
+	if !ok {
+		return nil, fmt.Errorf("byte requirement overflow: n=%d outLen=%d", n, outLen)
+	}
+
+	// make([]byte, int(need)) must fit into int on this architecture
+	maxInt := int(^uint(0) >> 1)
+	if need > uint64(maxInt) {
+		return nil, fmt.Errorf("request too large: need=%d bytes exceeds max int=%d", need, maxInt)
+	}
+
+	seedBlock, err := m.parseTRNGBlock()
+	if err != nil {
+		return nil, err
+	}
 
 	rng := chacha20.New(seedBlock)
 	rng.DiscardBytesFast(offsetBytes)
