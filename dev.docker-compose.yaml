@@ -155,6 +155,6 @@ services:
       - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
       - ORBITPORT_BEACON_UPDATE_INTERVAL=10
-      - ORBITPORT_DEFAULT_BEACON_NAME=randomness-beacon-dev1.1
+      - ORBITPORT_DEFAULT_BEACON_NAME=randomness-beacon-dev1.0
       - ORBITPORT_BEACON_REGISTRY=orbitport-dev-registry
       - ORBITPORT_REGISTRY_RETRIEVAL_TIMEOUT=90
