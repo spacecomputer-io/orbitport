@@ -11,7 +11,7 @@ var (
 	TRNGSize           = 32  // default
 	MaxMasterSeeds     = 100 // default
 	MaserSeedPeriod    = int64(3600)
-	MaxCountPerRequest = 25000
+	MaxCountPerRequest = 1000
 )
 
 type MasterSeed struct {
@@ -23,7 +23,7 @@ func LoadMasterSeedConfig(cfg *masterSeedConfig) {
 	TRNGSize = cfg.MasterSeedTRNGSize
 	MaxMasterSeeds = cfg.MasterSeedMaxMasterSeeds
 	MaserSeedPeriod = cfg.MaserSeedPeriod
-	if cfg.MasterSeedMaxCountPerRequest > 0 && cfg.MasterSeedMaxCountPerRequest <= MaxCountPerRequest {
+	if cfg.MasterSeedMaxCountPerRequest > 0 {
 		MaxCountPerRequest = cfg.MasterSeedMaxCountPerRequest
 	}
 }
