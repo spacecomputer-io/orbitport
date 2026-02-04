@@ -108,7 +108,7 @@ async fn run_test(
 
         let access_token = access_token.clone();
         let base_url = base_url.clone();
-        
+
         // clone global counters to pass into async block
         let sent_clone = sent.clone();
         let received_clone = received.clone();
