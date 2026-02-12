@@ -18,8 +18,9 @@ pub mod proto {
 pub mod types;
 
 pub mod logging;
-
 pub mod metrics;
+pub mod health;
+
 pub mod server;
 pub mod service_manager;
 pub mod structures;
