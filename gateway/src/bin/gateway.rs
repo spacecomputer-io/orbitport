@@ -9,8 +9,6 @@ struct Args {
     http_port: u16,
     #[clap(long, env = "ORBITPORT_METRICS_PORT", default_value = "9100")]
     metric_port: u16,
-    #[clap(long, env = "ORBITPORT_HEALTH_PORT", default_value = "8081")]
-    health_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
     auth_plugin: String,
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
@@ -55,11 +53,6 @@ async fn main() -> Result<(), GatewayError> {
     )
     .await
     .unwrap();
-
-    let health_port = args.health_port;
-    tokio::spawn(async move {
-        gateway::health::start_health_check_server(health_port).await;
-    });
 
     let metrics_port = args.metric_port;
     tokio::spawn(async move {

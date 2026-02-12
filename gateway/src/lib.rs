@@ -17,7 +17,6 @@ pub mod proto {
 
 pub mod types;
 
-pub mod health;
 pub mod logging;
 pub mod metrics;
 
