@@ -53,7 +53,7 @@ jobs:
 
       - name: Restart devenv (offline)
         run: |
-          make ENV_FILE=.dev.env.ci E2E_PROFILE=offline devenv-up
+          make ENV_FILE=.dev.env.ci E2E_PROFILE=offline devenv
 
       - name: Go beacon e2e (offline)
         run: |
