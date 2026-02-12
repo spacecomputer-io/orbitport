@@ -141,6 +141,12 @@ services:
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
     ports:
       - 8080:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
 
   plugin-beacon:
     <<: *plugin-base

@@ -31,9 +31,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Build docker images
+        run: |
+          make docker-build
+
       - name: Start devenv
         run: |
-          make ENV_FILE=.dev.env.ci devenv-up
+          make ENV_FILE=.dev.env.ci devenv
         continue-on-error: false
 
       - name: Run e2e tests
@@ -49,7 +53,7 @@ jobs:
 
       - name: Restart devenv (offline)
         run: |
-          make ENV_FILE=.dev.env.ci E2E_PROFILE=offline devenv-up
+          make ENV_FILE=.dev.env.ci E2E_PROFILE=offline devenv
 
       - name: Go beacon e2e (offline)
         run: |
