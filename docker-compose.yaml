@@ -93,7 +93,13 @@ services:
       - plugin-auth
     ports:
       - 8080:8080
-
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+      
   plugin-beacon:
     <<: *plugin-base
     container_name: plugin-beacon
