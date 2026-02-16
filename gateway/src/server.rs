@@ -217,9 +217,15 @@ pub async fn start(
         .and(warp::any().map(move || bulk_max_post))
         .and_then(handle_post);
 
-    //
+    let health_route = warp::path("healthz").map(|| {
+        warp::reply::json(&serde_json::json!({
+            "status": "ok"
+        }))
+    });
 
-    let routes = get_route.or(post_route);
+    let routes = get_route
+        .or(post_route)
+        .or(health_route.with(warp::log("health_check")));
 
     tracing::info!("Starting http server on: 0.0.0.0:{}", http_port);
 
