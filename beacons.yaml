@@ -1,0 +1,5 @@
+active: randomness-beacon1.0 
+beacons:
+  - name: randomness-beacon1.0
+    addr: /ipns/k2k4r8lvomw737sajfnpav0dpeernugnryng50uheyk1k39lursmn09f
+    interval: 5m
