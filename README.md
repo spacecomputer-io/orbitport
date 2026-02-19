@@ -18,3 +18,4 @@ Orbitport is designed to be easy to use and integrate with multiple types of web
 * [SpaceCopmuter docs](https://docs.spacecomputer.io)
 * [Orbitport user guide](https://docs.spacecomputer.io/using-orbitport/user-guide)
 * [Orbitport dev/internal docs](docs/README.md)
+* [Public beacons list](beacons.yaml)
