@@ -1,5 +1,7 @@
 # SpaceComputer | Orbitport 
 
+![spacecomputer logo](https://raw.githubusercontent.com/spacecomputer-io/media-kit/refs/heads/main/SpaceComputer/logo/SpaceComputer_banner.png)
+
 ![Plugins](https://github.com/spacecomputer-io/orbitport/actions/workflows/plugins.yml/badge.svg?branch=main)
 ![Gateway](https://github.com/spacecomputer-io/orbitport/actions/workflows/gateway.yml/badge.svg?branch=main)
 ![E2E](https://github.com/spacecomputer-io/orbitport/actions/workflows/e2e.yml/badge.svg?branch=main)
