@@ -28,10 +28,17 @@ func NewPlugin() (*Plugin, error) {
 	logger := utils.GetLogger("orbitport:auth")
 	logger.Infof("creating plugin with config: %+v", cfg)
 
-	if len(cfg.Auth0Domain) == 0 || len(cfg.Auth0Audience) == 0 {
-		logger.Warn("Auth0 domain is not set, authentication is OFF")
+    // explicit development bypass
+	if cfg.DisableAuth {
+		logger.Warn("CRITICAL: Authentication is explicitly DISABLED via ORBITPORT_DEV_DISABLE_AUTH. Do not use in production!")
 		return new(Plugin), nil
+	}	
+
+    // strict fail-closed validation
+	if len(cfg.Auth0Domain) == 0 || len(cfg.Auth0Audience) == 0 {
+		return nil, fmt.Errorf("FATAL: Auth0Domain or Auth0Audience is missing. Refusing to start insecurely. Set ORBITPORT_DEV_DISABLE_AUTH=true to bypass locally")
 	}
+
 	logger.Debug("Auth0 domain is set, creating Auth plugin")
 	plugin, err := newAuthPlugin(cfg.Auth0Domain, cfg.Auth0Audience)
 	if err != nil {
@@ -73,7 +80,8 @@ func newAuthPlugin(auth0Domain, auth0Audience string) (*Plugin, error) {
 func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
 	logger := utils.GetLogger("orbitport:auth")
 	if p.jwtValidator == nil {
-		logger.Debug("Auth0 domain is not set, authentication is OFF")
+		// log a warn on every request to make it obvious if this sneaks into prod
+		logger.Warn("Processing request with AUTHENTICATION DISABLED")
 		return &proto.TokenValidationResponse{
 			Ok: true,
 		}, nil
