@@ -7,9 +7,9 @@ on:
       - '**/Cargo.lock'
   pull_request:
     branches: [ "*" ]
-    paths:
-      - '**/Cargo.toml'
-      - '**/Cargo.lock'
+    # paths:
+    #   - '**/Cargo.toml'
+    #   - '**/Cargo.lock'
   schedule:
     # Run daily at midnight to catch newly disclosed vulnerabilities
     - cron: '0 0 * * *'

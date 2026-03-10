@@ -7,9 +7,9 @@ on:
       - '**/go.sum'
   pull_request:
     branches: [ "*" ]
-    paths:
-      - '**/go.mod'
-      - '**/go.sum'
+    # paths:
+    #   - '**/go.mod'
+    #   - '**/go.sum'
   schedule:
     # Run daily at midnight to catch newly disclosed vulnerabilities
     - cron: '0 0 * * *'
