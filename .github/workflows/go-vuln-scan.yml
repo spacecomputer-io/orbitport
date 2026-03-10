@@ -6,6 +6,7 @@ on:
       - '**/go.mod'
       - '**/go.sum'
   pull_request:
+    branches: [ "*" ]
     paths:
       - '**/go.mod'
       - '**/go.sum'
