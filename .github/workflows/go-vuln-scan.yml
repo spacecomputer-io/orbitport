@@ -2,17 +2,14 @@ name: Go Vulnerability Scan
 
 on:
   push:
+    branches: [ "main" ]
+  pull_request:
     paths:
       - '**/go.mod'
       - '**/go.sum'
-  pull_request:
-    branches: [ "*" ]
-    # paths:
-    #   - '**/go.mod'
-    #   - '**/go.sum'
-  schedule:
-    # Run daily at midnight to catch newly disclosed vulnerabilities
-    - cron: '0 0 * * *'
+  # schedule:
+  #   # Run daily at midnight to catch newly disclosed vulnerabilities
+  #   - cron: '0 0 * * *'
 
 jobs:
   govulncheck:

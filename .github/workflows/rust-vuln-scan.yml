@@ -2,17 +2,14 @@ name: Rust Vulnerability Scan
 
 on:
   push:
+    branches: [ "main" ]
+  pull_request:
     paths:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
-  pull_request:
-    branches: [ "*" ]
-    # paths:
-    #   - '**/Cargo.toml'
-    #   - '**/Cargo.lock'
-  schedule:
-    # Run daily at midnight to catch newly disclosed vulnerabilities
-    - cron: '0 0 * * *'
+  # schedule:
+  #   # Run daily at midnight to catch newly disclosed vulnerabilities
+  #   - cron: '0 0 * * *'
 
 jobs:
   audit:
