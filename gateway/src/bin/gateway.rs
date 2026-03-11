@@ -25,8 +25,8 @@ struct Args {
 
 impl Args {
     pub fn with_dot_env() -> Self {
-        dotenv::dotenv().ok();
-        dotenv::from_filename(".gateway.env").ok();
+        dotenvy::dotenv().ok();
+        dotenvy::from_filename(".gateway.env").ok();
         Self::parse()
     }
 }

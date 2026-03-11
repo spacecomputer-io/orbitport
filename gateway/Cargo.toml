@@ -20,16 +20,15 @@ hex = "0.4.3"
 futures = "0.3.31"
 clap = { version = "4.5.32", features = ["derive", "env"] }
 warp = { version = "0.3.7" }
-error = "0.1.9"
 prost = "0.13.5"
 tonic = "0.13.0"
-dotenv = "0.15.0"
 tonic-health = "0.13.0"
 sha2 = "0.10.8"
 lazy_static = "1.5.0"
 prometheus = "0.14.0"
 
 threshold = { git = "https://www.github.com/spacecomputer-io/threshold", tag = "v0.0.1" }
+dotenvy = "0.15.7"
 
 [build-dependencies]
 tonic-build = "0.13.0"
