@@ -20,6 +20,7 @@ type trngSeed struct {
 func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, numChunk uint) (*proto.TrngResponse, error) {
 	if !c.limiter.Allow() {
 		c.logger.Warn("rate limit exceeded")
+		requestTotal.WithLabelValues("local_rate_limit_exceeded").Inc()
 		return nil, ErrRateLimitExceeded
 	}
 
@@ -52,6 +53,7 @@ func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, num
 	}
 
 	trngChunksTotal.Add(float64(len(values)))
+	trngChunksPerRequest.Observe(float64(len(values)))
 
 	return &proto.TrngResponse{
 		Values: values,

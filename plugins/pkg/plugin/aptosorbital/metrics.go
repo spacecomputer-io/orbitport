@@ -30,8 +30,18 @@ var (
 			Help:      "Total number of TRNG chunks returned by Aptos Orbital.",
 		},
 	)
+
+	trngChunksPerRequest = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: "op",
+			Subsystem: "rand_aptos_orb",
+			Name:      "trng_chunks_per_request",
+			Help:      "Distribution of TRNG chunks returned per successful Aptos Orbital request.",
+			Buckets:   []float64{1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 1500},
+		},
+	)
 )
 
 func init() {
-	prometheus.MustRegister(requestDuration, requestTotal, trngChunksTotal)
+	prometheus.MustRegister(requestDuration, requestTotal, trngChunksTotal, trngChunksPerRequest)
 }

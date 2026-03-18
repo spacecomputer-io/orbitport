@@ -142,10 +142,11 @@ async fn rate_limit(
     // NOTE: Using empty_token in case authentication is off, in case authentication was on and there is no auth header
     // this will be rejected before this point.
     let empty_token = format!("{BEARER}empty");
-    let token = extract_jwt(auth_header.as_deref().unwrap_or(empty_token.as_str())).map_err(|_| {
-        metrics::record_rate_limit("missing_header");
-        warp::reject::custom(GatewayError::NoAuthHeaderError)
-    })?;
+    let token =
+        extract_jwt(auth_header.as_deref().unwrap_or(empty_token.as_str())).map_err(|_| {
+            metrics::record_rate_limit("missing_header");
+            warp::reject::custom(GatewayError::NoAuthHeaderError)
+        })?;
     // Hash the token to avoid storing it directly
     let mut hasher = Sha256::new();
     hasher.update(token);
@@ -283,12 +284,10 @@ async fn handle_get(
         }
     }
     let enc_key = if let Some(key) = query.key {
-        Some(
-            EncryptionKey::new_from_arg(&key).map_err(|e| {
-                metrics::record_validation("GET", "invalid_encryption_key");
-                warp::reject::custom(GatewayError::BadRequest(e.to_string()))
-            })?,
-        )
+        Some(EncryptionKey::new_from_arg(&key).map_err(|e| {
+            metrics::record_validation("GET", "invalid_encryption_key");
+            warp::reject::custom(GatewayError::BadRequest(e.to_string()))
+        })?)
     } else {
         None
     };
@@ -341,12 +340,10 @@ async fn handle_post(
         body.key
     };
     let enc_key = if let Some(key) = key {
-        Some(
-            EncryptionKey::new_from_arg(&key).map_err(|e| {
-                metrics::record_validation("POST", "invalid_encryption_key");
-                warp::reject::custom(GatewayError::BadRequest(e.to_string()))
-            })?,
-        )
+        Some(EncryptionKey::new_from_arg(&key).map_err(|e| {
+            metrics::record_validation("POST", "invalid_encryption_key");
+            warp::reject::custom(GatewayError::BadRequest(e.to_string()))
+        })?)
     } else {
         None
     };
@@ -370,7 +367,9 @@ async fn handle_service_req(
 
     let req_id = svc_req.req_id;
     let svc_name = svc_req.service.clone();
-    metrics::API_REQ_COUNTER.with_label_values(&[&svc_name]).inc();
+    metrics::API_REQ_COUNTER
+        .with_label_values(&[&svc_name])
+        .inc();
     let response = timeout(Duration::from_secs(10), async {
         service_manager.handle(svc_req).await
     })
