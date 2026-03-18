@@ -31,6 +31,15 @@ var (
 		},
 	)
 
+	trngBytesTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Namespace: "op",
+			Subsystem: "rand_aptos_orb",
+			Name:      "trng_bytes_total",
+			Help:      "Total number of TRNG bytes returned by Aptos Orbital.",
+		},
+	)
+
 	trngChunksPerRequest = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: "op",
@@ -43,5 +52,11 @@ var (
 )
 
 func init() {
-	prometheus.MustRegister(requestDuration, requestTotal, trngChunksTotal, trngChunksPerRequest)
+	prometheus.MustRegister(
+		requestDuration,
+		requestTotal,
+		trngChunksTotal,
+		trngBytesTotal,
+		trngChunksPerRequest,
+	)
 }

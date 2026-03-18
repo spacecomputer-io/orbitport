@@ -2,6 +2,7 @@ package aptosorbital
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
@@ -44,15 +45,18 @@ func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, num
 
 	// Collect all chunks
 	values := make([]string, 0, len(*resp))
+	byteCount := 0
 	var sig string
 	for i, r := range *resp {
 		if i == 0 {
 			sig = r.Signature
 		}
 		values = append(values, r.Chunk)
+		byteCount += hex.DecodedLen(len(r.Chunk))
 	}
 
 	trngChunksTotal.Add(float64(len(values)))
+	trngBytesTotal.Add(float64(byteCount))
 	trngChunksPerRequest.Observe(float64(len(values)))
 
 	return &proto.TrngResponse{
