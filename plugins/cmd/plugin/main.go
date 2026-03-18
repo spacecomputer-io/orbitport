@@ -25,7 +25,9 @@ func main() {
 
 	logger := utils.GetLogger(fmt.Sprintf("orbitport:plugin:%s", cfg.Plugin))
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(core.UnaryMetricsInterceptor(cfg.Plugin)),
+	)
 
 	logger.Infof("Starting plugin %s", cfg.Plugin)
 

@@ -55,7 +55,6 @@ func (p *Plugin) GetTrng(ctx context.Context, req *proto.TrngRequest) (*proto.Tr
 	// Try Aptos Orbital for fresh randomness
 	resp, err := p.aptosClient.GetTrueRandomnessSeed(ctx, req.IgnoreSig, uint(numChunk))
 	if err == nil && resp != nil && len(resp.GetValues()) > 0 {
-		ctrngFreshTotal.WithLabelValues("aptosorbital").Add(float64(len(resp.GetValues())))
 		return resp, nil
 	}
 

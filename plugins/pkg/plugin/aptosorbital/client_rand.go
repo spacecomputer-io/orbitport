@@ -51,6 +51,8 @@ func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, num
 		values = append(values, r.Chunk)
 	}
 
+	trngChunksTotal.Add(float64(len(values)))
+
 	return &proto.TrngResponse{
 		Values: values,
 		Sig:    sig,

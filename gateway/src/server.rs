@@ -344,47 +344,33 @@ async fn handle_service_req(
 
     let req_id = svc_req.req_id;
     let svc_name = svc_req.service.clone();
-    metrics::API_REQ_COUNTER
-        .with_label_values(&[&svc_name])
-        .inc();
     let response = timeout(Duration::from_secs(10), async {
         service_manager.handle(svc_req).await
     })
     .await;
 
     let duration = timer.elapsed().as_secs_f64();
-    metrics::API_REQ_DURATION_SECONDS
-        .with_label_values(&[&svc_name])
-        .observe(duration);
 
     match response {
         Ok(Ok(res)) => match res.result {
             Ok(result) => {
-                metrics::API_REQ_OK_COUNTER
-                    .with_label_values(&[&svc_name])
-                    .inc();
+                metrics::record_request(&svc_name, "ok", duration);
                 tracing::debug!("[req={}] Got service result", req_id);
                 Ok(warp::reply::json(&result))
             }
             Err(e) => {
-                metrics::API_REQ_ERR_COUNTER
-                    .with_label_values(&[&svc_name])
-                    .inc();
+                metrics::record_request(&svc_name, "service_error", duration);
                 tracing::error!("[req={}] Error result: {:?}", req_id, e);
                 Err(warp::reject::custom(e))
             }
         },
         Ok(Err(e)) => {
-            metrics::API_REQ_FAILED_COUNTER
-                .with_label_values(&[&svc_name])
-                .inc();
+            metrics::record_request(&svc_name, "routing_error", duration);
             tracing::error!("[req={}] Error routing request: {:?}", req_id, e);
             Err(warp::reject::custom(e))
         }
         Err(_) => {
-            metrics::API_REQ_TIMEOUT_COUNTER
-                .with_label_values(&[&svc_name])
-                .inc();
+            metrics::record_request(&svc_name, "timeout", duration);
             tracing::error!("[req={}] Request timed out", req_id);
             Err(warp::reject::custom(GatewayError::ServiceTimeout))
         }

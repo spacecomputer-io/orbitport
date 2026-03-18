@@ -22,29 +22,16 @@ var (
 		[]string{"status"},
 	)
 
-	ctrngFallbackTotal = prometheus.NewCounterVec(
+	trngChunksTotal = prometheus.NewCounter(
 		prometheus.CounterOpts{
 			Namespace: "op",
-			Subsystem: "beacon",
-			Name:      "ctrng_fallback_total",
-			Help:      "Total number of CTRNG values served from fallback (BIP32 master seeds).",
+			Subsystem: "rand_aptos_orb",
+			Name:      "trng_chunks_total",
+			Help:      "Total number of TRNG chunks returned by Aptos Orbital.",
 		},
-		[]string{"beacon"},
-	)
-
-	ctrngFreshTotal = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: "op",
-			Subsystem: "beacon",
-			Name:      "ctrng_fresh_total",
-			Help:      "Total number of CTRNG values served directly from Aptos (fresh).",
-		},
-		[]string{"beacon"},
 	)
 )
 
 func init() {
-	prometheus.MustRegister(requestDuration)
-	prometheus.MustRegister(ctrngFallbackTotal, ctrngFreshTotal)
-	prometheus.MustRegister(requestTotal)
+	prometheus.MustRegister(requestDuration, requestTotal, trngChunksTotal)
 }
