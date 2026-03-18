@@ -60,6 +60,7 @@ type ApiResult<T> = std::result::Result<T, warp::Rejection>;
 async fn authorize(
     (headers, mut auth_client): (HeaderMap<HeaderValue>, AuthPluginClient<Channel>),
 ) -> ApiResult<String> {
+    let timer = Instant::now();
     match jwt_from_header(&headers) {
         Ok(jwt) => {
             let request = tonic::Request::new(TokenValidationRequest { token: jwt.clone() });
@@ -68,24 +69,39 @@ async fn authorize(
                 .await
                 .map_err(|e| match e.code() {
                     tonic::Code::Unavailable | tonic::Code::NotFound => {
+                        metrics::record_auth("plugin_unavailable", timer.elapsed().as_secs_f64());
                         tracing::error!("Auth plugin is unavailable: {}", e);
                         warp::reject::custom(GatewayError::AuthPluginConnectionError(
                             "unavailable".to_string(),
                         ))
                     }
                     _ => {
+                        metrics::record_auth("failed", timer.elapsed().as_secs_f64());
                         tracing::error!("Failed to authorize JWT: {}", e);
                         warp::reject::custom(GatewayError::AuthenticationFailed)
                     }
                 })?
                 .into_inner();
             if !response.ok {
+                metrics::record_auth("rejected", timer.elapsed().as_secs_f64());
                 return Err(warp::reject::custom(GatewayError::AuthenticationFailed));
             }
+            metrics::record_auth("ok", timer.elapsed().as_secs_f64());
             tracing::debug!("JWT authorized successfully");
             Ok(jwt)
         }
-        Err(e) => Err(warp::reject::custom(e)),
+        Err(GatewayError::NoAuthHeaderError) => {
+            metrics::record_auth("missing_header", timer.elapsed().as_secs_f64());
+            Err(warp::reject::custom(GatewayError::NoAuthHeaderError))
+        }
+        Err(GatewayError::InvalidAuthHeaderError) => {
+            metrics::record_auth("invalid_header", timer.elapsed().as_secs_f64());
+            Err(warp::reject::custom(GatewayError::InvalidAuthHeaderError))
+        }
+        Err(e) => {
+            metrics::record_auth("failed", timer.elapsed().as_secs_f64());
+            Err(warp::reject::custom(e))
+        }
     }
 }
 
@@ -126,8 +142,10 @@ async fn rate_limit(
     // NOTE: Using empty_token in case authentication is off, in case authentication was on and there is no auth header
     // this will be rejected before this point.
     let empty_token = format!("{BEARER}empty");
-    let token = extract_jwt(auth_header.as_deref().unwrap_or(empty_token.as_str()))
-        .map_err(|_| warp::reject::custom(GatewayError::NoAuthHeaderError))?;
+    let token = extract_jwt(auth_header.as_deref().unwrap_or(empty_token.as_str())).map_err(|_| {
+        metrics::record_rate_limit("missing_header");
+        warp::reject::custom(GatewayError::NoAuthHeaderError)
+    })?;
     // Hash the token to avoid storing it directly
     let mut hasher = Sha256::new();
     hasher.update(token);
@@ -148,9 +166,11 @@ async fn rate_limit(
 
     // Check if the request count exceeds the limit
     if entry.0 > rate_limiter.max_requests {
+        metrics::record_rate_limit("exceeded");
         return Err(warp::reject::custom(GatewayError::RateLimitExceeded)); // Use a custom rejection
     }
 
+    metrics::record_rate_limit("ok");
     Ok(())
 }
 
@@ -253,6 +273,7 @@ async fn handle_get(
     };
     if let Some(b) = query.bulk {
         if b > bulk_max {
+            metrics::record_validation("GET", "bulk_limit_exceeded");
             return Err(warp::reject::custom(GatewayError::BadRequest(format!(
                 "Bulk size {} exceeds maximum {}",
                 b, bulk_max
@@ -263,8 +284,10 @@ async fn handle_get(
     }
     let enc_key = if let Some(key) = query.key {
         Some(
-            EncryptionKey::new_from_arg(&key)
-                .map_err(|e| warp::reject::custom(GatewayError::BadRequest(e.to_string())))?,
+            EncryptionKey::new_from_arg(&key).map_err(|e| {
+                metrics::record_validation("GET", "invalid_encryption_key");
+                warp::reject::custom(GatewayError::BadRequest(e.to_string()))
+            })?,
         )
     } else {
         None
@@ -303,6 +326,7 @@ async fn handle_post(
     };
     if let Some(b) = bulk {
         if b > bulk_max {
+            metrics::record_validation("POST", "bulk_limit_exceeded");
             return Err(warp::reject::custom(GatewayError::BadRequest(format!(
                 "Bulk size {} exceeds maximum {}",
                 b, bulk_max
@@ -318,8 +342,10 @@ async fn handle_post(
     };
     let enc_key = if let Some(key) = key {
         Some(
-            EncryptionKey::new_from_arg(&key)
-                .map_err(|e| warp::reject::custom(GatewayError::BadRequest(e.to_string())))?,
+            EncryptionKey::new_from_arg(&key).map_err(|e| {
+                metrics::record_validation("POST", "invalid_encryption_key");
+                warp::reject::custom(GatewayError::BadRequest(e.to_string()))
+            })?,
         )
     } else {
         None
@@ -344,32 +370,48 @@ async fn handle_service_req(
 
     let req_id = svc_req.req_id;
     let svc_name = svc_req.service.clone();
+    metrics::API_REQ_COUNTER.with_label_values(&[&svc_name]).inc();
     let response = timeout(Duration::from_secs(10), async {
         service_manager.handle(svc_req).await
     })
     .await;
 
     let duration = timer.elapsed().as_secs_f64();
+    metrics::API_REQ_DURATION_SECONDS
+        .with_label_values(&[&svc_name])
+        .observe(duration);
 
     match response {
         Ok(Ok(res)) => match res.result {
             Ok(result) => {
+                metrics::API_REQ_OK_COUNTER
+                    .with_label_values(&[&svc_name])
+                    .inc();
                 metrics::record_request(&svc_name, "ok", duration);
                 tracing::debug!("[req={}] Got service result", req_id);
                 Ok(warp::reply::json(&result))
             }
             Err(e) => {
+                metrics::API_REQ_ERR_COUNTER
+                    .with_label_values(&[&svc_name])
+                    .inc();
                 metrics::record_request(&svc_name, "service_error", duration);
                 tracing::error!("[req={}] Error result: {:?}", req_id, e);
                 Err(warp::reject::custom(e))
             }
         },
         Ok(Err(e)) => {
+            metrics::API_REQ_FAILED_COUNTER
+                .with_label_values(&[&svc_name])
+                .inc();
             metrics::record_request(&svc_name, "routing_error", duration);
             tracing::error!("[req={}] Error routing request: {:?}", req_id, e);
             Err(warp::reject::custom(e))
         }
         Err(_) => {
+            metrics::API_REQ_TIMEOUT_COUNTER
+                .with_label_values(&[&svc_name])
+                .inc();
             metrics::record_request(&svc_name, "timeout", duration);
             tracing::error!("[req={}] Request timed out", req_id);
             Err(warp::reject::custom(GatewayError::ServiceTimeout))
