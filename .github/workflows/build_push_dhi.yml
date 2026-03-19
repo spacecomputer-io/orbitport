@@ -7,8 +7,8 @@ on:
 
 env:
   REGISTRY: docker.io
-  GATEWAY_IMAGE: docker.io/shaunaksc/gateway-artifact
-  PLUGIN_IMAGE: docker.io/shaunaksc/plugin-artifact
+  GATEWAY_IMAGE: docker.io/spacecomp/gateway
+  PLUGIN_IMAGE: docker.io/spacecomp/plugin
 
 jobs:
   build-gateway:
