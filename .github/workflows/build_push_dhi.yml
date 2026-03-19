@@ -71,7 +71,7 @@ jobs:
 
           cosign attest --yes \
             --predicate /tmp/gateway-provenance.json \
-            --type slsaprovenance \
+            --type slsaprovenance02 \
             ${{ env.GATEWAY_IMAGE }}@${{ steps.build.outputs.digest }}
 
       - name: Verify Gateway Signature
@@ -142,7 +142,7 @@ jobs:
 
           cosign attest --yes \
             --predicate /tmp/plugin-provenance.json \
-            --type slsaprovenance \
+            --type slsaprovenance02 \
             ${{ env.PLUGIN_IMAGE }}@${{ steps.build.outputs.digest }}
 
       - name: Verify Plugin Signature
