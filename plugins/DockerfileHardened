@@ -24,7 +24,7 @@ RUN go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-FROM alpine:${ALPINE_VERSION}
+FROM dhi.io/alpine-base:${ALPINE_VERSION}-alpine${ALPINE_VERSION}-dev
 
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}

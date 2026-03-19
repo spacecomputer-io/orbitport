@@ -46,7 +46,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./gateway
-          file: ./gateway/Dockerfile
+          file: ./gateway/DockerfileHardened
           platforms: linux/amd64
           push: true
           tags: ${{ env.GATEWAY_IMAGE }}:${{ github.sha }}
@@ -77,7 +77,7 @@ jobs:
 
           cosign attest --yes \
             --predicate /tmp/gateway-provenance.json \
-            --type slsaprovenance02 \
+            --type slsaprovenance1 \
             ${{ env.GATEWAY_IMAGE }}@${{ steps.build.outputs.digest }}
 
       - name: Verify Gateway Signature
@@ -123,7 +123,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./plugins
-          file: ./plugins/Dockerfile
+          file: ./plugins/DockerfileHardened
           platforms: linux/amd64
           push: true
           tags: ${{ env.PLUGIN_IMAGE }}:${{ github.sha }}
@@ -148,7 +148,7 @@ jobs:
 
           cosign attest --yes \
             --predicate /tmp/plugin-provenance.json \
-            --type slsaprovenance02 \
+            --type slsaprovenance1 \
             ${{ env.PLUGIN_IMAGE }}@${{ steps.build.outputs.digest }}
 
       - name: Verify Plugin Signature
