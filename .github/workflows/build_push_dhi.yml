@@ -7,8 +7,8 @@ on:
 
 env:
   REGISTRY: docker.io
-  GATEWAY_IMAGE: docker.io/spacecomp/gateway
-  PLUGIN_IMAGE: docker.io/spacecomp/plugin
+  GATEWAY_IMAGE: docker.io/spacecomp/orbitport
+  PLUGIN_IMAGE: docker.io/spacecomp/orbitport
 
 jobs:
   build-gateway:
@@ -49,7 +49,7 @@ jobs:
           file: ./gateway/DockerfileHardened
           platforms: linux/amd64
           push: true
-          tags: ${{ env.GATEWAY_IMAGE }}:${{ github.sha }}
+          tags: ${{ env.GATEWAY_IMAGE }}:op-gateway-${{ github.sha }}
           build-args: |
             SOURCE_DATE_EPOCH=${{ steps.source_date.outputs.epoch }}
           attests: |
@@ -126,7 +126,7 @@ jobs:
           file: ./plugins/DockerfileHardened
           platforms: linux/amd64
           push: true
-          tags: ${{ env.PLUGIN_IMAGE }}:${{ github.sha }}
+          tags: ${{ env.PLUGIN_IMAGE }}:op-plugin-${{ github.sha }}
           build-args: |
             SOURCE_DATE_EPOCH=${{ steps.source_date.outputs.epoch }}
           attests: |
