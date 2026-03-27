@@ -408,10 +408,18 @@ func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace strin
 func (pi *Plugin) keyForName(ctx context.Context, name string) (iface.Key, error) {
 	logger := utils.GetLogger("orbitport:ipfs")
 
-	keys, err := pi.node.Key().List(ctx)
-	if err != nil {
-		logger.Warnf("failed to list keys: %s", err)
-		return nil, err
+	// Prefer direct key lookup by alias instead of depending on key listing support.
+	// Some IPFS deployments expose key generation and publishing but not key listing.
+	key, _, err := pi.node.Key().Sign(ctx, name, []byte("orbitport-key-lookup"))
+	if err == nil {
+		return key, nil
+	}
+	logger.Warnf("direct key lookup via sign failed for %q: %s", name, err)
+
+	keys, listErr := pi.node.Key().List(ctx)
+	if listErr != nil {
+		logger.Warnf("failed to list keys: %s", listErr)
+		return nil, errors.Join(err, listErr)
 	}
 
 	for _, key := range keys {

@@ -102,6 +102,22 @@ func TestIpfsPlugin(t *testing.T) {
 		require.NoError(t, err, "failed to get data from IPFS via IPNS")
 		require.Equal(t, data, getResp.Data, "retrieved data should match the original")
 		t.Logf("data retrieved from IPFS via IPNS: %s", getResp.Path)
+
+		// Re-publish the same alias to ensure existing keys are reused cleanly.
+		updatedData := []byte(fmt.Sprintf("updated test data %d", now.UnixNano()))
+		updatedResp, err := plugin.Add(ctx, &proto.AddRequest{Data: updatedData})
+		require.NoError(t, err, "failed to add updated data to IPFS")
+
+		repubResp, err := plugin.Publish(ctx, &proto.PublishRequest{
+			Cid:         updatedResp.Cid,
+			PublishName: publishName,
+		})
+		require.NoError(t, err, "failed to re-publish data to existing IPNS key")
+		require.Equal(t, pubresp.IpnsName, repubResp.IpnsName, "IPNS name should stay stable for the same alias")
+
+		updatedGetResp, err := plugin.Get(ctx, getReq)
+		require.NoError(t, err, "failed to get updated data from IPFS via IPNS")
+		require.Equal(t, updatedData, updatedGetResp.Data, "retrieved data should match the updated payload")
 	})
 }
 
