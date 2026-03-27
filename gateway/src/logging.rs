@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
 use tracing_appender::non_blocking::WorkerGuard;
@@ -50,17 +52,20 @@ pub fn initialize_logging() -> WorkerGuard {
     guard
 }
 
-/// Returns a log file writer, using the `RUST_LOG_FILE` environment variable if set or defaults to stdout.
-/// The log file is rolled daily.
+/// Returns a log writer based on `RUST_LOG_FILE`.
+/// When `RUST_LOG_FILE` is set, logs are written to a daily-rolled file managed by the process.
+/// Otherwise logs are written to stdout for container/runtime log collection.
 fn get_log_file_writer() -> (tracing_appender::non_blocking::NonBlocking, WorkerGuard) {
     if let Ok(log_file_path) = std::env::var("RUST_LOG_FILE") {
-        let (directory, prefix) = if let Some(split_at) = log_file_path.rfind('/') {
-            log_file_path.split_at(split_at)
-        } else {
-            // Defaults to current directory
-            ("./", log_file_path.as_str())
-        };
-        let writer = tracing_appender::rolling::never(directory, prefix);
+        let log_path = Path::new(&log_file_path);
+        let directory = log_path.parent().unwrap_or_else(|| Path::new("."));
+        let prefix = log_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .filter(|name| !name.is_empty())
+            .unwrap_or("gateway.log");
+
+        let writer = tracing_appender::rolling::daily(directory, prefix);
         let (non_blocking, guard) = tracing_appender::non_blocking(writer);
         return (non_blocking, guard);
     }

@@ -83,6 +83,11 @@ services:
     image: op-gateway:latest
     build:
       context: ./gateway
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - RUST_LOG=warn,orbitport=debug
       - ORBITPORT_HTTP_PORT=8080
