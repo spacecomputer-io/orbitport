@@ -30,13 +30,13 @@ func NewPlugin() (*Plugin, error) {
 
 	// explicit development bypass
 	if cfg.DisableAuth {
-		logger.Warn("CRITICAL: Authentication is explicitly DISABLED via ORBITPORT_DEV_DISABLE_AUTH. Do not use in production!")
+		logger.Warn("CRITICAL: Authentication is explicitly DISABLED via ORBITPORT_UNSAFE_DEV_DISABLE_AUTH. Do not use in production!")
 		return new(Plugin), nil
 	}
 
 	// strict fail-closed validation
 	if len(cfg.Auth0Domain) == 0 || len(cfg.Auth0Audience) == 0 {
-		return nil, fmt.Errorf("FATAL: Auth0Domain or Auth0Audience is missing. Refusing to start insecurely. Set ORBITPORT_DEV_DISABLE_AUTH=true to bypass locally")
+		return nil, fmt.Errorf("FATAL: Auth0Domain or Auth0Audience is missing. Refusing to start insecurely. Set ORBITPORT_UNSAFE_DEV_DISABLE_AUTH=true to bypass locally")
 	}
 
 	logger.Debug("Auth0 domain is set, creating Auth plugin")

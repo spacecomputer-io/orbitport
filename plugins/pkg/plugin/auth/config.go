@@ -19,12 +19,12 @@ func readFromEnv() *authConfig {
 	return &authConfig{
 		Auth0Domain:   viper.GetString("AUTH0_DOMAIN"),
 		Auth0Audience: viper.GetString("AUTH0_AUDIENCE"),
-		DisableAuth:   viper.GetBool("DEV_DISABLE_AUTH"),
+		DisableAuth:   viper.GetBool("UNSAFE_DEV_DISABLE_AUTH"),
 	}
 }
 
 func setDefaults() {
 	viper.SetDefault("AUTH0_DOMAIN", "")
 	viper.SetDefault("AUTH0_AUDIENCE", "")
-	viper.SetDefault("DEV_DISABLE_AUTH", false) // defaults to secure
+	viper.SetDefault("UNSAFE_DEV_DISABLE_AUTH", false) // defaults to secure
 }
