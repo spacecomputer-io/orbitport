@@ -40,19 +40,12 @@ async fn main() -> Result<(), GatewayError> {
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
 
-    service_manager::wait_for_deps(
-        vec![args.auth_plugin.clone(), args.masterseed_plugin.clone()],
-        std::time::Duration::from_secs(60),
-    )
-    .await
-    .unwrap();
-
-    let service_manager = service_manager::ServiceManager::new(
+    let service_manager = service_manager::wait_for_service_manager(
         args.auth_plugin.as_str(),
         args.masterseed_plugin.as_str(),
+        std::time::Duration::from_secs(60),
     )
-    .await
-    .unwrap();
+    .await?;
 
     let metrics_port = args.metric_port;
     tokio::spawn(async move {

@@ -26,19 +26,36 @@ async fn check_health(addr: &str) -> Result<HealthCheckResponse, tonic::Status> 
         .map(|response| response.into_inner())
 }
 
-pub async fn wait_for_deps(addrs: Vec<String>, max_delay: Duration) -> Result<(), String> {
+pub async fn wait_for_deps(
+    addrs: Vec<String>,
+    max_retry_delay: Duration,
+) -> Result<(), GatewayError> {
     let mut retry_delay = Duration::from_secs(1);
-
     let start_time = std::time::Instant::now();
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown);
 
-    tracing::info!("Waiting for dependencies to be healthy: {:?}", addrs);
+    tracing::info!(
+        "Waiting for dependencies to be healthy before serving traffic: {:?}",
+        addrs
+    );
 
-    let mut remaining = VecDeque::from(addrs.clone());
+    let mut remaining = VecDeque::from(addrs);
     loop {
         let n = remaining.len();
         for _i in 0..n {
-            let addr = remaining.pop_front().unwrap();
-            match check_health(addr.as_str()).await {
+            let Some(addr) = remaining.pop_front() else {
+                break;
+            };
+            let health_result = tokio::select! {
+                _ = &mut shutdown => {
+                    return Err(GatewayError::TerminationError(
+                        "Received shutdown signal while waiting for dependencies".to_string(),
+                    ));
+                }
+                result = check_health(addr.as_str()) => result,
+            };
+            match health_result {
                 Ok(response) => {
                     if response.status() != ServingStatus::Serving {
                         tracing::debug!(
@@ -71,8 +88,71 @@ pub async fn wait_for_deps(addrs: Vec<String>, max_delay: Duration) -> Result<()
             elapsed_time,
             retry_delay
         );
-        tokio::time::sleep(retry_delay).await;
-        retry_delay = (retry_delay * 2).min(max_delay); // Exponential backoff
+        tokio::select! {
+            _ = &mut shutdown => {
+                return Err(GatewayError::TerminationError(
+                    "Received shutdown signal while waiting for dependencies".to_string(),
+                ));
+            }
+            _ = tokio::time::sleep(retry_delay) => {}
+        }
+        retry_delay = (retry_delay * 2).min(max_retry_delay); // Exponential backoff
+    }
+}
+
+pub async fn wait_for_service_manager(
+    auth_url: &str,
+    masterseed_url: &str,
+    max_retry_delay: Duration,
+) -> Result<ServiceManager, GatewayError> {
+    wait_for_deps(
+        vec![auth_url.to_string(), masterseed_url.to_string()],
+        max_retry_delay,
+    )
+    .await?;
+
+    let mut retry_delay = Duration::from_secs(1);
+    let start_time = std::time::Instant::now();
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown);
+
+    loop {
+        let service_manager_result = tokio::select! {
+            _ = &mut shutdown => {
+                return Err(GatewayError::TerminationError(
+                    "Received shutdown signal while initializing service manager".to_string(),
+                ));
+            }
+            result = ServiceManager::new(auth_url, masterseed_url) => result,
+        };
+
+        match service_manager_result {
+            Ok(service_manager) => {
+                tracing::info!(
+                    "Service manager initialized successfully after {:?}",
+                    start_time.elapsed()
+                );
+                return Ok(service_manager);
+            }
+            Err(err) => {
+                tracing::warn!(
+                    "Failed to initialize service manager after {:?}: {}. Retrying in {:?}",
+                    start_time.elapsed(),
+                    err,
+                    retry_delay
+                );
+            }
+        }
+
+        tokio::select! {
+            _ = &mut shutdown => {
+                return Err(GatewayError::TerminationError(
+                    "Received shutdown signal while initializing service manager".to_string(),
+                ));
+            }
+            _ = tokio::time::sleep(retry_delay) => {}
+        }
+        retry_delay = (retry_delay * 2).min(max_retry_delay);
     }
 }
 
