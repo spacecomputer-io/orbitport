@@ -446,7 +446,9 @@ mod test {
         let token = "test_token".to_string();
 
         for _i in 0..5 {
-            rate_limit(token.clone(), rate_limiter.clone()).await.unwrap();
+            rate_limit(token.clone(), rate_limiter.clone())
+                .await
+                .unwrap();
         }
         match rate_limit(token.clone(), rate_limiter.clone()).await {
             Ok(_) => panic!("Rate limit should have been exceeded"),
