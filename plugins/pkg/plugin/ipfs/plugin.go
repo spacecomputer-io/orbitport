@@ -353,12 +353,19 @@ func (pi *Plugin) publish(ctx context.Context, p path.Path, name string) (*ipns.
 		return nil, err
 	}
 
-	// cache the published name
-	_ = pi.ipnsCache.Add(name, p)
-	cacheItems.WithLabelValues("ipns").Set(float64(pi.ipnsCache.Len()))
+	pi.cachePublishedName(name, published, p)
 	logger.Infof("published %s", published.AsPath())
 
 	return &published, nil
+}
+
+func (pi *Plugin) cachePublishedName(alias string, published ipns.Name, p path.Path) {
+	// Cache the latest head under every form callers may use:
+	// local alias, bare peer ID, and canonical /ipns/<peerID>.
+	_ = pi.ipnsCache.Add(alias, p)
+	_ = pi.ipnsCache.Add(published.String(), p)
+	_ = pi.ipnsCache.Add(published.AsPath().String(), p)
+	cacheItems.WithLabelValues("ipns").Set(float64(pi.ipnsCache.Len()))
 }
 
 func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace string) ([]byte, error) {
