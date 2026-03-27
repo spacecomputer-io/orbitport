@@ -86,7 +86,7 @@ impl EncryptionKey {
             "" => EncryptionScheme::None,
             "threshold" => EncryptionScheme::Threshold,
             _ => {
-                return Err(GatewayError::InvalidEncryptionScheme(key));
+                return Err(GatewayError::InvalidEncryptionScheme(parts[0].to_string()));
             }
         };
         Ok(EncryptionKey { key, scheme })
