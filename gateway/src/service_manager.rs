@@ -81,8 +81,6 @@ pub struct ServiceManager {
     trng_svc: TrngService,
 }
 
-unsafe impl Send for ServiceManager {}
-
 impl ServiceManager {
     pub async fn new(auth_url: &str, masterseed_url: &str) -> Result<ServiceManager, GatewayError> {
         let masterseed_client = MasterSeedPluginClient::connect(masterseed_url.to_string())

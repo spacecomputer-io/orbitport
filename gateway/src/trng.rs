@@ -36,8 +36,6 @@ pub struct TrngService {
     masterseed_client: MasterSeedPluginClient<Channel>,
 }
 
-unsafe impl Send for TrngService {}
-
 impl TrngService {
     /// Creates a new instance of the TrngService.
     pub fn new(masterseed_client: MasterSeedPluginClient<Channel>) -> Self {
