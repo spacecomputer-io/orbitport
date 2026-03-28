@@ -126,30 +126,22 @@ fn extract_jwt(auth_header: &str) -> Result<String, GatewayError> {
 
 // Create a rate limiter filter
 pub fn with_rate_limiter(
+    auth_filter: impl Filter<Extract = (String,), Error = warp::Rejection> + Clone,
     rate_limiter: Arc<RateLimiter>,
-) -> impl Filter<Extract = ((),), Error = warp::Rejection> + Clone {
-    warp::any()
-        .and(warp::header::optional::<String>(AUTHORIZATION.as_str()))
+) -> impl Filter<Extract = (String,), Error = warp::Rejection> + Clone {
+    auth_filter
         .and(warp::any().map(move || rate_limiter.clone()))
         .and_then(rate_limit)
 }
 
 /// Rate limiting logic.
 async fn rate_limit(
-    auth_header: Option<String>,
+    jwt: String,
     rate_limiter: Arc<RateLimiter>,
-) -> Result<(), warp::Rejection> {
-    // NOTE: Using empty_token in case authentication is off, in case authentication was on and there is no auth header
-    // this will be rejected before this point.
-    let empty_token = format!("{BEARER}empty");
-    let token =
-        extract_jwt(auth_header.as_deref().unwrap_or(empty_token.as_str())).map_err(|_| {
-            metrics::record_rate_limit("missing_header");
-            warp::reject::custom(GatewayError::NoAuthHeaderError)
-        })?;
-    // Hash the token to avoid storing it directly
+) -> Result<String, warp::Rejection> {
+    // Hash the token to avoid storing it directly.
     let mut hasher = Sha256::new();
-    hasher.update(token);
+    hasher.update(&jwt);
     let token_hash = format!("{:x}", hasher.finalize());
 
     let mut items = rate_limiter.items.lock().await;
@@ -172,7 +164,7 @@ async fn rate_limit(
     }
 
     metrics::record_rate_limit("ok");
-    Ok(())
+    Ok(jwt)
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -219,8 +211,10 @@ pub async fn start(
     let bulk_max_get = bulk_max;
     let get_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::get())
-        .and(with_auth(service_manager.clone()))
-        .and(with_rate_limiter(rate_limiter.clone()))
+        .and(with_rate_limiter(
+            with_auth(service_manager.clone()),
+            rate_limiter.clone(),
+        ))
         .and(warp::query::<QueryParams>())
         .and(warp::any().map(move || service_manager_clone.clone()))
         .and(warp::any().map(move || bulk_max_get))
@@ -229,8 +223,10 @@ pub async fn start(
     let bulk_max_post = bulk_max;
     let post_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::post())
-        .and(with_auth(service_manager.clone()))
-        .and(with_rate_limiter(rate_limiter.clone()))
+        .and(with_rate_limiter(
+            with_auth(service_manager.clone()),
+            rate_limiter.clone(),
+        ))
         .and(warp::body::content_length_limit(1024)) // limit to 1 KB payload
         .and(warp::body::json())
         .and(warp::query::<QueryParams>())
@@ -256,7 +252,6 @@ pub async fn start(
 async fn handle_get(
     service: String,
     _jwt: String,
-    _: (),
     query: QueryParams,
     service_manager: Arc<ServiceManager>,
     bulk_max: usize,
@@ -305,7 +300,6 @@ async fn handle_get(
 async fn handle_post(
     service: String,
     _jwt: String,
-    _: (),
     body: PostBody,
     query: QueryParams,
     service_manager: Arc<ServiceManager>,
@@ -449,14 +443,14 @@ mod test {
     #[tokio::test]
     async fn test_rate_limiter() {
         let rate_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(10)));
-        let token = format!("{}test_token", BEARER);
+        let token = "test_token".to_string();
 
         for _i in 0..5 {
-            rate_limit(Some(token.clone()), rate_limiter.clone())
+            rate_limit(token.clone(), rate_limiter.clone())
                 .await
                 .unwrap();
         }
-        match rate_limit(Some(token.clone()), rate_limiter.clone()).await {
+        match rate_limit(token.clone(), rate_limiter.clone()).await {
             Ok(_) => panic!("Rate limit should have been exceeded"),
             Err(e) => {
                 assert_eq!(
