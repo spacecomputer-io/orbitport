@@ -31,6 +31,8 @@ type Plugin struct {
 	ipnsCache *lru.Cache
 
 	leaseDuration time.Duration
+	maxAddBytes   uint
+	maxGetBytes   uint
 }
 
 // NewPlugin creates a new IPFS plugin with a storage layer.
@@ -77,6 +79,8 @@ func NewPlugin() (*Plugin, error) {
 		cache:         cache,
 		ipnsCache:     ipnsCache,
 		leaseDuration: cfg.LeaseDuration,
+		maxAddBytes:   cfg.MaxAddBytes,
+		maxGetBytes:   cfg.MaxGetBytes,
 	}
 
 	pl.RegisterCacheGauges()
@@ -96,6 +100,13 @@ func (pi *Plugin) Add(ctx context.Context, req *pluginsproto.AddRequest) (*plugi
 	}()
 
 	addBytesTotal.Add(float64(len(req.Data)))
+
+	if uint(len(req.Data)) > pi.maxAddBytes {
+		status = "err"
+		err := fmt.Errorf("add payload too large: %d bytes exceeds max %d", len(req.Data), pi.maxAddBytes)
+		logger.Warn(err.Error())
+		return nil, err
+	}
 
 	block, err := pi.node.Block().Put(ctx, bytes.NewReader(req.Data))
 	if err != nil {
@@ -391,12 +402,20 @@ func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace strin
 		return nil, err
 	}
 
-	data, err := io.ReadAll(reader)
+	data, err := io.ReadAll(io.LimitReader(reader, int64(pi.maxGetBytes)+1))
 	if err != nil {
 		status := "err"
 		getTotal.WithLabelValues(source, namespace, status).Inc()
 
 		logger.Warnf("failed to read data: %s", err)
+		return nil, err
+	}
+
+	if uint(len(data)) > pi.maxGetBytes {
+		status := "err"
+		getTotal.WithLabelValues(source, namespace, status).Inc()
+		err := fmt.Errorf("get payload too large: %d bytes exceeds max %d", len(data), pi.maxGetBytes)
+		logger.Warn(err.Error())
 		return nil, err
 	}
 
