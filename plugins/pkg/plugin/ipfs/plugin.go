@@ -353,12 +353,19 @@ func (pi *Plugin) publish(ctx context.Context, p path.Path, name string) (*ipns.
 		return nil, err
 	}
 
-	// cache the published name
-	_ = pi.ipnsCache.Add(name, p)
-	cacheItems.WithLabelValues("ipns").Set(float64(pi.ipnsCache.Len()))
+	pi.cachePublishedName(name, published, p)
 	logger.Infof("published %s", published.AsPath())
 
 	return &published, nil
+}
+
+func (pi *Plugin) cachePublishedName(alias string, published ipns.Name, p path.Path) {
+	// Cache the latest head under every form callers may use:
+	// local alias, bare peer ID, and canonical /ipns/<peerID>.
+	_ = pi.ipnsCache.Add(alias, p)
+	_ = pi.ipnsCache.Add(published.String(), p)
+	_ = pi.ipnsCache.Add(published.AsPath().String(), p)
+	cacheItems.WithLabelValues("ipns").Set(float64(pi.ipnsCache.Len()))
 }
 
 func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace string) ([]byte, error) {
@@ -408,10 +415,18 @@ func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace strin
 func (pi *Plugin) keyForName(ctx context.Context, name string) (iface.Key, error) {
 	logger := utils.GetLogger("orbitport:ipfs")
 
-	keys, err := pi.node.Key().List(ctx)
-	if err != nil {
-		logger.Warnf("failed to list keys: %s", err)
-		return nil, err
+	// Prefer direct key lookup by alias instead of depending on key listing support.
+	// Some IPFS deployments expose key generation and publishing but not key listing.
+	key, _, err := pi.node.Key().Sign(ctx, name, []byte("orbitport-key-lookup"))
+	if err == nil {
+		return key, nil
+	}
+	logger.Debugf("direct key lookup via sign failed for %q: %s", name, err)
+
+	keys, listErr := pi.node.Key().List(ctx)
+	if listErr != nil {
+		logger.Warnf("failed to list keys: %s", listErr)
+		return nil, errors.Join(err, listErr)
 	}
 
 	for _, key := range keys {
