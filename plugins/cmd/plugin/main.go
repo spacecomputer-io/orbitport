@@ -66,6 +66,7 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
+		healthCheck = beaconpn.HealthCheck
 
 		logger.Info("Beacon plugin ready")
 

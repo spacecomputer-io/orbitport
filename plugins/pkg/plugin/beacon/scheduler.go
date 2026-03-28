@@ -6,8 +6,31 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 )
+
+type executionStatus string
+
+const (
+	executionStatusSuccess   executionStatus = "success"
+	executionStatusRetryable executionStatus = "retryable"
+	executionStatusStale     executionStatus = "stale"
+)
+
+type executionResult struct {
+	status    executionStatus
+	err       error
+	successAt time.Time
+}
+
+type beaconRunState struct {
+	inFlight            bool
+	lastSuccess         time.Time
+	retryAfter          time.Time
+	consecutiveFailures uint32
+	lastError           string
+}
 
 type Scheduler struct {
 	threads utils.ThreadControl
@@ -17,18 +40,18 @@ type Scheduler struct {
 
 	q chan BeaconMetadata // channel to hold beacon update/exec events
 
-	lastExecs map[string]time.Time
-	lock      sync.RWMutex
+	states map[string]*beaconRunState
+	lock   sync.RWMutex
 }
 
 // NewScheduler creates a new Scheduler instance for managing beacon execution.
 func NewScheduler(cfg Config, registry *Registry) *Scheduler {
 	s := &Scheduler{
-		threads:   utils.NewThreadControl(),
-		cfg:       cfg,
-		registry:  registry,
-		q:         make(chan BeaconMetadata, 16),
-		lastExecs: make(map[string]time.Time),
+		threads:  utils.NewThreadControl(),
+		cfg:      cfg,
+		registry: registry,
+		q:        make(chan BeaconMetadata, 16),
+		states:   make(map[string]*beaconRunState),
 	}
 
 	// Register gauge, closure captures s.q, queueDepth is scaped automatically by prometheus (less stressful than manually setting value)
@@ -51,7 +74,7 @@ func (s *Scheduler) Start(ctx context.Context) error {
 
 	// Start a background thread to periodically update last execution times
 	s.threads.Go(func(ctx context.Context) {
-		ticker := time.NewTicker(10 * time.Second) // Adjust the interval as needed
+		ticker := time.NewTicker(time.Duration(s.cfg.SchedulerTickInterval) * time.Second)
 		defer ticker.Stop()
 
 		for {
@@ -84,8 +107,126 @@ func (s *Scheduler) Queue() <-chan BeaconMetadata {
 	return s.q
 }
 
+func (s *Scheduler) stateLocked(name string) *beaconRunState {
+	if st, ok := s.states[name]; ok {
+		return st
+	}
+
+	st := &beaconRunState{}
+	s.states[name] = st
+	beaconInFlight.WithLabelValues(name).Set(0)
+	consecutiveFailures.WithLabelValues(name).Set(0)
+	lastSuccessTimestampSeconds.WithLabelValues(name).Set(0)
+	retryAfterTimestampSeconds.WithLabelValues(name).Set(0)
+	return st
+}
+
+func backoffDelay(baseDelay, maxDelay time.Duration, failures uint32) time.Duration {
+	if failures == 0 {
+		return baseDelay
+	}
+
+	delay := baseDelay
+	for i := uint32(1); i < failures; i++ {
+		delay *= 2
+		if delay >= maxDelay {
+			return maxDelay
+		}
+	}
+	if delay > maxDelay {
+		return maxDelay
+	}
+	return delay
+}
+
+func (s *Scheduler) noteSuccessLocked(name string, ts time.Time) {
+	st := s.stateLocked(name)
+	st.lastSuccess = ts
+	st.retryAfter = time.Time{}
+	st.consecutiveFailures = 0
+	st.lastError = ""
+	lastSuccessTimestampSeconds.WithLabelValues(name).Set(float64(ts.Unix()))
+	retryAfterTimestampSeconds.WithLabelValues(name).Set(0)
+	consecutiveFailures.WithLabelValues(name).Set(0)
+}
+
+func (s *Scheduler) completeExecution(metadata BeaconMetadata, result executionResult) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	now := time.Now()
+	st := s.stateLocked(metadata.Name)
+	st.inFlight = false
+	beaconInFlight.WithLabelValues(metadata.Name).Set(0)
+
+	switch result.status {
+	case executionStatusSuccess:
+		ts := result.successAt
+		if ts.IsZero() {
+			ts = now
+		}
+		s.noteSuccessLocked(metadata.Name, ts)
+	case executionStatusStale:
+		st.retryAfter = now.Add(time.Duration(s.cfg.StaleRetryDelay) * time.Second)
+		st.lastError = ""
+		retryAfterTimestampSeconds.WithLabelValues(metadata.Name).Set(float64(st.retryAfter.Unix()))
+		retryScheduledTotal.WithLabelValues(metadata.Name, "stale").Inc()
+		staleAttemptTotal.WithLabelValues(metadata.Name).Inc()
+	case executionStatusRetryable:
+		st.consecutiveFailures++
+		st.lastError = ""
+		if result.err != nil {
+			st.lastError = result.err.Error()
+		}
+		delay := backoffDelay(
+			time.Duration(s.cfg.RetryBaseDelay)*time.Second,
+			time.Duration(s.cfg.RetryMaxDelay)*time.Second,
+			st.consecutiveFailures,
+		)
+		st.retryAfter = now.Add(delay)
+		consecutiveFailures.WithLabelValues(metadata.Name).Set(float64(st.consecutiveFailures))
+		retryAfterTimestampSeconds.WithLabelValues(metadata.Name).Set(float64(st.retryAfter.Unix()))
+		retryScheduledTotal.WithLabelValues(metadata.Name, "retryable").Inc()
+	}
+}
+
+func maxDuration(a, b time.Duration) time.Duration {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func (s *Scheduler) HealthCheck(_ context.Context) (health.HealthState, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	now := time.Now()
+	for _, beacon := range s.registry.Beacons {
+		st, ok := s.states[beacon.Name]
+		if !ok {
+			continue
+		}
+
+		if st.consecutiveFailures < s.cfg.HealthFailureThreshold {
+			continue
+		}
+
+		grace := maxDuration(beacon.Interval*2, 30*time.Second)
+		if st.lastSuccess.IsZero() || now.Sub(st.lastSuccess) > grace {
+			errMsg := st.lastError
+			if errMsg == "" {
+				errMsg = "repeated execution failures"
+			}
+			return health.HealthStateUnhealthy, fmt.Errorf("beacon %s unhealthy: %s", beacon.Name, errMsg)
+		}
+	}
+
+	return health.HealthStateHealthy, nil
+}
+
 // checkAndTriggerBeacons is called periodically to check if any beacons need to be executed based on their cron schedules.
-// It updates the last execution times and queues beacons for processing.
+// It queues beacons for processing when they are due or when a retry becomes eligible.
 // This function is thread-safe and uses a mutex to protect access to shared state.
 func (s *Scheduler) checkAndTriggerBeacons() {
 	s.lock.Lock()
@@ -93,32 +234,44 @@ func (s *Scheduler) checkAndTriggerBeacons() {
 
 	schedTickTotal.Inc()
 	logger := utils.GetLogger("orbitport:beacon:scheduler")
+	now := time.Now()
 
 	for _, beacon := range s.registry.Beacons {
+		st := s.stateLocked(beacon.Name)
 		if beacon.Interval == 0 {
 			skippedTotal.WithLabelValues(beacon.Name, "no_interval").Inc()
 			continue // Skip beacons without a cron schedule
 		}
-		// Check if the beacon needs to be updated based on its cron schedule
-		if lastExec, exists := s.lastExecs[beacon.Name]; exists {
-			if time.Since(lastExec) < beacon.Interval {
+
+		if st.inFlight {
+			skippedTotal.WithLabelValues(beacon.Name, "in_flight").Inc()
+			continue
+		}
+
+		if !st.retryAfter.IsZero() {
+			if now.Before(st.retryAfter) {
+				skippedTotal.WithLabelValues(beacon.Name, "retry_backoff").Inc()
+				continue
+			}
+		} else if !st.lastSuccess.IsZero() {
+			if now.Sub(st.lastSuccess) < beacon.Interval {
 				skippedTotal.WithLabelValues(beacon.Name, "too_recent").Inc()
 				continue // Skip if the beacon was recently updated
 			}
 		}
 
-		// Add the beacon to the queue for processing
 		logger.Infof("Scheduling beacon execution for: %s, with interval: %v", beacon.Name, beacon.Interval)
 		select {
 		case s.q <- beacon:
 			logger.Debugf("Beacon execution queued for: %s", beacon.Name)
-			s.lastExecs[beacon.Name] = time.Now() // Update last execution time
+			st.inFlight = true
+			st.retryAfter = time.Time{}
+			beaconInFlight.WithLabelValues(beacon.Name).Set(1)
+			retryAfterTimestampSeconds.WithLabelValues(beacon.Name).Set(0)
 			scheduledExecutionsTotal.WithLabelValues(beacon.Name).Inc()
 		default:
 			logger.Warnf("Beacon queue is full, skipping execution for: %s", beacon.Name)
 			skippedTotal.WithLabelValues(beacon.Name, "queue_full").Inc()
-			// TODO: Handle the case where the queue is full
-			// This could involve logging, retrying later, or dropping the beacon
 			continue
 		}
 	}
@@ -145,14 +298,14 @@ func (s *Scheduler) updateLastExecs(ctx context.Context) error {
 			continue // Skip this beacon if we can't load its last block
 		}
 		logger.Infof("lastBlock fetched %v\n", lastBlock)
-		s.setLastExec(beacon.Name, time.Unix(lastBlock.Timestamp, 0))
+		s.setLastSuccess(beacon.Name, time.Unix(lastBlock.Timestamp, 0))
 	}
 	return nil
 }
 
-func (s *Scheduler) setLastExec(beacon string, t time.Time) {
+func (s *Scheduler) setLastSuccess(beacon string, t time.Time) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.lastExecs[beacon] = t
+	s.noteSuccessLocked(beacon, t)
 }

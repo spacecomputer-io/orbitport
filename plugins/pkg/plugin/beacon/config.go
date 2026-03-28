@@ -1,8 +1,6 @@
 package beacon
 
-import (
-	"github.com/spf13/viper"
-)
+import "github.com/spf13/viper"
 
 type Config struct {
 	IPFSPlugin               string `json:"ipfs_plugin"`
@@ -14,6 +12,11 @@ type Config struct {
 	BeaconInterval           int32  `json:"beacon_interval"`
 	IPFSAddress              string `json:"ipfs_address"`
 	RegistryRetrievalTimeout int32  `json:"registry_retrieval_timeout"`
+	SchedulerTickInterval    int32  `json:"scheduler_tick_interval"`
+	RetryBaseDelay           int32  `json:"retry_base_delay"`
+	RetryMaxDelay            int32  `json:"retry_max_delay"`
+	StaleRetryDelay          int32  `json:"stale_retry_delay"`
+	HealthFailureThreshold   uint32 `json:"health_failure_threshold"`
 }
 
 func readFromEnv() Config {
@@ -29,6 +32,11 @@ func readFromEnv() Config {
 		BeaconInterval:           viper.GetInt32("BEACON_UPDATE_INTERVAL"),
 		IPFSAddress:              viper.GetString("IPFS_ADDRESS"),
 		RegistryRetrievalTimeout: viper.GetInt32("REGISTRY_RETRIEVAL_TIMEOUT"),
+		SchedulerTickInterval:    viper.GetInt32("SCHEDULER_TICK_INTERVAL"),
+		RetryBaseDelay:           viper.GetInt32("RETRY_BASE_DELAY"),
+		RetryMaxDelay:            viper.GetInt32("RETRY_MAX_DELAY"),
+		StaleRetryDelay:          viper.GetInt32("STALE_RETRY_DELAY"),
+		HealthFailureThreshold:   viper.GetUint32("HEALTH_FAILURE_THRESHOLD"),
 	}
 }
 
@@ -42,4 +50,9 @@ func setDefaults() {
 	viper.SetDefault("BEACON_UPDATE_INTERVAL", 60)
 	viper.SetDefault("IPFS_ADDRESS", "http://ipfs-node:5001")
 	viper.SetDefault("REGISTRY_RETRIEVAL_TIMEOUT", 90)
+	viper.SetDefault("SCHEDULER_TICK_INTERVAL", 1)
+	viper.SetDefault("RETRY_BASE_DELAY", 2)
+	viper.SetDefault("RETRY_MAX_DELAY", 60)
+	viper.SetDefault("STALE_RETRY_DELAY", 2)
+	viper.SetDefault("HEALTH_FAILURE_THRESHOLD", 3)
 }
