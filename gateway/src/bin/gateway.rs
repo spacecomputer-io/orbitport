@@ -52,13 +52,17 @@ async fn main() -> Result<(), GatewayError> {
         });
     }
 
-    let service_manager = service_manager::wait_for_service_manager(
-        args.auth_plugin.as_str(),
-        args.masterseed_plugin.as_str(),
+    service_manager::wait_for_deps(
+        vec![
+            args.auth_plugin.to_string(),
+            args.masterseed_plugin.to_string(),
+        ],
         std::time::Duration::from_secs(60),
         shutdown.clone(),
     )
     .await?;
+    let service_manager =
+        service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
 
     let metrics_port = args.metric_port;
     tokio::spawn(async move {

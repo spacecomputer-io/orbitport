@@ -103,64 +103,6 @@ pub async fn wait_for_deps(
     }
 }
 
-pub async fn wait_for_service_manager(
-    auth_url: &str,
-    masterseed_url: &str,
-    max_retry_delay: Duration,
-    shutdown: Arc<Notify>,
-) -> Result<ServiceManager, GatewayError> {
-    wait_for_deps(
-        vec![auth_url.to_string(), masterseed_url.to_string()],
-        max_retry_delay,
-        shutdown.clone(),
-    )
-    .await?;
-
-    let mut retry_delay = Duration::from_secs(1);
-    let start_time = std::time::Instant::now();
-    let shutdown = shutdown.notified();
-    tokio::pin!(shutdown);
-
-    loop {
-        let service_manager_result = tokio::select! {
-            _ = &mut shutdown => {
-                return Err(GatewayError::TerminationError(
-                    "Received shutdown signal while initializing service manager".to_string(),
-                ));
-            }
-            result = ServiceManager::new(auth_url, masterseed_url) => result,
-        };
-
-        match service_manager_result {
-            Ok(service_manager) => {
-                tracing::info!(
-                    "Service manager initialized successfully after {:?}",
-                    start_time.elapsed()
-                );
-                return Ok(service_manager);
-            }
-            Err(err) => {
-                tracing::warn!(
-                    "Failed to initialize service manager after {:?}: {}. Retrying in {:?}",
-                    start_time.elapsed(),
-                    err,
-                    retry_delay
-                );
-            }
-        }
-
-        tokio::select! {
-            _ = &mut shutdown => {
-                return Err(GatewayError::TerminationError(
-                    "Received shutdown signal while initializing service manager".to_string(),
-                ));
-            }
-            _ = tokio::time::sleep(retry_delay) => {}
-        }
-        retry_delay = (retry_delay * 2).min(max_retry_delay);
-    }
-}
-
 pub struct ServiceManager {
     auth_client: AuthPluginClient<Channel>,
     trng_svc: TrngService,
