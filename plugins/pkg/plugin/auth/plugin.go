@@ -28,15 +28,9 @@ func NewPlugin() (*Plugin, error) {
 	logger := utils.GetLogger("orbitport:auth")
 	logger.Infof("creating plugin with config: %+v", cfg)
 
-	// explicit development bypass
-	if cfg.DisableAuth {
-		logger.Warn("CRITICAL: Authentication is explicitly DISABLED via ORBITPORT_UNSAFE_DEV_DISABLE_AUTH. Do not use in production!")
-		return new(Plugin), nil
-	}
-
 	// strict fail-closed validation
 	if len(cfg.Auth0Domain) == 0 || len(cfg.Auth0Audience) == 0 {
-		return nil, fmt.Errorf("FATAL: Auth0Domain or Auth0Audience is missing. Refusing to start insecurely. Set ORBITPORT_UNSAFE_DEV_DISABLE_AUTH=true to bypass locally")
+		return nil, fmt.Errorf("FATAL: Auth0Domain or Auth0Audience is missing. Refusing to start without auth configuration")
 	}
 
 	logger.Debug("Auth0 domain is set, creating Auth plugin")
@@ -79,13 +73,6 @@ func newAuthPlugin(auth0Domain, auth0Audience string) (*Plugin, error) {
 // It validates the JWT token using the Auth0 sdk.
 func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
 	logger := utils.GetLogger("orbitport:auth")
-	if p.jwtValidator == nil {
-		// log a warn on every request to make it obvious if this sneaks into prod
-		logger.Warn("Processing request with AUTHENTICATION DISABLED")
-		return &proto.TokenValidationResponse{
-			Ok: true,
-		}, nil
-	}
 	logger.Debug("Validating token")
 	_, err := p.jwtValidator.ValidateToken(ctx, req.Token)
 	if err != nil {

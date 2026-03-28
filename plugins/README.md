@@ -31,6 +31,8 @@ make ENV_FILE=.auth.env docker-run
 ```
 
 ## Testing (e2e)
+`dev.docker-compose.yaml` uses a dedicated noop auth plugin for local development.
+
 for happy-path (testing aptos connectivity):
 ```sh
 make ENV_FILE=.dev.env.ci E2E_PROFILE=happy devenv-up
