@@ -421,7 +421,7 @@ func (pi *Plugin) keyForName(ctx context.Context, name string) (iface.Key, error
 	if err == nil {
 		return key, nil
 	}
-	logger.Warnf("direct key lookup via sign failed for %q: %s", name, err)
+	logger.Debugf("direct key lookup via sign failed for %q: %s", name, err)
 
 	keys, listErr := pi.node.Key().List(ctx)
 	if listErr != nil {
