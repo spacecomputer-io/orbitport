@@ -76,8 +76,8 @@ func (p *Plugin) Close() error {
 	logger := utils.GetLogger("orbitport:beacon")
 	logger.Info("Stopping beacon plugin...")
 
-	_ = p.scheduler.Close()
-	_ = p.builder.Close()
+	p.scheduler.Close()
+	p.builder.Close()
 
 	return nil
 }

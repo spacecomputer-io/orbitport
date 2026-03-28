@@ -91,15 +91,13 @@ func (s *Scheduler) Start(ctx context.Context) error {
 }
 
 // Close stops the scheduler and any background tasks it has started.
-func (s *Scheduler) Close() error {
+func (s *Scheduler) Close() {
 	logger := utils.GetLogger("orbitport:beacon:scheduler")
 	logger.Info("Stopping beacon scheduler...")
 
 	// Stop all background threads
 	s.threads.Close()
 	close(s.q)
-
-	return nil
 }
 
 // Queue returns a channel that can be used to receive beacon metadata for processing.

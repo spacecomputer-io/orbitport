@@ -120,11 +120,10 @@ func (b *Builder) Start(_ context.Context) error {
 	return nil
 }
 
-func (b *Builder) Close() error {
+func (b *Builder) Close() {
 	logger := utils.GetLogger("orbitport:beacon:builder")
 	logger.Info("Stopping beacon builder...")
 	b.threads.Close()
-	return nil
 }
 
 func normalizeCIDRef(ref string) string {
