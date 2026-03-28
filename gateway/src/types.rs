@@ -85,9 +85,7 @@ impl EncryptionKey {
         let scheme = match parts[0] {
             "" => EncryptionScheme::None,
             "threshold" => EncryptionScheme::Threshold,
-            _ => {
-                return Err(GatewayError::InvalidEncryptionScheme(parts[0].to_string()));
-            }
+            x => return Err(GatewayError::InvalidEncryptionScheme(x.to_string())),
         };
         Ok(EncryptionKey { key, scheme })
     }
