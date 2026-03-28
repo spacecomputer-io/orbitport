@@ -1,4 +1,4 @@
-gitpackage beacon
+package beacon
 
 import (
 	"context"
