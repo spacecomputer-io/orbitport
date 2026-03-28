@@ -114,11 +114,9 @@ services:
     image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=auth
+      - ORBITPORT_PLUGIN=authnoop
       - ORBITPORT_GRPC_PORT=50000
-      - ORBITPORT_DEV_DISABLE_AUTH=${ORBITPORT_DEV_DISABLE_AUTH}
-      # - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
-      # - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
+      # Dev compose intentionally runs the noop auth plugin.
 
   ipfs-node:
     image: ipfs/kubo:release

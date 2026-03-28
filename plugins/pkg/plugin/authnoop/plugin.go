@@ -1,0 +1,29 @@
+package authnoop
+
+import (
+	"context"
+
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
+	"github.com/spacecomputer-io/orbitport/plugins/proto"
+)
+
+// Plugin implements a development-only auth plugin that accepts all tokens.
+type Plugin struct {
+	proto.AuthPluginServer
+}
+
+// NewPlugin creates a noop auth plugin for local development environments.
+func NewPlugin() (*Plugin, error) {
+	utils.GetLogger("orbitport:authnoop").Warn(
+		"Using noop auth plugin: all tokens will be accepted. Do not use in production!",
+	)
+	return new(Plugin), nil
+}
+
+// ValidateToken handles the ValidateToken RPC call.
+func (p *Plugin) ValidateToken(_ context.Context, _ *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
+	utils.GetLogger("orbitport:authnoop").Warn("Processing request with noop authentication")
+	return &proto.TokenValidationResponse{
+		Ok: true,
+	}, nil
+}
