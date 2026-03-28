@@ -119,6 +119,37 @@ func TestIpfsPlugin(t *testing.T) {
 		require.NoError(t, err, "failed to get updated data from IPFS via IPNS")
 		require.Equal(t, updatedData, updatedGetResp.Data, "retrieved data should match the updated payload")
 	})
+
+	t.Run("AddRejectsOversizedPayload", func(t *testing.T) {
+		pluginWithSmallAddLimit, err := createPluginWithLimits(apiPort, 16, 1048576)
+		require.NoError(t, err, "failed to create plugin with small add limit")
+
+		_, err = pluginWithSmallAddLimit.Add(ctx, &proto.AddRequest{
+			Data: []byte("this payload is definitely larger than sixteen bytes"),
+		})
+		require.Error(t, err, "expected oversized add payload to be rejected")
+		require.Contains(t, err.Error(), "add payload too large")
+	})
+
+	t.Run("GetRejectsOversizedPayload", func(t *testing.T) {
+		pluginWithDefaultLimits, err := createPluginWithLimits(apiPort, 1048576, 1048576)
+		require.NoError(t, err, "failed to create plugin with default limits")
+
+		addResp, err := pluginWithDefaultLimits.Add(ctx, &proto.AddRequest{
+			Data: []byte("this payload is larger than sixteen bytes"),
+		})
+		require.NoError(t, err, "failed to add data for oversized get test")
+
+		pluginWithSmallGetLimit, err := createPluginWithLimits(apiPort, 1048576, 16)
+		require.NoError(t, err, "failed to create plugin with small get limit")
+
+		_, err = pluginWithSmallGetLimit.Get(ctx, &proto.GetRequest{
+			Key:       addResp.Cid,
+			Namespace: "ipfs",
+		})
+		require.Error(t, err, "expected oversized get payload to be rejected")
+		require.Contains(t, err.Error(), "get payload too large")
+	})
 }
 
 func createIpfsNode(ctx context.Context, apiPort uint16) (testcontainers.Container, error) {
@@ -147,7 +178,13 @@ func createIpfsNode(ctx context.Context, apiPort uint16) (testcontainers.Contain
 }
 
 func createPlugin(ipfsApiPort uint16) (*Plugin, error) {
+	return createPluginWithLimits(ipfsApiPort, 1048576, 1048576)
+}
+
+func createPluginWithLimits(ipfsApiPort uint16, maxAddBytes, maxGetBytes uint) (*Plugin, error) {
 	viper.Set("IPFS_ADDRESS", fmt.Sprintf("http://localhost:%d", ipfsApiPort))
+	viper.Set("PLUGIN_MAX_ADD_BYTES", maxAddBytes)
+	viper.Set("PLUGIN_MAX_GET_BYTES", maxGetBytes)
 	plugin, err := NewPlugin()
 	if err != nil {
 		return nil, err
