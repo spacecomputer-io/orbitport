@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::sync::Arc;
+use tokio::sync::Notify;
 
 use gateway::{logging, server, service_manager, types::GatewayError};
 
@@ -40,10 +41,22 @@ async fn main() -> Result<(), GatewayError> {
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
 
+    let shutdown = Arc::new(Notify::new());
+    {
+        let shutdown = shutdown.clone();
+        tokio::spawn(async move {
+            match tokio::signal::ctrl_c().await {
+                Ok(()) => shutdown.notify_waiters(),
+                Err(err) => tracing::error!("Failed to listen for shutdown signal: {}", err),
+            }
+        });
+    }
+
     let service_manager = service_manager::wait_for_service_manager(
         args.auth_plugin.as_str(),
         args.masterseed_plugin.as_str(),
         std::time::Duration::from_secs(60),
+        shutdown.clone(),
     )
     .await?;
 
