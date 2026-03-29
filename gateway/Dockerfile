@@ -37,7 +37,11 @@ EOF
 
 FROM debian:trixie-slim AS final
 
+RUN groupadd --system appgroup \
+    && useradd --system --gid appgroup --no-create-home --home-dir /nonexistent appuser
 
-COPY --from=build /bin/gateway /bin/gateway
+COPY --from=build --chown=appuser:appgroup /bin/gateway /bin/gateway
+
+USER appuser
 
 ENTRYPOINT ["/bin/gateway"]
