@@ -92,8 +92,8 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
     if !is_running("gateway").await.unwrap_or(false) {
         tracing::info!("Starting orbitport");
         let env_file = env::var("OPTEST_DOTENV").unwrap_or(".dev.env".to_string());
-        std::env::set_current_dir("../").expect("Failed to change directory");
         let output = Command::new("docker-compose")
+            .current_dir("..")
             .arg("-f")
             .arg("dev.docker-compose.yaml")
             .arg("--env-file")
@@ -114,7 +114,6 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
         }
         tracing::info!("Waiting for orbitport to start");
 
-        std::env::set_current_dir("gateway").expect("Failed to change directory");
         // Wait for the containers to be up for 10 sec
         tokio::select! {
             _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
@@ -136,16 +135,14 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
 pub async fn post_test(started: bool) -> Result<(), E2EError> {
     if started {
         tracing::info!("Stopping orbitport");
-        std::env::set_current_dir("../").expect("Failed to change directory");
         let output = Command::new("docker-compose")
+            .current_dir("..")
             .arg("-f")
             .arg("dev.docker-compose.yaml")
             .arg("down")
             .output()
             .await
             .map_err(|e| E2EError::CommandError(e.to_string()))?;
-
-        std::env::set_current_dir("gateway").expect("Failed to change directory");
 
         if !output.status.success() {
             let error_message = String::from_utf8_lossy(&output.stderr);
