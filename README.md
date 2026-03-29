@@ -21,3 +21,11 @@ Orbitport is designed to be easy to use and integrate with multiple types of web
 * [Orbitport user guide](https://docs.spacecomputer.io/using-orbitport/user-guide)
 * [Orbitport dev/internal docs](docs/README.md)
 * [Public beacons list](beacons.yaml)
+
+## Contributing
+
+We welcome contributions to Orbitport! Please see our [contributing guidelines](CONTRIBUTING.md) for more information on how to get involved.
+
+## License
+
+Orbitport is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for more information.
