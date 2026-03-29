@@ -3,6 +3,7 @@ package aptosorbital
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
@@ -32,6 +33,7 @@ func NewPlugin() (*Plugin, error) {
 		WithClientID(cfg.AptosOrbitalClientId),
 		WithClientSecret(cfg.AptosOrbitalClientSecret),
 		WithRateLimit(float64(cfg.AptosOrbitalRateLimit), 2),
+		WithTimeout(time.Duration(cfg.AptosOrbitalTimeout)*time.Second),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Aptos Orbital client: %w", err)
