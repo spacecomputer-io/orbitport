@@ -18,7 +18,7 @@ var (
 			Name:      "auth_status",
 			Help:      "Status of the Aptos Orbital API authentication",
 		},
-		[]string{"url"},
+		[]string{"endpoint"},
 	)
 	authExpireCollector = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -27,7 +27,7 @@ var (
 			Name:      "auth_expire",
 			Help:      "Expiration time of the Aptos Orbital API access token",
 		},
-		[]string{"url"},
+		[]string{"endpoint"},
 	)
 )
 
