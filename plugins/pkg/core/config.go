@@ -25,13 +25,15 @@ type GrpcPluginConfig struct {
 // ReadFromEnv reads the configuration from the environment.
 func ReadFromEnv() *GrpcPluginConfig {
 	// if we running with '-e <path>' flag, load the env file
+	logger := utils.GetLogger("orbitport:plugin")
 	envFiles := make([]string, 0)
 	if len(os.Args) > 2 && os.Args[1] == "-e" {
-		logger := utils.GetLogger("orbitport:plugin")
 		logger.Infof("Using env file %s\n", os.Args[2])
 		envFiles = append(envFiles, os.Args[2])
 	}
-	_ = godotenv.Load(envFiles...)
+	if err := godotenv.Load(envFiles...); err != nil && len(envFiles) > 0 {
+		logger.Warnf("Failed to load env file(s) %v: %v", envFiles, err)
+	}
 	viper.SetEnvPrefix("ORBITPORT") // Will read env vars like ORBITPORT_VARNAME
 	viper.AutomaticEnv()            // Read in environment variables that match
 
