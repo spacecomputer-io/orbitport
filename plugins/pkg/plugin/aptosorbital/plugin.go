@@ -2,6 +2,7 @@ package aptosorbital
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
@@ -58,8 +59,17 @@ func (p *Plugin) GetTrng(ctx context.Context, req *proto.TrngRequest) (*proto.Tr
 		return resp, nil
 	}
 
-	// Aptos failed or returned no values
-	logger.Warnf("Aptos failed to deliver fresh rng, falling back to master seeds: %v", err)
+	if errors.Is(err, ErrNoDataAvailable) {
+		logger.Infof("Aptos has no fresh randomness available, falling back to master seeds")
+		return &proto.TrngResponse{Values: []string{}, Sig: ""}, nil
+	}
+
+	if err != nil {
+		logger.Warnf("Aptos failed to deliver fresh rng: %v", err)
+		return nil, err
+	}
+
+	logger.Infof("Aptos returned no fresh randomness, falling back to master seeds")
 
 	// Return empty values facilitating a fallback to MasterSeed
 	return &proto.TrngResponse{Values: []string{}, Sig: ""}, nil

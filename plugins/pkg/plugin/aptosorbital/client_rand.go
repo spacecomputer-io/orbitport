@@ -37,7 +37,7 @@ func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, num
 
 	resp, err := makeRequest[trngSeedResponse](ctx, c, "GET", urlStr, headers, nil, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make trng_seed request: %v", err)
+		return nil, fmt.Errorf("failed to make trng_seed request: %w", err)
 	}
 	if resp == nil || len(*resp) == 0 {
 		return nil, fmt.Errorf("empty response from trng_seed")

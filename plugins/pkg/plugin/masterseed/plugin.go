@@ -92,8 +92,12 @@ func (p *Plugin) startSeedFetch(ctx context.Context, defaulMastertSeeds []string
 					IgnoreSig: true,
 					Chunks:    1,
 				})
-				if err != nil || len(resp.GetValues()) == 0 {
-					logger.Warnf("Failed to fetch master seed from aptos: %v", err)
+				if err != nil {
+					logger.Warnf("Failed to fetch master seed from CTRNG provider: %v", err)
+					continue
+				}
+				if resp == nil || len(resp.GetValues()) == 0 {
+					logger.Infof("No fresh master seed available from CTRNG provider yet; keeping existing master seeds")
 					continue
 				}
 
