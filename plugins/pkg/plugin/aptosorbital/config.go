@@ -1,6 +1,8 @@
 package aptosorbital
 
 import (
+	"strings"
+
 	"github.com/spf13/viper"
 )
 
@@ -18,14 +20,18 @@ type aptosOrbitalConfig struct {
 	AptosOrbitalRateLimit float64
 }
 
+func trimValue(value string) string {
+	return strings.TrimSpace(value)
+}
+
 func readFromEnv() *aptosOrbitalConfig {
 	setDefaults()
 
 	return &aptosOrbitalConfig{
-		AptosOrbitalApiUrl:       viper.GetString("APTOS_ORBITAL_API_URL"),
-		AptosOrbitalAuthUrl:      viper.GetString("APTOS_ORBITAL_AUTH_URL"),
-		AptosOrbitalClientId:     viper.GetString("APTOS_ORBITAL_CLIENT_ID"),
-		AptosOrbitalClientSecret: viper.GetString("APTOS_ORBITAL_CLIENT_SECRET"),
+		AptosOrbitalApiUrl:       trimValue(viper.GetString("APTOS_ORBITAL_API_URL")),
+		AptosOrbitalAuthUrl:      trimValue(viper.GetString("APTOS_ORBITAL_AUTH_URL")),
+		AptosOrbitalClientId:     trimValue(viper.GetString("APTOS_ORBITAL_CLIENT_ID")),
+		AptosOrbitalClientSecret: trimValue(viper.GetString("APTOS_ORBITAL_CLIENT_SECRET")),
 		AptosOrbitalRateLimit:    viper.GetFloat64("APTOS_ORBITAL_RATE_LIMIT"),
 	}
 }
