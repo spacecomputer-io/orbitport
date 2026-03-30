@@ -21,7 +21,7 @@ type masterSeedConfig struct {
 }
 
 func extractSeeds() []string {
-	rawSeeds := viper.GetString("DEFAULT_MASTER_SEEDS")
+	rawSeeds := strings.TrimSpace(viper.GetString("DEFAULT_MASTER_SEEDS"))
 	var seeds []string
 	if rawSeeds != "" {
 		parts := strings.Split(rawSeeds, ",")
