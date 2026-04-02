@@ -11,7 +11,9 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	"github.com/spacecomputer-io/orbitport/plugins/proto"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
 type Plugin struct {
@@ -22,6 +24,14 @@ type Plugin struct {
 	scheduler *Scheduler
 	builder   *Builder
 }
+
+type registryQueryState int
+
+const (
+	registryQueryStateMissingKey registryQueryState = iota
+	registryQueryStateUnpublishedKey
+	registryQueryStateLoaded
+)
 
 // NewPlugin creates a new Beacon plugin with a storage layer.
 func NewPlugin() (*Plugin, error) {
@@ -209,6 +219,12 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 		}
 	}()
 
+	return loadRegistryWithClient(ctx, cfg, ipfs)
+}
+
+func loadRegistryWithClient(ctx context.Context, cfg Config, ipfs proto.IpfsPluginClient) (*Registry, error) {
+	logger := utils.GetLogger("orbitport:beacon:registry_loader")
+
 	// persisted registry state identifier
 	registryAlias := cfg.BeaconRegistry
 	if registryAlias == "" {
@@ -219,12 +235,12 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 	waitDuration := 2 * time.Second
 
 	var reg *Registry
-	var exists bool
+	var queryState registryQueryState
 
 	for i := 0; i < maxRetries; i++ {
 		var queryErr error
 
-		reg, _, exists, queryErr = queryRegistry(ctx, ipfs, registryAlias, cfg)
+		reg, _, queryState, queryErr = queryRegistry(ctx, ipfs, registryAlias, cfg)
 		if queryErr == nil {
 			break
 		}
@@ -248,17 +264,27 @@ func loadRegistry(ctx context.Context, cfg Config) (*Registry, error) {
 
 	beaconName := cfg.DefaultBeaconName
 
-	if exists {
+	switch queryState {
+	case registryQueryStateLoaded:
+		if reg == nil {
+			return nil, fmt.Errorf("registry %q reported as loaded but returned no data", registryAlias)
+		}
+
 		// If the registry exists, reuse the beacon if present
 		if meta, ok := findBeaconInRegistry(reg, beaconName); ok {
 			logger.Infof("Found beacon %q in registry %q; resuming.", beaconName, registryAlias)
 			return &Registry{Beacons: []BeaconMetadata{meta}}, nil
 		}
 		logger.Infof("Beacon %q not in registry %q; creating and upserting.", beaconName, registryAlias)
-	} else {
+	case registryQueryStateMissingKey:
 		// Fresh Install or Renamed Registry - create registry
 		logger.Infof("Registry %q not found (Key missing locally); initializing new registry.", registryAlias)
 		reg = &Registry{Beacons: []BeaconMetadata{}}
+	case registryQueryStateUnpublishedKey:
+		logger.Infof("Registry %q key exists locally but has no published head yet; initializing new registry.", registryAlias)
+		reg = &Registry{Beacons: []BeaconMetadata{}}
+	default:
+		return nil, fmt.Errorf("registry %q lookup returned unknown state %d", registryAlias, queryState)
 	}
 
 	// Create the beacon (two-step genesis), then upsert into the registry and publish
@@ -308,8 +334,9 @@ func getMasterSeedPluginClient(cfg Config) (*grpc.ClientConn, proto.MasterSeedPl
 
 // queryRegistry tries to fetch the Orbitport registry JSON from IPNS <alias>.
 // - If Key is missing: Safe to create
-// - If Key exists but Network/Timeout: returns Error (trigger retry)
-func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string, cfg Config) (*Registry, string, bool, error) {
+// - If Key exists but no registry head was ever published: Safe to initialize
+// - If Key exists but Network/Timeout/Corruption: returns Error (trigger retry/fail)
+func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias string, cfg Config) (*Registry, string, registryQueryState, error) {
 	logger := utils.GetLogger("orbitport:beacon:registry_query")
 
 	timeoutVal := cfg.RegistryRetrievalTimeout
@@ -324,13 +351,13 @@ func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias strin
 	ki, err := ipfs.KeyInfo(gctx, &proto.KeyInfoRequest{PublishName: alias}, grpc.WaitForReady(true))
 	if err != nil {
 		// failure to check to propagate error to trigger retry
-		return nil, "", false, fmt.Errorf("KeyInfo check failed: %w", err)
+		return nil, "", registryQueryStateMissingKey, fmt.Errorf("KeyInfo check failed: %w", err)
 	}
 
 	if ki == nil || ki.IpnsName == "" {
 		// Alias not present yet or never published
 		logger.Debugf("KeyInfo(%v) returned empty. Assuming fresh registry.", alias)
-		return nil, "", false, nil
+		return nil, "", registryQueryStateMissingKey, nil
 	}
 
 	// Resolve current head of the registry
@@ -340,18 +367,21 @@ func queryRegistry(ctx context.Context, ipfs proto.IpfsPluginClient, alias strin
 		Namespace: "ipns",
 	}, grpc.WaitForReady(true))
 	if err != nil {
-		// Alias exists but nothing published yet
+		if status.Code(err) == codes.NotFound {
+			logger.Infof("Key %q exists locally, but no registry head is published yet. Treating as cold start.", alias)
+			return nil, "", registryQueryStateUnpublishedKey, nil
+		}
+
 		logger.Warnf("Get(%s) failed: %v", ki.IpnsName, err)
-		// force retry
-		return nil, "", false, fmt.Errorf("key exists (%s) but IPNS Get failed: %w", ki.IpnsName, err)
+		return nil, "", registryQueryStateUnpublishedKey, fmt.Errorf("key exists (%s) but IPNS Get failed: %w", ki.IpnsName, err)
 	}
 
 	var reg Registry
 	if err := reg.Unmarshal(resp.GetData()); err != nil {
-		return nil, "", true, fmt.Errorf("unmarshal registry: %w", err)
+		return nil, "", registryQueryStateLoaded, fmt.Errorf("unmarshal registry: %w", err)
 	}
 
-	return &reg, resp.GetPath(), true, nil
+	return &reg, resp.GetPath(), registryQueryStateLoaded, nil
 }
 
 func findBeaconInRegistry(reg *Registry, name string) (BeaconMetadata, bool) {

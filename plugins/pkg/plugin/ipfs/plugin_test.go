@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestIpfsPlugin(t *testing.T) {
@@ -149,6 +151,19 @@ func TestIpfsPlugin(t *testing.T) {
 		})
 		require.Error(t, err, "expected oversized get payload to be rejected")
 		require.Contains(t, err.Error(), "get payload too large")
+	})
+
+	t.Run("GetReturnsNotFoundForUnpublishedIPNSKey", func(t *testing.T) {
+		publishName := fmt.Sprintf("test-unpublished-name-%d", time.Now().UnixNano())
+		_, err := plugin.node.Key().Generate(ctx, publishName)
+		require.NoError(t, err, "failed to generate unpublished IPNS key")
+
+		_, err = plugin.Get(ctx, &proto.GetRequest{
+			Key:       publishName,
+			Namespace: "ipns",
+		})
+		require.Error(t, err, "expected unpublished IPNS key lookup to fail")
+		require.Equal(t, codes.NotFound, status.Code(err), "expected unpublished IPNS key lookup to return NotFound")
 	})
 }
 

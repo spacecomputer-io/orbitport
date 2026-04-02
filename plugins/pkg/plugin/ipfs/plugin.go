@@ -14,10 +14,13 @@ import (
 	"github.com/ipfs/boxo/ipns"
 	"github.com/ipfs/boxo/path"
 	"github.com/ipfs/go-cid"
+	cmds "github.com/ipfs/go-ipfs-cmds"
 	"github.com/ipfs/kubo/client/rpc"
 	iface "github.com/ipfs/kubo/core/coreiface"
 	"github.com/ipfs/kubo/core/coreiface/options"
 	ma "github.com/multiformats/go-multiaddr"
+	"google.golang.org/grpc/codes"
+	statuspkg "google.golang.org/grpc/status"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	pluginsproto "github.com/spacecomputer-io/orbitport/plugins/proto"
@@ -206,6 +209,10 @@ func (pi *Plugin) Get(ctx context.Context, req *pluginsproto.GetRequest) (*plugi
 				)
 
 				logErrorChain(logger, err)
+
+				if isUnpublishedIPNSRecordError(err) {
+					return nil, statuspkg.Errorf(codes.NotFound, "ipns record not published for %q", normalized)
+				}
 
 				return nil, err
 			}
@@ -516,4 +523,20 @@ func logErrorChain(logger interface {
 	if se, ok := err.(hasStatus); ok {
 		logger.Warnf("  statusCode=%d", se.StatusCode())
 	}
+}
+
+func isUnpublishedIPNSRecordError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var cmdErr *rpc.Error
+	if !errors.As(err, &cmdErr) {
+		return false
+	}
+
+	return cmdErr.Code == cmds.ErrNormal
 }
