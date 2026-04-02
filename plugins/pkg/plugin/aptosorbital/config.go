@@ -18,6 +18,8 @@ type aptosOrbitalConfig struct {
 	AptosOrbitalClientSecret string
 	// AptosOrbitalRateLimit is the rate limit for the Aptos Orbital API.
 	AptosOrbitalRateLimit float64
+	// AptosOrbitalTimeout is the timeout in seconds for Aptos Orbital HTTP requests.
+	AptosOrbitalTimeout int
 }
 
 func trimValue(value string) string {
@@ -33,6 +35,7 @@ func readFromEnv() *aptosOrbitalConfig {
 		AptosOrbitalClientId:     trimValue(viper.GetString("APTOS_ORBITAL_CLIENT_ID")),
 		AptosOrbitalClientSecret: trimValue(viper.GetString("APTOS_ORBITAL_CLIENT_SECRET")),
 		AptosOrbitalRateLimit:    viper.GetFloat64("APTOS_ORBITAL_RATE_LIMIT"),
+		AptosOrbitalTimeout:      viper.GetInt("APTOS_ORBITAL_TIMEOUT"),
 	}
 }
 
@@ -42,4 +45,5 @@ func setDefaults() {
 	viper.SetDefault("APTOS_ORBITAL_CLIENT_ID", "")
 	viper.SetDefault("APTOS_ORBITAL_CLIENT_SECRET", "")
 	viper.SetDefault("APTOS_ORBITAL_RATE_LIMIT", 0.5)
+	viper.SetDefault("APTOS_ORBITAL_TIMEOUT", 20)
 }

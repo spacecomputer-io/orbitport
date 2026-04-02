@@ -43,7 +43,7 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 		logger:     logger,
 		opts:       o,
 		limiter:    limiter,
-		authClient: oauth.NewOAuthClient(o.clientID, o.clientSecret, o.authURL),
+		authClient: oauth.NewOAuthClient(o.clientID, o.clientSecret, o.authURL, o.timeout),
 	}, nil
 }
 

@@ -50,7 +50,7 @@ func (o *ClientOptions) defaults() error {
 		o.rateBurst = 1
 	}
 	if o.timeout == 0 {
-		o.timeout = 5 * time.Second
+		o.timeout = 20 * time.Second
 	}
 	return nil
 }
@@ -59,7 +59,7 @@ func (o *ClientOptions) defaults() error {
 type ClientOption func(*ClientOptions)
 
 // WithTimeout sets the timeout for the client.
-// The default value is 5 seconds.
+// The default value is 20 seconds.
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(o *ClientOptions) {
 		o.timeout = timeout
