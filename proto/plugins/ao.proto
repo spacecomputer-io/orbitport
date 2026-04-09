@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 
-package trng;
+package ao;
 
 service RandomnessPlugin {
     rpc GetTrng(TrngRequest) returns (TrngResponse); 

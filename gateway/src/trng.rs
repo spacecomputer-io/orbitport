@@ -2,9 +2,9 @@ use threshold::core::CiphertextMsg;
 use tonic::transport::Channel;
 
 use crate::metrics;
-use crate::proto::trng::TrngResponse;
+use crate::proto::plugins::ao::TrngResponse;
 
-use crate::proto::masterseed::{
+use crate::proto::plugins::masterseed::{
     GetSeedsRequest, GetSeedsResponse, master_seed_plugin_client::MasterSeedPluginClient,
 };
 

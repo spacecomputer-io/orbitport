@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -9,10 +9,20 @@ use tonic_health::pb::{
 };
 
 use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
-use crate::trng::TrngService;
-use crate::types::{GatewayError, ServiceHandler, ServiceRequest, ServiceResponse};
 
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum PluginError {
+    #[error("Internal error: {0}")]
+    InternalError(String),
+    #[error("Failed to connect to plugin: {0}")]
+    ConnectionError(String),
+    #[error("Plugin not found: {0}")]
+    PluginNotFound(String),
+}
 
 async fn check_health(addr: &str) -> Result<HealthCheckResponse, tonic::Status> {
     let channel = Channel::from_shared(addr.to_string())
@@ -28,11 +38,11 @@ async fn check_health(addr: &str) -> Result<HealthCheckResponse, tonic::Status> 
         .map(|response| response.into_inner())
 }
 
-pub async fn wait_for_deps(
+pub async fn wait_for(
     addrs: Vec<String>,
     max_retry_delay: Duration,
     shutdown: Arc<Notify>,
-) -> Result<(), GatewayError> {
+) -> Result<(), PluginError> {
     let mut retry_delay = Duration::from_secs(1);
     let start_time = std::time::Instant::now();
     let shutdown = shutdown.notified();
@@ -52,7 +62,7 @@ pub async fn wait_for_deps(
             };
             let health_result = tokio::select! {
                 _ = &mut shutdown => {
-                    return Err(GatewayError::TerminationError(
+                    return Err(PluginError::InternalError(
                         "Received shutdown signal while waiting for dependencies".to_string(),
                     ));
                 }
@@ -93,7 +103,7 @@ pub async fn wait_for_deps(
         );
         tokio::select! {
             _ = &mut shutdown => {
-                return Err(GatewayError::TerminationError(
+                return Err(PluginError::InternalError(
                     "Received shutdown signal while waiting for dependencies".to_string(),
                 ));
             }
@@ -103,44 +113,43 @@ pub async fn wait_for_deps(
     }
 }
 
-pub struct ServiceManager {
-    auth_client: AuthPluginClient<Channel>,
-    trng_svc: TrngService,
+pub struct PluginCatalog {
+    urls: Arc<HashMap<String, String>>,
 }
 
-impl ServiceManager {
-    pub async fn new(auth_url: &str, masterseed_url: &str) -> Result<ServiceManager, GatewayError> {
-        let masterseed_client = MasterSeedPluginClient::connect(masterseed_url.to_string())
-            .await
-            .map_err(|e| GatewayError::ServiceConnectionError(e.to_string()))?;
+impl PluginCatalog {
+    pub fn new(auth_url: &str, masterseed_url: &str) -> Self {
+        let mut urls = HashMap::new();
+        urls.insert("auth".to_string(), auth_url.to_string());
+        urls.insert("masterseed".to_string(), masterseed_url.to_string());
 
-        let trng_svc = TrngService::new(masterseed_client);
-
-        let auth_client = AuthPluginClient::connect(auth_url.to_string())
-            .await
-            .map_err(|e| {
-                tracing::error!("Failed to connect to auth plugin: {}", e);
-                GatewayError::ServiceConnectionError(e.to_string())
-            })?;
-
-        Ok(ServiceManager {
-            auth_client,
-            trng_svc,
-        })
-    }
-
-    pub fn get_auth_client(&self) -> AuthPluginClient<Channel> {
-        self.auth_client.clone()
-    }
-
-    pub async fn handle(&self, svc_req: ServiceRequest) -> Result<ServiceResponse, GatewayError> {
-        match svc_req.service {
-            ref service if service == "trng" => {
-                let mut svc = self.trng_svc.clone();
-                let response = svc.handle(svc_req).await?;
-                Ok(response)
-            }
-            ref service => Err(GatewayError::ServiceNotFoundError(service.clone())),
+        PluginCatalog {
+            urls: Arc::new(urls),
         }
+    }
+
+    pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {
+        let url = self
+            .urls
+            .get(plugin_name)
+            .ok_or_else(|| PluginError::PluginNotFound(plugin_name.to_string()))?;
+
+        Channel::from_shared(url.to_string())
+            .map_err(|e| PluginError::ConnectionError(format!("Failed to create channel: {e}")))?
+            .connect()
+            .await
+            .map_err(|_e| PluginError::ConnectionError(plugin_name.to_string()))
+    }
+
+    pub async fn get_auth_client(&self) -> Result<AuthPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("auth").await?;
+        Ok(AuthPluginClient::new(channel))
+    }
+
+    pub async fn get_masterseed_client(
+        &self,
+    ) -> Result<MasterSeedPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("masterseed").await?;
+        Ok(MasterSeedPluginClient::new(channel))
     }
 }

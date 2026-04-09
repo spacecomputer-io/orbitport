@@ -70,9 +70,14 @@ async fn main() -> Result<(), GatewayError> {
     });
 
     let service_manager = Arc::new(service_manager);
+    let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
+        &args.auth_plugin,
+        &args.masterseed_plugin,
+    ));
     server::start(
         args.http_port,
         service_manager.clone(),
+        plugin_catalog.clone(),
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
