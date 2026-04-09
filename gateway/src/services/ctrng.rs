@@ -5,7 +5,7 @@ use crate::metrics;
 use crate::proto::plugins::masterseed::{
     GetSeedsRequest, GetSeedsResponse, master_seed_plugin_client::MasterSeedPluginClient,
 };
-use crate::proto::services::ctrng::{CTrngResponse, CTrngResult};
+use crate::proto::services::ctrng::{CTrngRequest, CTrngResponse, CTrngResult};
 use thiserror::Error;
 
 /// The entropy src used for space-based randomness
@@ -29,6 +29,11 @@ impl CTrngService {
     /// Creates a new instance of the CTrngService.
     pub fn new(masterseed_client: MasterSeedPluginClient<Channel>) -> Self {
         CTrngService { masterseed_client }
+    }
+
+    /// Get random values, currently only from master seed (mixed randomness)
+    pub async fn get_values(&mut self, req: CTrngRequest) -> Result<CTrngResponse, CTrngError> {
+        self.get_mixed(req.chunks.unwrap_or(1)).await
     }
 
     /// Get random values using a mixed approach where random values are derived from space-based seed.

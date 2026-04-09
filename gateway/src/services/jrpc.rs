@@ -75,8 +75,7 @@ impl RpcCall {
                     .await
                     .map_err(|_| tonic::Status::not_found("Masterseed plugin not found"))?;
                 let mut svc = CTrngService::new(grpc_client);
-                let count = req.chunks.unwrap_or(1);
-                let results: CTrngResponse = svc.get_mixed(count).await.map_err(|e| {
+                let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
                     // We can log _e here for debugging, but we don't want to expose internal errors to the client
                     tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
                     tonic::Status::internal("Failed to get mixed cTRNG")
