@@ -2,7 +2,7 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use gateway::{logging, server, service_manager, types::GatewayError};
+use gateway::{logging, server, service_manager, types::GatewayError, plugins};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -52,7 +52,7 @@ async fn main() -> Result<(), GatewayError> {
         });
     }
 
-    service_manager::wait_for_deps(
+    plugins::wait_for(
         vec![
             args.auth_plugin.to_string(),
             args.masterseed_plugin.to_string(),
@@ -60,7 +60,11 @@ async fn main() -> Result<(), GatewayError> {
         std::time::Duration::from_secs(60),
         shutdown.clone(),
     )
-    .await?;
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed while waiting for plugins to be healthy: {}", e);
+        GatewayError::ServiceConnectionError(e.to_string())
+    })?;
     let service_manager =
         service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
 

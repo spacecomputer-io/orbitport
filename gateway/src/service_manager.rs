@@ -1,108 +1,10 @@
-use std::collections::VecDeque;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::Notify;
 use tonic::transport::Channel;
-use tonic_health::pb::{
-    HealthCheckRequest, HealthCheckResponse, health_check_response::ServingStatus,
-    health_client::HealthClient,
-};
 
 use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 use crate::trng::TrngService;
 use crate::types::{GatewayError, ServiceHandler, ServiceRequest, ServiceResponse};
 
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
-
-async fn check_health(addr: &str) -> Result<HealthCheckResponse, tonic::Status> {
-    let channel = Channel::from_shared(addr.to_string())
-        .map_err(|e| tonic::Status::unavailable(format!("Failed to create channel: {e}")))?
-        .connect()
-        .await
-        .map_err(|e| tonic::Status::unavailable(format!("Failed to connect to {addr}: {e}")))?;
-    let mut client = HealthClient::new(channel);
-    let request = HealthCheckRequest::default();
-    client
-        .check(request)
-        .await
-        .map(|response| response.into_inner())
-}
-
-pub async fn wait_for_deps(
-    addrs: Vec<String>,
-    max_retry_delay: Duration,
-    shutdown: Arc<Notify>,
-) -> Result<(), GatewayError> {
-    let mut retry_delay = Duration::from_secs(1);
-    let start_time = std::time::Instant::now();
-    let shutdown = shutdown.notified();
-    tokio::pin!(shutdown);
-
-    tracing::info!(
-        "Waiting for dependencies to be healthy before serving traffic: {:?}",
-        addrs
-    );
-
-    let mut remaining = VecDeque::from(addrs);
-    loop {
-        let n = remaining.len();
-        for _i in 0..n {
-            let Some(addr) = remaining.pop_front() else {
-                break;
-            };
-            let health_result = tokio::select! {
-                _ = &mut shutdown => {
-                    return Err(GatewayError::TerminationError(
-                        "Received shutdown signal while waiting for dependencies".to_string(),
-                    ));
-                }
-                result = check_health(addr.as_str()) => result,
-            };
-            match health_result {
-                Ok(response) => {
-                    if response.status() != ServingStatus::Serving {
-                        tracing::debug!(
-                            "Plugin {} is not serving. Status: {:?}",
-                            addr,
-                            response.status()
-                        );
-                        remaining.push_back(addr);
-                    } else {
-                        tracing::debug!("Plugin {} is serving.", addr);
-                    }
-                }
-                Err(e) => {
-                    tracing::debug!("Failed to check health for {}: {}", addr, e);
-                    remaining.push_back(addr);
-                }
-            }
-        }
-        if remaining.is_empty() {
-            let elapsed_time = start_time.elapsed();
-            tracing::info!(
-                "All dependencies are healthy. Time elapsed: {:?}",
-                elapsed_time
-            );
-            return Ok(());
-        }
-        let elapsed_time = start_time.elapsed();
-        tracing::warn!(
-            "Not all dependencies are healthy. Time elapsed: {:?}. Retrying in {:?}",
-            elapsed_time,
-            retry_delay
-        );
-        tokio::select! {
-            _ = &mut shutdown => {
-                return Err(GatewayError::TerminationError(
-                    "Received shutdown signal while waiting for dependencies".to_string(),
-                ));
-            }
-            _ = tokio::time::sleep(retry_delay) => {}
-        }
-        retry_delay = (retry_delay * 2).min(max_retry_delay); // Exponential backoff
-    }
-}
-
 pub struct ServiceManager {
     auth_client: AuthPluginClient<Channel>,
     trng_svc: TrngService,
