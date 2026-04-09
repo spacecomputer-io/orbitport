@@ -23,7 +23,7 @@ import (
 	statuspkg "google.golang.org/grpc/status"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	pluginsproto "github.com/spacecomputer-io/orbitport/plugins/proto"
+	pluginsproto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 type Plugin struct {

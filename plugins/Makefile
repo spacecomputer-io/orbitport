@@ -15,10 +15,10 @@ protoc-deps:
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 protoc: protoc-deps
-	@./scripts/protoc.sh
+	@cd ../ && ./plugins/scripts/protoc.sh
 
 protoc-dry-run: protoc-deps
-	@./scripts/protoc.sh --dry-run
+	@cd ../ && ./plugins/scripts/protoc.sh --dry-run
 
 test: deps
 	@GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} go test -v $(GOPACKAGES)

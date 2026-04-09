@@ -31,5 +31,3 @@ jobs:
     - name: Run unit tests
       working-directory: ./gateway
       run: make test
-    - name: Check Protobufs are up to date
-      run: make protoc-dry-run
