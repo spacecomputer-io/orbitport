@@ -6,13 +6,13 @@ ARG RUST_VERSION=1.92
 
 FROM rust:${RUST_VERSION}-slim-trixie AS build
 
-WORKDIR /app
-
 RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
     libssl-dev \ 
     protobuf-compiler
+
+WORKDIR /app
 
 # Leverage a cache mount to /usr/local/cargo/registry/
 # for downloaded dependencies and a cache mount to /app/target/ for 
