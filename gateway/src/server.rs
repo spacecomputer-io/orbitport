@@ -4,6 +4,7 @@ use tokio::time::{Duration, Instant, timeout};
 use warp::{Filter, Rejection, Reply, reject::Reject};
 
 use crate::metrics;
+use crate::proto::services::ctrng::CTrngResponse;
 use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
@@ -119,7 +120,8 @@ async fn handle_rpc(
     let rpc_call = body.call;
     if let Err(e) = rpc_call.validate() {
         tracing::error!("RPC validation error [id={}]: {}", req_id, e);
-        let res = JsonRpcResponse::error(req_id, format!("Invalid request: {}", e));
+        let res: JsonRpcResponse<()> =
+            JsonRpcResponse::error(req_id, format!("Invalid request: {}", e));
         return Ok(warp::reply::json(&res));
     }
     match rpc_call.execute(req_id, &plugin_catalog).await {
@@ -131,7 +133,7 @@ async fn handle_rpc(
             tracing::warn!("RPC execution error [id={}]: {}", req_id, e);
             // NOTE: the errors returned from execute are already sanitized,
             // so we can return the error message directly to the client
-            let res = JsonRpcResponse::error(req_id, e.to_string());
+            let res: JsonRpcResponse<CTrngResponse> = JsonRpcResponse::error(req_id, e.to_string());
             let val = serde_json::to_value(res).map_err(|e| {
                 tracing::error!(
                     "Failed to serialize RPC error response [id={}]: {}",

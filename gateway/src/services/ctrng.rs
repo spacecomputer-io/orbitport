@@ -38,7 +38,7 @@ impl CTrngService {
     /// Get random values, currently only from master seed (mixed randomness)
     pub async fn get_values(&mut self, req: CTrngRequest) -> Result<CTrngResponse, CTrngError> {
         // extract chunks from request, default to 1 if not provided, and cap at MAX_CHUNKS
-        let chunks = req.chunks.unwrap_or(1).min(MAX_CHUNKS).max(1);
+        let chunks = req.chunks.unwrap_or(1).clamp(1, MAX_CHUNKS);
         self.get_mixed(chunks).await
     }
 

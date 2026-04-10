@@ -26,7 +26,7 @@ pub struct JsonRpcResponse<T> {
     pub id: u64,
 }
 
-impl JsonRpcResponse<()> {
+impl<T> JsonRpcResponse<T> {
     pub fn error(id: u64, message: String) -> Self {
         JsonRpcResponse {
             jsonrpc: "2.0".to_string(),
@@ -36,7 +36,7 @@ impl JsonRpcResponse<()> {
         }
     }
 
-    pub fn success<T>(id: u64, result: T) -> JsonRpcResponse<T> {
+    pub fn success(id: u64, result: T) -> JsonRpcResponse<T> {
         JsonRpcResponse {
             jsonrpc: "2.0".to_string(),
             result: Some(result),
