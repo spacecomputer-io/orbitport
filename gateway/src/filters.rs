@@ -22,7 +22,9 @@ const BEARER: &str = "Bearer ";
 pub type RateLimit = (u32, Instant);
 /// Rate limit items
 type RateLimiterItems = Arc<Mutex<HashMap<String, RateLimit>>>;
-/// Rate limiter
+
+/// Rate limiter structure that holds the rate limit items, maximum requests allowed,
+/// and the time window for rate limiting.
 pub struct RateLimiter {
     items: RateLimiterItems,
     max_requests: u32,
@@ -39,6 +41,7 @@ impl RateLimiter {
     }
 }
 
+/// Creates an authentication filter that validates JWTs using the auth plugin.
 pub fn with_auth(
     auth_client: AuthPluginClient<Channel>,
 ) -> impl Filter<Extract = (String,), Error = warp::Rejection> + Clone {
@@ -49,6 +52,8 @@ pub fn with_auth(
 
 type ApiResult<T> = std::result::Result<T, warp::Rejection>;
 
+/// Authorization logic that extracts the JWT from the Authorization header,
+/// validates it using the auth plugin, and returns the JWT if valid.
 async fn authorize(
     (headers, mut auth_client): (HeaderMap<HeaderValue>, AuthPluginClient<Channel>),
 ) -> ApiResult<String> {

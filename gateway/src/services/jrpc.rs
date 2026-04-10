@@ -5,15 +5,19 @@ use crate::proto::services::ctrng::CTrngRequest;
 
 use crate::services::ctrng::CTrngService;
 
+/// Struct representing a JSON-RPC request, which includes the JSON-RPC version,
+/// an ID for correlating requests and responses, and the RPC call details.
 #[derive(Deserialize, Debug)]
 pub struct JsonRpcRequest {
     #[serde(rename = "jsonrpc")]
     _jsonrpc: String,
     pub id: u64,
     #[serde(flatten)]
-    pub call: RpcCall, // This handles method + params mapping automatically
+    pub call: RpcCall,
 }
-
+/// Struct representing a JSON-RPC response.
+/// It can be either a success with a result or an error with a message.
+/// The `id` field is used to correlate the response with the original request.
 #[derive(Serialize)]
 pub struct JsonRpcResponse<T> {
     jsonrpc: String,
@@ -42,6 +46,10 @@ impl JsonRpcResponse<()> {
     }
 }
 
+/// Enum representing the different RPC calls that the gateway can handle.
+/// Each variant corresponds to a specific RPC method and contains the parameters for that method.
+/// The "method" format is `{service}.{method}`, where the service is always lowercase and the method is in CamelCase.
+/// This allows for easy routing of RPC calls to the appropriate service handlers.
 #[derive(Deserialize, Debug)]
 #[serde(tag = "method", content = "params")]
 pub enum RpcCall {

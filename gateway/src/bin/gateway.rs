@@ -2,7 +2,7 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use gateway::{logging, server, service_manager, types::GatewayError, plugins};
+use gateway::{logging, plugins, server, service_manager, types::GatewayError};
 
 #[derive(Parser, Debug)]
 struct Args {

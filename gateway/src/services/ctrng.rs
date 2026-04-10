@@ -20,6 +20,8 @@ pub enum CTrngError {
     MasterSeedFailure(String),
 }
 
+/// The ctrng service abstracts the logic for fetching random values,
+/// using multiple sources of randomness, currently only masterseed-derived fallback.
 #[derive(Clone)]
 pub struct CTrngService {
     masterseed_client: MasterSeedPluginClient<Channel>,
