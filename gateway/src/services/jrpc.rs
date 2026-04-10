@@ -5,6 +5,14 @@ use crate::proto::services::ctrng::CTrngRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 
+#[derive(Serialize)]
+pub struct JsonRpcError {
+    code: i32,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    data: Option<serde_json::Value>,
+}
+
 /// Struct representing a JSON-RPC request, which includes the JSON-RPC version,
 /// an ID for correlating requests and responses, and the RPC call details.
 #[derive(Deserialize, Debug)]
@@ -20,27 +28,33 @@ pub struct JsonRpcRequest {
 /// The `id` field is used to correlate the response with the original request.
 #[derive(Serialize)]
 pub struct JsonRpcResponse<T> {
-    jsonrpc: String,
+    jsonrpc: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<T>,
-    error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<JsonRpcError>,
     pub id: u64,
 }
 
 impl<T> JsonRpcResponse<T> {
-    pub fn error(id: u64, message: String) -> Self {
-        JsonRpcResponse {
-            jsonrpc: "2.0".to_string(),
-            result: None,
-            error: Some(message),
+    pub fn success(id: u64, result: T) -> Self {
+        Self {
+            jsonrpc: "2.0",
+            result: Some(result),
+            error: None,
             id,
         }
     }
 
-    pub fn success(id: u64, result: T) -> JsonRpcResponse<T> {
-        JsonRpcResponse {
-            jsonrpc: "2.0".to_string(),
-            result: Some(result),
-            error: None,
+    pub fn error(id: u64, code: i32, message: impl Into<String>) -> Self {
+        Self {
+            jsonrpc: "2.0",
+            result: None,
+            error: Some(JsonRpcError {
+                code,
+                message: message.into(),
+                data: None,
+            }),
             id,
         }
     }

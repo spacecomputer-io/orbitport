@@ -4,7 +4,6 @@ use tokio::time::{Duration, Instant, timeout};
 use warp::{Filter, Rejection, Reply, reject::Reject};
 
 use crate::metrics;
-use crate::proto::services::ctrng::CTrngResponse;
 use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
@@ -121,30 +120,30 @@ async fn handle_rpc(
     if let Err(e) = rpc_call.validate() {
         tracing::error!("RPC validation error [id={}]: {}", req_id, e);
         let res: JsonRpcResponse<()> =
-            JsonRpcResponse::error(req_id, format!("Invalid request: {}", e));
+            JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {}", e));
         return Ok(warp::reply::json(&res));
     }
-    match rpc_call.execute(req_id, &plugin_catalog).await {
-        Ok(result) => {
+    const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+    match timeout(REQUEST_TIMEOUT, rpc_call.execute(req_id, &plugin_catalog)).await {
+        Ok(Ok(result)) => {
             tracing::debug!("RPC executed successfully [id={}]", req_id);
             Ok(warp::reply::json(&result))
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::warn!("RPC execution error [id={}]: {}", req_id, e);
-            // NOTE: the errors returned from execute are already sanitized,
-            // so we can return the error message directly to the client
-            let res: JsonRpcResponse<CTrngResponse> = JsonRpcResponse::error(req_id, e.to_string());
-            let val = serde_json::to_value(res).map_err(|e| {
-                tracing::error!(
-                    "Failed to serialize RPC error response [id={}]: {}",
-                    req_id,
-                    e
-                );
-                warp::reject::custom(GatewayError::InternalError(
-                    "Failed to serialize RPC error response".to_string(),
-                ))
-            })?;
-            Ok(warp::reply::json(&val))
+
+            let res: JsonRpcResponse<()> = JsonRpcResponse::error(req_id, -32001, e.to_string());
+
+            Ok(warp::reply::json(&res))
+        }
+        Err(_) => {
+            tracing::error!("RPC request timed out [id={}]", req_id);
+
+            let res: JsonRpcResponse<()> =
+                JsonRpcResponse::error(req_id, -32002, "Request timed out");
+
+            Ok(warp::reply::json(&res))
         }
     }
 }
