@@ -444,7 +444,7 @@ func (x *KeyInfoRequest) GetPublishName() string {
 
 type KeyInfoResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// "/ipns/<PeerID>"
+	// "/ipns/<pub key>"
 	IpnsName      string `protobuf:"bytes,1,opt,name=ipns_name,json=ipnsName,proto3" json:"ipns_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

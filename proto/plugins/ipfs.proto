@@ -53,6 +53,6 @@ message KeyInfoRequest {
 }
 
 message KeyInfoResponse {
-    // "/ipns/<PeerID>"
+    // "/ipns/<pub key>"
     string ipns_name = 1;
 }

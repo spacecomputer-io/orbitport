@@ -1,19 +1,27 @@
 #!/bin/bash
 
-export PATH="$HOME/go/bin:$PATH"
+# if there is no /go/bin in the PATH, add it
+if [[ ":$PATH:" != *":$HOME/go/bin:"* ]]; then
+    export PATH="$HOME/go/bin:$PATH"
+fi
 (protoc-gen-go --version &> /dev/null) || (echo "Missing protoc-gen-go" && exit 1)
 (protoc-gen-go-grpc --version &> /dev/null) || (echo "Missing protoc-gen-go-grpc" && exit 1)
 
-TARGET_DIR=./plugins
+if [[ "$PWD" != *"/plugins" ]]; then
+    cd plugins
+fi
 
-mkdir -p $TARGET_DIR/proto
-cp -r $TARGET_DIR/proto $TARGET_DIR/.backup/proto
+mkdir -p proto && mkdir -p .backup/proto && cp -r ./proto/ .backup/proto
+cp -r ../proto/plugins ./proto
 
-echo "Generating Go code from proto files..."
-protoc --go_out=$TARGET_DIR --go_opt=paths=source_relative \
-    --go-grpc_out=$TARGET_DIR --go-grpc_opt=paths=source_relative ./proto/plugins/*.proto
+protoc --go_out=. --go_opt=paths=source_relative \
+    --go-grpc_out=. --go-grpc_opt=paths=source_relative ./proto/**/*.proto
 
+# remove all the proto files from the proto directory, since we only want the generated .pb.go files
+find ./proto -type f -name "*.proto" -delete
+
+## if passed --dry-run flag, just print the diff for the relevant files
 if [ "$1" == "--dry-run" ]; then
     git diff --exit-code --name-only | grep '\.pb\.go$'
-    cp -r $TARGET_DIR/.backup/proto $TARGET_DIR/proto
+    cp -r .backup/proto .
 fi
