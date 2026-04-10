@@ -12,6 +12,8 @@ use thiserror::Error;
 pub const SRC_SPACE: &str = "space";
 /// The entropy src used for masterseed-derived fallback
 pub const SRC_MIXED: &str = "mixed";
+/// The maximum number of random values that can be retrieved in a single request
+pub const MAX_CHUNKS: u32 = 10;
 
 /// Error type for the CTrngService
 #[derive(Error, Debug)]
@@ -35,7 +37,9 @@ impl CTrngService {
 
     /// Get random values, currently only from master seed (mixed randomness)
     pub async fn get_values(&mut self, req: CTrngRequest) -> Result<CTrngResponse, CTrngError> {
-        self.get_mixed(req.chunks.unwrap_or(1)).await
+        // extract chunks from request, default to 1 if not provided, and cap at MAX_CHUNKS
+        let chunks = req.chunks.unwrap_or(1).min(MAX_CHUNKS).max(1);
+        self.get_mixed(chunks).await
     }
 
     /// Get random values using a mixed approach where random values are derived from space-based seed.

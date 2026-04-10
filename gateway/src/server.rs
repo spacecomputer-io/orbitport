@@ -117,13 +117,11 @@ async fn handle_rpc(
     tracing::debug!("Handling RPC request [id={}] {:?}", body.id, body);
     let req_id = body.id;
     let rpc_call = body.call;
-    rpc_call.validate().map_err(|e| {
+    if let Err(e) = rpc_call.validate() {
         tracing::error!("RPC validation error [id={}]: {}", req_id, e);
-        warp::reject::custom(GatewayError::BadRequest(format!(
-            "RPC validation error: {}",
-            e
-        )))
-    })?;
+        let res = JsonRpcResponse::error(req_id, format!("Invalid request: {}", e));
+        return Ok(warp::reply::json(&res));
+    }
     match rpc_call.execute(req_id, &plugin_catalog).await {
         Ok(result) => {
             tracing::debug!("RPC executed successfully [id={}]", req_id);

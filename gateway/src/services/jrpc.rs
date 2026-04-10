@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::proto::services::ctrng::CTrngRequest;
 
-use crate::services::ctrng::CTrngService;
+use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 
 /// Struct representing a JSON-RPC request, which includes the JSON-RPC version,
 /// an ID for correlating requests and responses, and the RPC call details.
@@ -62,8 +62,13 @@ impl RpcCall {
     pub fn validate(&self) -> Result<(), String> {
         match self {
             RpcCall::GetCTRNG(req) => {
-                if req.chunks.is_some() && req.chunks.unwrap() > 10 {
-                    return Err("Max chunks exceeded".to_string());
+                if let Some(chunks) = req.chunks {
+                    if chunks > MAX_CHUNKS {
+                        return Err("Max chunks exceeded".to_string());
+                    }
+                    if chunks < 1 {
+                        return Err("Chunks must be at least 1".to_string());
+                    }
                 }
             }
         }
@@ -81,7 +86,7 @@ impl RpcCall {
                 let grpc_client = plugin_catalog
                     .get_masterseed_client()
                     .await
-                    .map_err(|_| tonic::Status::not_found("Masterseed plugin not found"))?;
+                    .map_err(|_| tonic::Status::unavailable("Masterseed plugin unavailable"))?;
                 let mut svc = CTrngService::new(grpc_client);
                 let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
                     // We can log _e here for debugging, but we don't want to expose internal errors to the client
