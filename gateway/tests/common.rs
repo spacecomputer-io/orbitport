@@ -81,6 +81,58 @@ pub async fn get_trng(
     Ok(parsed)
 }
 
+pub async fn rpc_ctrng_get(
+    base_url: &str,
+    access_token: &str,
+    count: u32,
+) -> Result<gateway::proto::services::ctrng::CTrngResponse, E2EError> {
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "ctrng.Get",
+            "params": serde_json::json!({
+                "chunks": count
+            }),
+        }
+    );
+    let response = client
+        .post(format!("{base_url}/api/v1/rpc"))
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .bearer_auth(access_token)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| E2EError::RequestError(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        tracing::error!("Gateway returned Error: {} | Body: {}", status, text);
+        return Err(E2EError::AssertionFailed(format!(
+            "Server returned error {}: {}",
+            status, text
+        )));
+    }
+    let raw = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| E2EError::ParseError(e.to_string()))?;
+    tracing::debug!("jRPC response: {}", raw);
+    assert!(raw.get("jsonrpc").and_then(|v| v.as_str()) == Some("2.0"));
+    assert!(raw.get("id").is_some());
+    assert!(raw.get("id").and_then(|v| v.as_u64()) == Some(1));
+    let result = raw
+        .get("result")
+        .ok_or_else(|| E2EError::ParseError("Missing result field".to_string()))?;
+    let parsed =
+        serde_json::from_value::<gateway::proto::services::ctrng::CTrngResponse>(result.clone())
+            .map_err(|e| E2EError::ParseError(e.to_string()))?;
+    Ok(parsed)
+}
+
 /// Prepare the test environment by starting the orbitport Docker containers.
 /// This function is called before the tests are executed.
 /// It checks if the containers are already running, and if not, it starts them.
