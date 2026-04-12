@@ -61,7 +61,15 @@ async fn test_e2e_happy_rpc() {
 
     let result = async {
         let resp = common::rpc_ctrng_get(&base_url, &access_token, 5).await?;
-        assert!(resp.items.len() > 0, "Response values is empty");
+        assert_eq!(resp.items.len(), 5, "RPC response did not honor chunks=5");
+        for item in &resp.items {
+            assert!(!item.value.is_empty(), "RPC response item value is empty");
+            assert_eq!(
+                item.src.as_deref(),
+                Some("mixed"),
+                "RPC response item src was not mixed"
+            );
+        }
         tracing::debug!("RPC response: {:?}", resp);
         tracing::info!("RPC request completed successfully");
         Ok::<(), common::E2EError>(())

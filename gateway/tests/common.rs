@@ -21,6 +21,7 @@ pub enum E2EError {
 }
 
 /// Get the TRNG service from the orbitport gateway.
+#[allow(dead_code)]
 pub async fn get_trng(
     base_url: &str,
     access_token: &str,
@@ -81,12 +82,12 @@ pub async fn get_trng(
     Ok(parsed)
 }
 
+#[allow(dead_code)]
 pub async fn rpc_ctrng_get(
     base_url: &str,
     access_token: &str,
     count: u32,
 ) -> Result<gateway::proto::services::ctrng::CTrngResponse, E2EError> {
-    let client = reqwest::Client::new();
     let payload = serde_json::json!(
         {
             "jsonrpc": "2.0",
@@ -97,15 +98,7 @@ pub async fn rpc_ctrng_get(
             }),
         }
     );
-    let response = client
-        .post(format!("{base_url}/api/v1/rpc"))
-        .header("Content-Type", "application/json")
-        .header("Accept", "application/json")
-        .bearer_auth(access_token)
-        .json(&payload)
-        .send()
-        .await
-        .map_err(|e| E2EError::RequestError(e.to_string()))?;
+    let response = rpc_request(base_url, access_token, payload).await?;
 
     if !response.status().is_success() {
         let status = response.status();
@@ -131,6 +124,23 @@ pub async fn rpc_ctrng_get(
         serde_json::from_value::<gateway::proto::services::ctrng::CTrngResponse>(result.clone())
             .map_err(|e| E2EError::ParseError(e.to_string()))?;
     Ok(parsed)
+}
+
+#[allow(dead_code)]
+pub async fn rpc_request(
+    base_url: &str,
+    access_token: &str,
+    payload: serde_json::Value,
+) -> Result<reqwest::Response, E2EError> {
+    reqwest::Client::new()
+        .post(format!("{base_url}/api/v1/rpc"))
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .bearer_auth(access_token)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| E2EError::RequestError(e.to_string()))
 }
 
 /// Prepare the test environment by starting the orbitport Docker containers.
