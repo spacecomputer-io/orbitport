@@ -3,6 +3,9 @@ E2E_PROFILE?=happy
 CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl
 DOCKER_TAG?=latest ## DOCKER_TAG=v*.*.*
 
+protoc:
+	@cd plugins && make protoc
+	
 test:
 	@cd plugins && make test
 	@cd gateway && make test
