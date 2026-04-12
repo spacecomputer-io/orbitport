@@ -9,7 +9,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/testutils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"

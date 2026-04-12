@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"

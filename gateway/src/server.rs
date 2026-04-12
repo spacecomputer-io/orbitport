@@ -1,171 +1,18 @@
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use std::{collections::HashMap, sync::Arc};
-use tokio::{
-    sync::Mutex,
-    time::{Duration, Instant, timeout},
-};
-use tonic::transport::Channel;
-use warp::{
-    Filter, Rejection, Reply,
-    filters::header::headers_cloned,
-    http::header::{AUTHORIZATION, HeaderMap, HeaderValue},
-    reject::Reject,
-};
+use std::sync::Arc;
+use tokio::time::{Duration, Instant, timeout};
+use warp::{Filter, Rejection, Reply, reject::Reject};
 
 use crate::metrics;
-use crate::proto::auth::{
-    TokenValidationRequest, TokenValidationResponse, auth_plugin_client::AuthPluginClient,
-};
 use crate::service_manager::ServiceManager;
-use crate::trng::SRC_DERIVED_TRNG;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
+use crate::filters::{RateLimiter, with_auth, with_rate_limiter};
+use crate::plugins::PluginCatalog;
+use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
+use crate::trng::SRC_DERIVED_TRNG;
+
 impl Reject for GatewayError {}
-
-const BEARER: &str = "Bearer ";
-
-/// Rate limit structure
-pub type RateLimit = (u32, Instant);
-/// Rate limit items
-type RateLimiterItems = Arc<Mutex<HashMap<String, RateLimit>>>;
-/// Rate limiter
-pub struct RateLimiter {
-    items: RateLimiterItems,
-    max_requests: u32,
-    time_window: Duration,
-}
-
-impl RateLimiter {
-    fn new(max_requests: u32, time_window: Duration) -> Self {
-        RateLimiter {
-            items: Arc::new(Mutex::new(HashMap::new())),
-            max_requests,
-            time_window,
-        }
-    }
-}
-
-pub fn with_auth(
-    service_manager: Arc<ServiceManager>,
-) -> impl Filter<Extract = (String,), Error = warp::Rejection> + Clone {
-    let auth_client = service_manager.get_auth_client();
-    headers_cloned()
-        .map(move |headers: HeaderMap<HeaderValue>| (headers, auth_client.clone()))
-        .and_then(authorize)
-}
-
-type ApiResult<T> = std::result::Result<T, warp::Rejection>;
-
-async fn authorize(
-    (headers, mut auth_client): (HeaderMap<HeaderValue>, AuthPluginClient<Channel>),
-) -> ApiResult<String> {
-    let timer = Instant::now();
-    match jwt_from_header(&headers) {
-        Ok(jwt) => {
-            let request = tonic::Request::new(TokenValidationRequest { token: jwt.clone() });
-            let response: TokenValidationResponse = auth_client
-                .validate_token(request)
-                .await
-                .map_err(|e| match e.code() {
-                    tonic::Code::Unavailable | tonic::Code::NotFound => {
-                        metrics::record_auth("plugin_unavailable", timer.elapsed().as_secs_f64());
-                        tracing::error!("Auth plugin is unavailable: {}", e);
-                        warp::reject::custom(GatewayError::AuthPluginConnectionError(
-                            "unavailable".to_string(),
-                        ))
-                    }
-                    _ => {
-                        metrics::record_auth("failed", timer.elapsed().as_secs_f64());
-                        tracing::error!("Failed to authorize JWT: {}", e);
-                        warp::reject::custom(GatewayError::AuthenticationFailed)
-                    }
-                })?
-                .into_inner();
-            if !response.ok {
-                metrics::record_auth("rejected", timer.elapsed().as_secs_f64());
-                return Err(warp::reject::custom(GatewayError::AuthenticationFailed));
-            }
-            metrics::record_auth("ok", timer.elapsed().as_secs_f64());
-            tracing::debug!("JWT authorized successfully");
-            Ok(jwt)
-        }
-        Err(GatewayError::NoAuthHeaderError) => {
-            metrics::record_auth("missing_header", timer.elapsed().as_secs_f64());
-            Err(warp::reject::custom(GatewayError::NoAuthHeaderError))
-        }
-        Err(GatewayError::InvalidAuthHeaderError) => {
-            metrics::record_auth("invalid_header", timer.elapsed().as_secs_f64());
-            Err(warp::reject::custom(GatewayError::InvalidAuthHeaderError))
-        }
-        Err(e) => {
-            metrics::record_auth("failed", timer.elapsed().as_secs_f64());
-            Err(warp::reject::custom(e))
-        }
-    }
-}
-
-fn jwt_from_header(headers: &HeaderMap<HeaderValue>) -> Result<String, GatewayError> {
-    let header = match headers.get(AUTHORIZATION) {
-        Some(v) => v,
-        None => return Err(GatewayError::NoAuthHeaderError),
-    };
-    let auth_header = match std::str::from_utf8(header.as_bytes()) {
-        Ok(v) => v,
-        Err(_) => return Err(GatewayError::NoAuthHeaderError),
-    };
-    extract_jwt(auth_header)
-}
-
-fn extract_jwt(auth_header: &str) -> Result<String, GatewayError> {
-    if !auth_header.starts_with(BEARER) {
-        return Err(GatewayError::InvalidAuthHeaderError);
-    }
-    Ok(auth_header.trim_start_matches(BEARER).to_owned())
-}
-
-// Create a rate limiter filter
-pub fn with_rate_limiter(
-    auth_filter: impl Filter<Extract = (String,), Error = warp::Rejection> + Clone,
-    rate_limiter: Arc<RateLimiter>,
-) -> impl Filter<Extract = (String,), Error = warp::Rejection> + Clone {
-    auth_filter
-        .and(warp::any().map(move || rate_limiter.clone()))
-        .and_then(rate_limit)
-}
-
-/// Rate limiting logic.
-async fn rate_limit(
-    jwt: String,
-    rate_limiter: Arc<RateLimiter>,
-) -> Result<String, warp::Rejection> {
-    // Hash the token to avoid storing it directly.
-    let mut hasher = Sha256::new();
-    hasher.update(&jwt);
-    let token_hash = format!("{:x}", hasher.finalize());
-
-    let mut items = rate_limiter.items.lock().await;
-
-    // Check the current time and rate limit
-    let now = Instant::now();
-    let entry = items.entry(token_hash).or_insert((0, now));
-
-    // Reset the count if the time window has passed
-    if now.duration_since(entry.1) > rate_limiter.time_window {
-        entry.0 = 0;
-        entry.1 = now;
-    }
-    entry.0 += 1;
-
-    // Check if the request count exceeds the limit
-    if entry.0 > rate_limiter.max_requests {
-        metrics::record_rate_limit("exceeded");
-        return Err(warp::reject::custom(GatewayError::RateLimitExceeded)); // Use a custom rejection
-    }
-
-    metrics::record_rate_limit("ok");
-    Ok(jwt)
-}
 
 #[derive(Debug, Clone, Deserialize)]
 struct QueryParams {
@@ -199,6 +46,7 @@ struct PostBody {
 pub async fn start(
     http_port: u16,
     service_manager: Arc<ServiceManager>,
+    plugin_catalog: Arc<PluginCatalog>,
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
@@ -208,11 +56,22 @@ pub async fn start(
 
     let rate_limiter = Arc::new(RateLimiter::new(limit, Duration::from_secs(limit_window))); // 100 requests per minute
 
+    let rpc_route = warp::post()
+        .and(warp::path("api").and(warp::path("v1").and(warp::path("rpc"))))
+        .and(with_rate_limiter(
+            with_auth(service_manager.get_auth_client()),
+            rate_limiter.clone(),
+        ))
+        .and(warp::body::content_length_limit(1024))
+        .and(warp::body::json())
+        .and(warp::any().map(move || plugin_catalog.clone()))
+        .and_then(handle_rpc);
+
     let bulk_max_get = bulk_max;
     let get_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::get())
         .and(with_rate_limiter(
-            with_auth(service_manager.clone()),
+            with_auth(service_manager.get_auth_client()),
             rate_limiter.clone(),
         ))
         .and(warp::query::<QueryParams>())
@@ -224,7 +83,7 @@ pub async fn start(
     let post_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::post())
         .and(with_rate_limiter(
-            with_auth(service_manager.clone()),
+            with_auth(service_manager.get_auth_client()),
             rate_limiter.clone(),
         ))
         .and(warp::body::content_length_limit(1024)) // limit to 1 KB payload
@@ -242,11 +101,51 @@ pub async fn start(
 
     let routes = get_route
         .or(post_route)
+        .or(rpc_route)
         .or(health_route.with(warp::log("health_check")));
 
     tracing::info!("Starting http server on: 0.0.0.0:{}", http_port);
 
     warp::serve(routes).run(([0, 0, 0, 0], http_port)).await;
+}
+
+async fn handle_rpc(
+    _jwt: String,
+    body: JsonRpcRequest,
+    plugin_catalog: Arc<PluginCatalog>,
+) -> Result<impl Reply, Rejection> {
+    tracing::debug!("Handling RPC request [id={}] {:?}", body.id, body);
+    let req_id = body.id;
+    let rpc_call = body.call;
+    if let Err(e) = rpc_call.validate() {
+        tracing::error!("RPC validation error [id={}]: {}", req_id, e);
+        let res: JsonRpcResponse<()> =
+            JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {}", e));
+        return Ok(warp::reply::json(&res));
+    }
+    const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+    match timeout(REQUEST_TIMEOUT, rpc_call.execute(req_id, &plugin_catalog)).await {
+        Ok(Ok(result)) => {
+            tracing::debug!("RPC executed successfully [id={}]", req_id);
+            Ok(warp::reply::json(&result))
+        }
+        Ok(Err(e)) => {
+            tracing::warn!("RPC execution error [id={}]: {}", req_id, e);
+
+            let res: JsonRpcResponse<()> = JsonRpcResponse::error(req_id, -32001, e.to_string());
+
+            Ok(warp::reply::json(&res))
+        }
+        Err(_) => {
+            tracing::error!("RPC request timed out [id={}]", req_id);
+
+            let res: JsonRpcResponse<()> =
+                JsonRpcResponse::error(req_id, -32002, "Request timed out");
+
+            Ok(warp::reply::json(&res))
+        }
+    }
 }
 
 async fn handle_get(
@@ -417,48 +316,4 @@ fn new_req_id() -> u64 {
     use rand::Rng;
     let mut rng = rand::rng();
     rng.random_range(1..u64::MAX)
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_jwt_from_header() {
-        let mut headers = HeaderMap::new();
-        headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer test_token"));
-        let jwt = jwt_from_header(&headers).unwrap();
-        assert_eq!(jwt, "test_token");
-    }
-
-    #[tokio::test]
-    async fn test_jwt_from_header_empty() {
-        let headers = HeaderMap::new();
-        match jwt_from_header(&headers) {
-            Err(GatewayError::NoAuthHeaderError) => {}
-            _ => panic!("Expected NoAuthHeaderError"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_rate_limiter() {
-        let rate_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(10)));
-        let token = "test_token".to_string();
-
-        for _i in 0..5 {
-            rate_limit(token.clone(), rate_limiter.clone())
-                .await
-                .unwrap();
-        }
-        match rate_limit(token.clone(), rate_limiter.clone()).await {
-            Ok(_) => panic!("Rate limit should have been exceeded"),
-            Err(e) => {
-                assert_eq!(
-                    format!("{:?}", e),
-                    "Rejection(RateLimitExceeded)".to_string(),
-                    "Expected rate limit exceeded error"
-                );
-            }
-        }
-    }
 }

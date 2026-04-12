@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 // Plugin implements a development-only auth plugin that accepts all tokens.

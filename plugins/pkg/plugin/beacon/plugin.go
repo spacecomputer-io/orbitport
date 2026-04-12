@@ -9,7 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"

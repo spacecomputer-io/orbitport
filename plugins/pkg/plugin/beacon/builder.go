@@ -9,7 +9,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	ms "github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 type Builder struct {

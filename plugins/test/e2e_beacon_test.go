@@ -9,7 +9,7 @@ import (
 	"time"
 
 	beaconpkg "github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

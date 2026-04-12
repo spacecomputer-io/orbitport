@@ -16,7 +16,7 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 func main() {

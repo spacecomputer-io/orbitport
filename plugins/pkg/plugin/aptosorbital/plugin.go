@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 // Plugin implements the interfaces for the Aptos Orbital API.
