@@ -157,6 +157,66 @@ var (
 		[]string{"beacon"},
 	)
 
+	beaconInFlight = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "op",
+			Subsystem: "beacon",
+			Name:      "in_flight",
+			Help:      "Whether a beacon execution is currently in flight (1=yes, 0=no)",
+		},
+		[]string{"beacon"},
+	)
+
+	consecutiveFailures = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "op",
+			Subsystem: "beacon",
+			Name:      "consecutive_failures",
+			Help:      "Current number of consecutive execution failures per beacon",
+		},
+		[]string{"beacon"},
+	)
+
+	lastSuccessTimestampSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "op",
+			Subsystem: "beacon",
+			Name:      "last_success_timestamp_seconds",
+			Help:      "Last successful publish timestamp tracked by the scheduler",
+		},
+		[]string{"beacon"},
+	)
+
+	retryAfterTimestampSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "op",
+			Subsystem: "beacon",
+			Name:      "retry_after_timestamp_seconds",
+			Help:      "Unix timestamp after which the next retry is eligible (0 if none pending)",
+		},
+		[]string{"beacon"},
+	)
+
+	retryScheduledTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "op",
+			Subsystem: "beacon",
+			Name:      "retry_scheduled_total",
+			Help:      "Number of retry executions scheduled by the beacon scheduler",
+		},
+		[]string{"beacon", "reason"},
+	)
+
+	staleAttemptTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "op",
+			Subsystem: "beacon",
+			Name:      "stale_attempt_total",
+			Help:      "Number of stale execution attempts discarded before publish",
+		},
+		[]string{"beacon"},
+	)
+
 	genesisStepTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "op",
@@ -186,6 +246,9 @@ var (
 
 // RegisterQueueDepthGauge sets up the gauge for queue depth.
 func RegisterQueueDepthGauge(getLen func() float64) {
+	if queueDepth != nil {
+		prometheus.Unregister(queueDepth)
+	}
 	queueDepth = prometheus.NewGaugeFunc(
 		prometheus.GaugeOpts{
 			Namespace: "op",
@@ -206,5 +269,8 @@ func init() {
 	prometheus.MustRegister(ipnsPublishDuration, ipnsPublishTotal)
 	prometheus.MustRegister(schedTickTotal, scheduledExecutionsTotal)
 	prometheus.MustRegister(lastSequence, lastTimestampSeconds)
+	prometheus.MustRegister(beaconInFlight, consecutiveFailures)
+	prometheus.MustRegister(lastSuccessTimestampSeconds, retryAfterTimestampSeconds)
+	prometheus.MustRegister(retryScheduledTotal, staleAttemptTotal)
 	prometheus.MustRegister(genesisStepTotal, genesisStepDuration)
 }

@@ -86,10 +86,14 @@ func (p *Plugin) Close() error {
 	logger := utils.GetLogger("orbitport:beacon")
 	logger.Info("Stopping beacon plugin...")
 
-	_ = p.scheduler.Close()
-	_ = p.builder.Close()
+	p.scheduler.Close()
+	p.builder.Close()
 
 	return nil
+}
+
+func (p *Plugin) HealthCheck(ctx context.Context) (health.HealthState, error) {
+	return p.scheduler.HealthCheck(ctx)
 }
 
 func loadLastBeaconBlock(ctx context.Context, ipfsPluginClient proto.IpfsPluginClient, name string) (string, *BeaconPayload, error) {
@@ -100,7 +104,6 @@ func loadLastBeaconBlock(ctx context.Context, ipfsPluginClient proto.IpfsPluginC
 		Namespace: "ipns",
 	})
 	if err != nil {
-		// TODO: Handle error appropriately, maybe retry or set to recoverable state
 		return "", nil, fmt.Errorf("failed to get beacon from IPFS: %v", err)
 	}
 	lastCid := getResp.GetPath()
