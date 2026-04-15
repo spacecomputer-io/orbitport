@@ -2,6 +2,10 @@ syntax = "proto3";
 
 option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 
+// Internal KMS plugin contract used between the gateway and the KMS gRPC plugin.
+// It intentionally mirrors proto/services/kms.proto today to keep the gateway
+// adapter thin, but it is allowed to diverge if internal-only fields, provider-
+// specific execution details, or future threshold-crypto flows require it.
 package kmsapi;
 
 service KmsPlugin {

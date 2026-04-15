@@ -2,6 +2,11 @@ syntax = "proto3";
 
 option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 
+// Public KMS contract exposed by Orbitport through the gateway JSON-RPC API.
+// The gateway owns JSON-RPC routing, PascalCase JSON serialization, validation,
+// and timeout/error mapping on top of these message shapes.
+// This file should stay consumer-facing even if the internal plugin contract
+// later diverges for backend-specific or provider-specific needs.
 package kms;
 
 service KmsService {
