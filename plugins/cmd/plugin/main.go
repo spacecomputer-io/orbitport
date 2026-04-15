@@ -14,6 +14,7 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -102,6 +103,13 @@ func main() {
 				logger.Errorf("error closing masterseed plugin: %v", err)
 			}
 		}()
+	case "kms":
+		plugin, err := kms.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterKmsPluginServer(grpcServer, plugin)
+		logger.Info("KMS plugin ready")
 	default:
 		panic("unknown plugin")
 	}

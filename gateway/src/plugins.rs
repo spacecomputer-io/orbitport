@@ -11,6 +11,7 @@ use tonic_health::pb::{
 use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
+use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
 
 use thiserror::Error;
 
@@ -118,9 +119,10 @@ pub struct PluginCatalog {
 }
 
 impl PluginCatalog {
-    pub fn new(auth_url: &str, masterseed_url: &str) -> Self {
+    pub fn new(auth_url: &str, masterseed_url: &str, kms_url: &str) -> Self {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
+        urls.insert("kms".to_string(), kms_url.to_string());
         urls.insert("masterseed".to_string(), masterseed_url.to_string());
 
         PluginCatalog {
@@ -151,5 +153,10 @@ impl PluginCatalog {
     ) -> Result<MasterSeedPluginClient<Channel>, PluginError> {
         let channel = self.get_client("masterseed").await?;
         Ok(MasterSeedPluginClient::new(channel))
+    }
+
+    pub async fn get_kms_client(&self) -> Result<KmsPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("kms").await?;
+        Ok(KmsPluginClient::new(channel))
     }
 }

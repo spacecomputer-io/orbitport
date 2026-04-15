@@ -9,6 +9,7 @@ Plugins are grpc services that runs in their own processes and encapsulate the l
 - [x] [IPFS](./pkg/plugin/ipfs)
 - [x] [Beacon](./pkg/plugin/beacon)
 - [x] [Masterseed](./pkg/plugin/masterseed)
+- [x] [KMS](./pkg/plugin/kms)
 
 ## Usage
 
@@ -32,6 +33,12 @@ make ENV_FILE=.auth.env docker-run
 
 ## Testing (e2e)
 `dev.docker-compose.yaml` uses a dedicated noop auth plugin for local development.
+It also bootstraps the local OpenBao-backed KMS environment automatically. Running
+`make devenv` or `make devenv-up` triggers the one-shot Compose services that execute
+[`scripts/dev/openbao/build-eth-plugin.sh`](../scripts/dev/openbao/build-eth-plugin.sh)
+and
+[`scripts/dev/openbao/bootstrap.sh`](../scripts/dev/openbao/bootstrap.sh)
+to build the Ethereum plugin, register it with OpenBao, and enable the required local mounts.
 
 for happy-path (testing aptos connectivity):
 ```sh

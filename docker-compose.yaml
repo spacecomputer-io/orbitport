@@ -56,6 +56,18 @@ services:
     depends_on:
       - plugin-aptos-orbital
 
+  plugin-kms:
+    <<: *plugin-base
+    container_name: plugin-kms
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=kms
+      - ORBITPORT_GRPC_PORT=50004
+      - ORBITPORT_KMS_OPENBAO_PROXY_URL=http://openbao-proxy:8200
+
   plugin-auth:
     <<: *plugin-base
     container_name: plugin-auth
@@ -91,11 +103,13 @@ services:
       - RUST_LOG=warn,orbitport=debug
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
+      - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
     depends_on:
       - plugin-aptos-orbital
       - plugin-auth
+      - plugin-kms
     ports:
       - 8080:8080
     healthcheck:

@@ -2,6 +2,8 @@ use std::env;
 
 mod common;
 
+use gateway::proto::services::kms::{CreateKeyResponse, SignResponse};
+
 /// Test e2e happy path.
 #[tokio::test]
 async fn test_e2e_happy() {
@@ -31,6 +33,154 @@ async fn test_e2e_happy() {
             assert_eq!(resp.bulk.unwrap().len(), 10, "Bulk is not 10");
         }
         tracing::info!("All requests completed successfully");
+        Ok::<(), common::E2EError>(())
+    }
+    .await;
+
+    #[cfg(feature = "localtest")]
+    if let Err(e) = common::post_test(started).await {
+        tracing::error!("Failed to clean up test environment: {:?}", e);
+    }
+
+    if let Err(e) = result {
+        panic!("Test failed: {:?}", e);
+    }
+
+    tracing::info!("Test completed successfully");
+}
+
+#[tokio::test]
+async fn test_e2e_happy_kms_create_key_and_sign() {
+    _ = tracing_subscriber::fmt::try_init();
+
+    let access_token = env::var("OPTEST_TOKEN").unwrap_or("test_access_token".to_string());
+    let base_url = env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string());
+
+    tracing::info!("Starting e2e KMS RPC test with base_url: {base_url}");
+
+    #[cfg(feature = "localtest")]
+    let started = common::pre_test("happy").await.unwrap();
+
+    let result = async {
+        let create_req_id = 41;
+        let create_payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": create_req_id,
+            "method": "kms.CreateKey",
+            "params": {
+                "Description": "gateway e2e ethereum key",
+                "Scheme": "ETHEREUM",
+                "KeySpec": "ECC_SECG_P256K1",
+                "KeyUsage": "SIGN_VERIFY",
+                "Tags": [
+                    {
+                        "TagKey": "test",
+                        "TagValue": "e2e"
+                    }
+                ]
+            }
+        });
+
+        let create_resp: CreateKeyResponse =
+            common::rpc_success_result(&base_url, &access_token, create_req_id, create_payload)
+                .await?;
+        let metadata = create_resp.key_metadata.ok_or_else(|| {
+            common::E2EError::AssertionFailed(
+                "kms.CreateKey did not return KeyMetadata".to_string(),
+            )
+        })?;
+
+        assert!(
+            metadata.key_id.starts_with("kms:"),
+            "CreateKey returned unexpected KeyId: {}",
+            metadata.key_id
+        );
+        assert_eq!(
+            metadata.scheme, "ETHEREUM",
+            "CreateKey returned the wrong Scheme"
+        );
+        assert_eq!(
+            metadata.key_spec, "ECC_SECG_P256K1",
+            "CreateKey returned the wrong KeySpec"
+        );
+        assert_eq!(
+            metadata.key_usage, "SIGN_VERIFY",
+            "CreateKey returned the wrong KeyUsage"
+        );
+        assert!(
+            metadata.enabled,
+            "CreateKey returned disabled KeyMetadata for a new key"
+        );
+        assert!(
+            metadata.primary_version > 0,
+            "CreateKey did not return a positive PrimaryVersion"
+        );
+        assert!(
+            !metadata.creation_date.is_empty(),
+            "CreateKey did not return CreationDate"
+        );
+        assert_eq!(metadata.tags.len(), 1, "CreateKey did not persist Tags");
+        assert_eq!(metadata.tags[0].tag_key, "test", "TagKey was not preserved");
+        assert_eq!(
+            metadata.tags[0].tag_value, "e2e",
+            "TagValue was not preserved"
+        );
+
+        let public_key = metadata.public_key.as_deref().ok_or_else(|| {
+            common::E2EError::AssertionFailed(
+                "CreateKey did not return Ethereum PublicKey".to_string(),
+            )
+        })?;
+        let address = metadata.address.as_deref().ok_or_else(|| {
+            common::E2EError::AssertionFailed(
+                "CreateKey did not return Ethereum Address".to_string(),
+            )
+        })?;
+        assert!(
+            public_key.starts_with("0x") && public_key.len() > 2,
+            "CreateKey returned invalid Ethereum PublicKey: {public_key}"
+        );
+        assert!(
+            address.starts_with("0x") && address.len() == 42,
+            "CreateKey returned invalid Ethereum Address: {address}"
+        );
+
+        let sign_req_id = 42;
+        let sign_payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": sign_req_id,
+            "method": "kms.Sign",
+            "params": {
+                "KeyId": metadata.key_id,
+                "Message": "Hello Orbitport",
+                "SigningAlgorithm": "ETHEREUM_SECP256K1",
+                "MessageType": "EIP191"
+            }
+        });
+
+        let sign_resp: SignResponse =
+            common::rpc_success_result(&base_url, &access_token, sign_req_id, sign_payload).await?;
+        assert_eq!(
+            sign_resp.key_id, metadata.key_id,
+            "Sign returned a different KeyId"
+        );
+        assert_eq!(
+            sign_resp.signing_algorithm, "ETHEREUM_SECP256K1",
+            "Sign returned the wrong SigningAlgorithm"
+        );
+        assert!(
+            sign_resp.signature.starts_with("0x"),
+            "Sign did not return a hex signature"
+        );
+        assert!(
+            sign_resp.signature.len() == 132,
+            "Expected a 65-byte Ethereum signature, got {} chars",
+            sign_resp.signature.len()
+        );
+
+        tracing::debug!("CreateKey metadata: {:?}", metadata);
+        tracing::debug!("Sign response: {:?}", sign_resp);
+        tracing::info!("KMS CreateKey + Sign completed successfully");
         Ok::<(), common::E2EError>(())
     }
     .await;
