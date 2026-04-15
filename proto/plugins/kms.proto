@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 
-package kmsplugin;
+package kmsapi;
 
 service KmsPlugin {
   rpc Encrypt(EncryptRequest) returns (EncryptResponse);

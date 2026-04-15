@@ -19,12 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KmsPlugin_Encrypt_FullMethodName         = "/kmsplugin.KmsPlugin/Encrypt"
-	KmsPlugin_Decrypt_FullMethodName         = "/kmsplugin.KmsPlugin/Decrypt"
-	KmsPlugin_Sign_FullMethodName            = "/kmsplugin.KmsPlugin/Sign"
-	KmsPlugin_CreateKey_FullMethodName       = "/kmsplugin.KmsPlugin/CreateKey"
-	KmsPlugin_GenerateDataKey_FullMethodName = "/kmsplugin.KmsPlugin/GenerateDataKey"
-	KmsPlugin_RotateKey_FullMethodName       = "/kmsplugin.KmsPlugin/RotateKey"
+	KmsPlugin_Encrypt_FullMethodName         = "/kmsapi.KmsPlugin/Encrypt"
+	KmsPlugin_Decrypt_FullMethodName         = "/kmsapi.KmsPlugin/Decrypt"
+	KmsPlugin_Sign_FullMethodName            = "/kmsapi.KmsPlugin/Sign"
+	KmsPlugin_CreateKey_FullMethodName       = "/kmsapi.KmsPlugin/CreateKey"
+	KmsPlugin_GenerateDataKey_FullMethodName = "/kmsapi.KmsPlugin/GenerateDataKey"
+	KmsPlugin_RotateKey_FullMethodName       = "/kmsapi.KmsPlugin/RotateKey"
 )
 
 // KmsPluginClient is the client API for KmsPlugin service.
@@ -278,7 +278,7 @@ func _KmsPlugin_RotateKey_Handler(srv interface{}, ctx context.Context, dec func
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var KmsPlugin_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "kmsplugin.KmsPlugin",
+	ServiceName: "kmsapi.KmsPlugin",
 	HandlerType: (*KmsPluginServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

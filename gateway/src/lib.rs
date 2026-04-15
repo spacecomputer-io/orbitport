@@ -12,7 +12,7 @@ pub mod proto {
             tonic::include_proto!("ipfs");
         }
         pub mod kms {
-            tonic::include_proto!("kmsplugin");
+            tonic::include_proto!("kmsapi");
         }
         pub mod masterseed {
             tonic::include_proto!("masterseed");

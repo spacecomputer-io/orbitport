@@ -897,10 +897,10 @@ var File_proto_plugins_kms_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/plugins/kms.proto\x12\tkmsplugin\";\n" +
+	"\x17proto/plugins/kms.proto\x12\x06kmsapi\";\n" +
 	"\x03Tag\x12\x17\n" +
 	"\atag_key\x18\x01 \x01(\tR\x06tagKey\x12\x1b\n" +
-	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\x80\x03\n" +
+	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\xfd\x02\n" +
 	"\vKeyMetadata\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x19\n" +
@@ -908,8 +908,8 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\tkey_usage\x18\x04 \x01(\tR\bkeyUsage\x12\x18\n" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x12'\n" +
 	"\x0fprimary_version\x18\x06 \x01(\rR\x0eprimaryVersion\x12#\n" +
-	"\rcreation_date\x18\a \x01(\tR\fcreationDate\x12\"\n" +
-	"\x04tags\x18\b \x03(\v2\x0e.kmsplugin.TagR\x04tags\x12\x16\n" +
+	"\rcreation_date\x18\a \x01(\tR\fcreationDate\x12\x1f\n" +
+	"\x04tags\x18\b \x03(\v2\v.kmsapi.TagR\x04tags\x12\x16\n" +
 	"\x06scheme\x18\t \x01(\tR\x06scheme\x12\"\n" +
 	"\n" +
 	"public_key\x18\n" +
@@ -946,16 +946,16 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\fSignResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12+\n" +
-	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"\xb8\x01\n" +
+	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"\xb5\x01\n" +
 	"\x10CreateKeyRequest\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x19\n" +
 	"\bkey_spec\x18\x02 \x01(\tR\akeySpec\x12\x1b\n" +
-	"\tkey_usage\x18\x03 \x01(\tR\bkeyUsage\x12\"\n" +
-	"\x04tags\x18\x04 \x03(\v2\x0e.kmsplugin.TagR\x04tags\x12\x1b\n" +
+	"\tkey_usage\x18\x03 \x01(\tR\bkeyUsage\x12\x1f\n" +
+	"\x04tags\x18\x04 \x03(\v2\v.kmsapi.TagR\x04tags\x12\x1b\n" +
 	"\x06scheme\x18\x05 \x01(\tH\x00R\x06scheme\x88\x01\x01B\t\n" +
-	"\a_scheme\"N\n" +
-	"\x11CreateKeyResponse\x129\n" +
-	"\fkey_metadata\x18\x01 \x01(\v2\x16.kmsplugin.KeyMetadataR\vkeyMetadata\"\xab\x01\n" +
+	"\a_scheme\"K\n" +
+	"\x11CreateKeyResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\xab\x01\n" +
 	"\x16GenerateDataKeyRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12'\n" +
 	"\rdata_key_spec\x18\x02 \x01(\tH\x00R\vdataKeySpec\x88\x01\x01\x12+\n" +
@@ -967,16 +967,16 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\tplaintext\x18\x02 \x01(\tR\tplaintext\x12'\n" +
 	"\x0fciphertext_blob\x18\x03 \x01(\tR\x0eciphertextBlob\")\n" +
 	"\x10RotateKeyRequest\x12\x15\n" +
-	"\x06key_id\x18\x01 \x01(\tR\x05keyId\"N\n" +
-	"\x11RotateKeyResponse\x129\n" +
-	"\fkey_metadata\x18\x01 \x01(\v2\x16.kmsplugin.KeyMetadataR\vkeyMetadata2\xb2\x03\n" +
-	"\tKmsPlugin\x12@\n" +
-	"\aEncrypt\x12\x19.kmsplugin.EncryptRequest\x1a\x1a.kmsplugin.EncryptResponse\x12@\n" +
-	"\aDecrypt\x12\x19.kmsplugin.DecryptRequest\x1a\x1a.kmsplugin.DecryptResponse\x127\n" +
-	"\x04Sign\x12\x16.kmsplugin.SignRequest\x1a\x17.kmsplugin.SignResponse\x12F\n" +
-	"\tCreateKey\x12\x1b.kmsplugin.CreateKeyRequest\x1a\x1c.kmsplugin.CreateKeyResponse\x12X\n" +
-	"\x0fGenerateDataKey\x12!.kmsplugin.GenerateDataKeyRequest\x1a\".kmsplugin.GenerateDataKeyResponse\x12F\n" +
-	"\tRotateKey\x12\x1b.kmsplugin.RotateKeyRequest\x1a\x1c.kmsplugin.RotateKeyResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\"K\n" +
+	"\x11RotateKeyResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata2\x8e\x03\n" +
+	"\tKmsPlugin\x12:\n" +
+	"\aEncrypt\x12\x16.kmsapi.EncryptRequest\x1a\x17.kmsapi.EncryptResponse\x12:\n" +
+	"\aDecrypt\x12\x16.kmsapi.DecryptRequest\x1a\x17.kmsapi.DecryptResponse\x121\n" +
+	"\x04Sign\x12\x13.kmsapi.SignRequest\x1a\x14.kmsapi.SignResponse\x12@\n" +
+	"\tCreateKey\x12\x18.kmsapi.CreateKeyRequest\x1a\x19.kmsapi.CreateKeyResponse\x12R\n" +
+	"\x0fGenerateDataKey\x12\x1e.kmsapi.GenerateDataKeyRequest\x1a\x1f.kmsapi.GenerateDataKeyResponse\x12@\n" +
+	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
 
 var (
 	file_proto_plugins_kms_proto_rawDescOnce sync.Once
@@ -992,38 +992,38 @@ func file_proto_plugins_kms_proto_rawDescGZIP() []byte {
 
 var file_proto_plugins_kms_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_proto_plugins_kms_proto_goTypes = []any{
-	(*Tag)(nil),                     // 0: kmsplugin.Tag
-	(*KeyMetadata)(nil),             // 1: kmsplugin.KeyMetadata
-	(*EncryptRequest)(nil),          // 2: kmsplugin.EncryptRequest
-	(*EncryptResponse)(nil),         // 3: kmsplugin.EncryptResponse
-	(*DecryptRequest)(nil),          // 4: kmsplugin.DecryptRequest
-	(*DecryptResponse)(nil),         // 5: kmsplugin.DecryptResponse
-	(*SignRequest)(nil),             // 6: kmsplugin.SignRequest
-	(*SignResponse)(nil),            // 7: kmsplugin.SignResponse
-	(*CreateKeyRequest)(nil),        // 8: kmsplugin.CreateKeyRequest
-	(*CreateKeyResponse)(nil),       // 9: kmsplugin.CreateKeyResponse
-	(*GenerateDataKeyRequest)(nil),  // 10: kmsplugin.GenerateDataKeyRequest
-	(*GenerateDataKeyResponse)(nil), // 11: kmsplugin.GenerateDataKeyResponse
-	(*RotateKeyRequest)(nil),        // 12: kmsplugin.RotateKeyRequest
-	(*RotateKeyResponse)(nil),       // 13: kmsplugin.RotateKeyResponse
+	(*Tag)(nil),                     // 0: kmsapi.Tag
+	(*KeyMetadata)(nil),             // 1: kmsapi.KeyMetadata
+	(*EncryptRequest)(nil),          // 2: kmsapi.EncryptRequest
+	(*EncryptResponse)(nil),         // 3: kmsapi.EncryptResponse
+	(*DecryptRequest)(nil),          // 4: kmsapi.DecryptRequest
+	(*DecryptResponse)(nil),         // 5: kmsapi.DecryptResponse
+	(*SignRequest)(nil),             // 6: kmsapi.SignRequest
+	(*SignResponse)(nil),            // 7: kmsapi.SignResponse
+	(*CreateKeyRequest)(nil),        // 8: kmsapi.CreateKeyRequest
+	(*CreateKeyResponse)(nil),       // 9: kmsapi.CreateKeyResponse
+	(*GenerateDataKeyRequest)(nil),  // 10: kmsapi.GenerateDataKeyRequest
+	(*GenerateDataKeyResponse)(nil), // 11: kmsapi.GenerateDataKeyResponse
+	(*RotateKeyRequest)(nil),        // 12: kmsapi.RotateKeyRequest
+	(*RotateKeyResponse)(nil),       // 13: kmsapi.RotateKeyResponse
 }
 var file_proto_plugins_kms_proto_depIdxs = []int32{
-	0,  // 0: kmsplugin.KeyMetadata.tags:type_name -> kmsplugin.Tag
-	0,  // 1: kmsplugin.CreateKeyRequest.tags:type_name -> kmsplugin.Tag
-	1,  // 2: kmsplugin.CreateKeyResponse.key_metadata:type_name -> kmsplugin.KeyMetadata
-	1,  // 3: kmsplugin.RotateKeyResponse.key_metadata:type_name -> kmsplugin.KeyMetadata
-	2,  // 4: kmsplugin.KmsPlugin.Encrypt:input_type -> kmsplugin.EncryptRequest
-	4,  // 5: kmsplugin.KmsPlugin.Decrypt:input_type -> kmsplugin.DecryptRequest
-	6,  // 6: kmsplugin.KmsPlugin.Sign:input_type -> kmsplugin.SignRequest
-	8,  // 7: kmsplugin.KmsPlugin.CreateKey:input_type -> kmsplugin.CreateKeyRequest
-	10, // 8: kmsplugin.KmsPlugin.GenerateDataKey:input_type -> kmsplugin.GenerateDataKeyRequest
-	12, // 9: kmsplugin.KmsPlugin.RotateKey:input_type -> kmsplugin.RotateKeyRequest
-	3,  // 10: kmsplugin.KmsPlugin.Encrypt:output_type -> kmsplugin.EncryptResponse
-	5,  // 11: kmsplugin.KmsPlugin.Decrypt:output_type -> kmsplugin.DecryptResponse
-	7,  // 12: kmsplugin.KmsPlugin.Sign:output_type -> kmsplugin.SignResponse
-	9,  // 13: kmsplugin.KmsPlugin.CreateKey:output_type -> kmsplugin.CreateKeyResponse
-	11, // 14: kmsplugin.KmsPlugin.GenerateDataKey:output_type -> kmsplugin.GenerateDataKeyResponse
-	13, // 15: kmsplugin.KmsPlugin.RotateKey:output_type -> kmsplugin.RotateKeyResponse
+	0,  // 0: kmsapi.KeyMetadata.tags:type_name -> kmsapi.Tag
+	0,  // 1: kmsapi.CreateKeyRequest.tags:type_name -> kmsapi.Tag
+	1,  // 2: kmsapi.CreateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	1,  // 3: kmsapi.RotateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	2,  // 4: kmsapi.KmsPlugin.Encrypt:input_type -> kmsapi.EncryptRequest
+	4,  // 5: kmsapi.KmsPlugin.Decrypt:input_type -> kmsapi.DecryptRequest
+	6,  // 6: kmsapi.KmsPlugin.Sign:input_type -> kmsapi.SignRequest
+	8,  // 7: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
+	10, // 8: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
+	12, // 9: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
+	3,  // 10: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
+	5,  // 11: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
+	7,  // 12: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
+	9,  // 13: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
+	11, // 14: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
+	13, // 15: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
 	10, // [10:16] is the sub-list for method output_type
 	4,  // [4:10] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
