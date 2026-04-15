@@ -21,4 +21,3 @@ rm -f "${tmp_path}" "${final_path}" "${final_path}.sha256"
 
 CGO_ENABLED=1 go build -o "${tmp_path}" ./cmd/plugin
 mv "${tmp_path}" "${final_path}"
-sha256sum "${final_path}" | cut -d' ' -f1 > "${final_path}.sha256"

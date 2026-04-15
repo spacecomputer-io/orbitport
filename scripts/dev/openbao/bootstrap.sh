@@ -14,7 +14,6 @@ export BAO_ADDR="${OPENBAO_ADDR}"
 export BAO_TOKEN="${OPENBAO_TOKEN}"
 
 plugin_path="${OPENBAO_PLUGIN_DIR}/${OPENBAO_ETH_PLUGIN_NAME}"
-plugin_sha_path="${plugin_path}.sha256"
 
 echo "waiting for OpenBao at ${BAO_ADDR}"
 until bao status >/dev/null 2>&1; do
@@ -22,7 +21,7 @@ until bao status >/dev/null 2>&1; do
 done
 
 echo "waiting for ethereum plugin binary at ${plugin_path}"
-until [ -f "${plugin_path}" ] && [ -f "${plugin_sha_path}" ]; do
+until [ -f "${plugin_path}" ]; do
     sleep 1
 done
 
@@ -35,7 +34,7 @@ enable_mount_if_missing() {
     fi
 }
 
-plugin_sha="$(cat "${plugin_sha_path}")"
+plugin_sha="$(sha256sum "${plugin_path}" | cut -d' ' -f1)"
 
 bao plugin register -sha256="${plugin_sha}" secret "${OPENBAO_ETH_PLUGIN_NAME}"
 

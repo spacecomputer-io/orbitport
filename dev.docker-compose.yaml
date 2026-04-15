@@ -39,6 +39,9 @@ services:
   openbao:
     container_name: openbao
     image: openbao/openbao:latest
+    depends_on:
+      openbao-eth-plugin-builder:
+        condition: service_completed_successfully
     command:
       - server
       - -dev
