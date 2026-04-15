@@ -270,10 +270,10 @@ impl KmsService {
         if let Some(spec) = req.data_key_spec.as_ref() {
             DataKeySpec::parse(spec)?;
         }
-        if let Some(bytes) = req.number_of_bytes {
-            if bytes == 0 {
-                return Err("NumberOfBytes must be greater than 0".to_string());
-            }
+        if let Some(bytes) = req.number_of_bytes
+            && bytes == 0
+        {
+            return Err("NumberOfBytes must be greater than 0".to_string());
         }
         Ok(())
     }

@@ -26,9 +26,7 @@ run: build
 	@./target/release/gateway
 
 docker-build:
-	@cp -r ../proto ./
-	@${CONTAINER_TOOL} build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
-	@rm -rf proto
+	@${CONTAINER_TOOL} build -f Dockerfile -t ${DOCKER_IMAGE}:${DOCKER_TAG} ..
 
 docker-clean:
 	@${CONTAINER_TOOL} rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null
