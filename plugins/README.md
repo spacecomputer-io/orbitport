@@ -35,9 +35,9 @@ make ENV_FILE=.auth.env docker-run
 `dev.docker-compose.yaml` uses a dedicated noop auth plugin for local development.
 It also bootstraps the local OpenBao-backed KMS environment automatically. Running
 `make devenv` or `make devenv-up` triggers the one-shot Compose services that execute
-[`scripts/dev/openbao/build-eth-plugin.sh`](../scripts/dev/openbao/build-eth-plugin.sh)
+[`docker/openbao/build-eth-plugin.sh`](../docker/openbao/build-eth-plugin.sh)
 and
-[`scripts/dev/openbao/bootstrap.sh`](../scripts/dev/openbao/bootstrap.sh)
+[`docker/openbao/bootstrap.sh`](../docker/openbao/bootstrap.sh)
 to build the Ethereum plugin, register it with OpenBao, and enable the required local mounts.
 
 for happy-path (testing aptos connectivity):

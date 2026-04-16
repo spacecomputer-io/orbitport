@@ -7,8 +7,8 @@ OUT_DIR="${2:-/out}"
 PLUGIN_NAME="${PLUGIN_NAME:-ethereum-secrets-plugin}"
 
 if [ ! -f "${SRC_DIR}/go.mod" ]; then
-    echo "missing go.mod in ${SRC_DIR}" >&2
-    exit 1
+    echo "skipping ethereum plugin build: missing go.mod in ${SRC_DIR}"
+    exit 0
 fi
 
 mkdir -p "${OUT_DIR}"

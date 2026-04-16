@@ -62,6 +62,14 @@ type ethereumSignInfo struct {
 }
 
 func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
+	logger.Infof(
+		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s ethereum_mount=%s timeout_secs=%d",
+		strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
+		cfg.TransitMount,
+		cfg.KVMount,
+		cfg.EthereumMount,
+		cfg.TimeoutSecs,
+	)
 	return &openBaoClient{
 		baseURL:       strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		ethereumMount: cfg.EthereumMount,
@@ -276,8 +284,10 @@ func (c *openBaoClient) get(ctx context.Context, target string, into any) error 
 }
 
 func (c *openBaoClient) do(req *http.Request, into any) error {
+	logger.Debugf("OpenBao request %s %s", req.Method, req.URL.Path)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		logger.Warnf("OpenBao request failed %s %s: %v", req.Method, req.URL.Path, err)
 		return fmt.Errorf("openbao request failed: %w", err)
 	}
 	defer func() {
@@ -286,15 +296,18 @@ func (c *openBaoClient) do(req *http.Request, into any) error {
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
+		logger.Warnf("failed reading OpenBao response body for %s %s: %v", req.Method, req.URL.Path, err)
 		return fmt.Errorf("read openbao response: %w", err)
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		return fmt.Errorf("openbao returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+		logger.Warnf("OpenBao returned %s for %s %s", resp.Status, req.Method, req.URL.Path)
+		return fmt.Errorf("openbao returned %s", resp.Status)
 	}
 	if into == nil {
 		return nil
 	}
 	if err := json.Unmarshal(body, into); err != nil {
+		logger.Warnf("failed decoding OpenBao response for %s %s: %v", req.Method, req.URL.Path, err)
 		return fmt.Errorf("decode openbao response: %w", err)
 	}
 	return nil

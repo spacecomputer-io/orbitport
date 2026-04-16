@@ -20,11 +20,6 @@ until bao status >/dev/null 2>&1; do
     sleep 1
 done
 
-echo "waiting for ethereum plugin binary at ${plugin_path}"
-until [ -f "${plugin_path}" ]; do
-    sleep 1
-done
-
 enable_mount_if_missing() {
     mount_path="$1"
     mount_type="$2"
@@ -34,12 +29,15 @@ enable_mount_if_missing() {
     fi
 }
 
-plugin_sha="$(sha256sum "${plugin_path}" | cut -d' ' -f1)"
-
-bao plugin register -sha256="${plugin_sha}" secret "${OPENBAO_ETH_PLUGIN_NAME}"
-
 enable_mount_if_missing "${OPENBAO_TRANSIT_MOUNT}" transit
 enable_mount_if_missing "${OPENBAO_KV_MOUNT}" kv-v2
-enable_mount_if_missing "${OPENBAO_ETH_MOUNT}" "${OPENBAO_ETH_PLUGIN_NAME}"
+
+if [ -f "${plugin_path}" ]; then
+    plugin_sha="$(sha256sum "${plugin_path}" | cut -d' ' -f1)"
+    bao plugin register -sha256="${plugin_sha}" secret "${OPENBAO_ETH_PLUGIN_NAME}"
+    enable_mount_if_missing "${OPENBAO_ETH_MOUNT}" "${OPENBAO_ETH_PLUGIN_NAME}"
+else
+    echo "ethereum plugin binary not found at ${plugin_path}; skipping ethereum mount"
+fi
 
 echo "OpenBao bootstrap complete"

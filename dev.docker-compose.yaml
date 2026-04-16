@@ -27,14 +27,14 @@ services:
     working_dir: /src
     volumes:
       - ${ORBITPORT_OPENBAO_ETH_PLUGIN_DIR:-../openbao-eth-plugin-poc}:/src:ro
-      - ./scripts/dev/openbao:/orbitport/scripts/dev/openbao:ro
+      - ./docker/openbao:/orbitport/docker/openbao:ro
       - openbao-plugins:/out
       - openbao-eth-go-pkg:/go/pkg/mod
       - openbao-eth-go-build:/root/.cache/go-build
     command:
       - /bin/sh
       - -ec
-      - apk add --no-cache build-base linux-headers >/dev/null && /bin/sh /orbitport/scripts/dev/openbao/build-eth-plugin.sh /src /out
+      - apk add --no-cache build-base linux-headers >/dev/null && /bin/sh /orbitport/docker/openbao/build-eth-plugin.sh /src /out
 
   openbao:
     container_name: openbao
@@ -80,8 +80,8 @@ services:
       - OPENBAO_KV_MOUNT=orbitport-kv
     volumes:
       - openbao-plugins:/openbao/plugins
-      - ./scripts/dev/openbao:/orbitport/scripts/dev/openbao:ro
-    command: ["/bin/sh", "/orbitport/scripts/dev/openbao/bootstrap.sh"]
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+    command: ["/bin/sh", "/orbitport/docker/openbao/bootstrap.sh"]
 
   openbao-proxy:
     container_name: openbao-proxy

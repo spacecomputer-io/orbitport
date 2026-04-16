@@ -143,12 +143,22 @@ impl RpcCall {
                 Ok(val)
             }
             RpcCall::Encrypt(req) => {
+                tracing::debug!(
+                    "Executing KMS Encrypt RPC [id={} key_id={}]",
+                    req_id,
+                    req.key_id
+                );
                 let grpc_client = plugin_catalog
                     .get_kms_client()
                     .await
                     .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
                 let mut svc = KmsService::new(grpc_client);
                 let results: EncryptResponse = svc.encrypt(req).await?;
+                tracing::debug!(
+                    "KMS Encrypt RPC succeeded [id={} key_id={}]",
+                    req_id,
+                    results.key_id
+                );
                 let res = JsonRpcResponse::success(req_id, results);
                 let val = serde_json::to_value(res).map_err(|e| {
                     tonic::Status::internal(format!("Failed to serialize response: {}", e))
@@ -156,12 +166,22 @@ impl RpcCall {
                 Ok(val)
             }
             RpcCall::Decrypt(req) => {
+                tracing::debug!(
+                    "Executing KMS Decrypt RPC [id={} key_id={}]",
+                    req_id,
+                    req.key_id.as_deref().unwrap_or("<blob>")
+                );
                 let grpc_client = plugin_catalog
                     .get_kms_client()
                     .await
                     .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
                 let mut svc = KmsService::new(grpc_client);
                 let results: DecryptResponse = svc.decrypt(req).await?;
+                tracing::debug!(
+                    "KMS Decrypt RPC succeeded [id={} key_id={}]",
+                    req_id,
+                    results.key_id
+                );
                 let res = JsonRpcResponse::success(req_id, results);
                 let val = serde_json::to_value(res).map_err(|e| {
                     tonic::Status::internal(format!("Failed to serialize response: {}", e))
@@ -169,12 +189,24 @@ impl RpcCall {
                 Ok(val)
             }
             RpcCall::Sign(req) => {
+                tracing::debug!(
+                    "Executing KMS Sign RPC [id={} key_id={} signing_algorithm={}]",
+                    req_id,
+                    req.key_id,
+                    req.signing_algorithm
+                );
                 let grpc_client = plugin_catalog
                     .get_kms_client()
                     .await
                     .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
                 let mut svc = KmsService::new(grpc_client);
                 let results: SignResponse = svc.sign(req).await?;
+                tracing::debug!(
+                    "KMS Sign RPC succeeded [id={} key_id={} signing_algorithm={}]",
+                    req_id,
+                    results.key_id,
+                    results.signing_algorithm
+                );
                 let res = JsonRpcResponse::success(req_id, results);
                 let val = serde_json::to_value(res).map_err(|e| {
                     tonic::Status::internal(format!("Failed to serialize response: {}", e))
@@ -182,12 +214,27 @@ impl RpcCall {
                 Ok(val)
             }
             RpcCall::CreateKey(req) => {
+                tracing::debug!(
+                    "Executing KMS CreateKey RPC [id={} scheme={} key_spec={} key_usage={}]",
+                    req_id,
+                    req.scheme.as_deref().unwrap_or("TRANSIT"),
+                    req.key_spec,
+                    req.key_usage
+                );
                 let grpc_client = plugin_catalog
                     .get_kms_client()
                     .await
                     .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
                 let mut svc = KmsService::new(grpc_client);
                 let results: CreateKeyResponse = svc.create_key(req).await?;
+                if let Some(metadata) = results.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS CreateKey RPC succeeded [id={} key_id={} scheme={}]",
+                        req_id,
+                        metadata.key_id,
+                        metadata.scheme
+                    );
+                }
                 let res = JsonRpcResponse::success(req_id, results);
                 let val = serde_json::to_value(res).map_err(|e| {
                     tonic::Status::internal(format!("Failed to serialize response: {}", e))
@@ -195,12 +242,22 @@ impl RpcCall {
                 Ok(val)
             }
             RpcCall::GenerateDataKey(req) => {
+                tracing::debug!(
+                    "Executing KMS GenerateDataKey RPC [id={} key_id={}]",
+                    req_id,
+                    req.key_id
+                );
                 let grpc_client = plugin_catalog
                     .get_kms_client()
                     .await
                     .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
                 let mut svc = KmsService::new(grpc_client);
                 let results: GenerateDataKeyResponse = svc.generate_data_key(req).await?;
+                tracing::debug!(
+                    "KMS GenerateDataKey RPC succeeded [id={} key_id={}]",
+                    req_id,
+                    results.key_id
+                );
                 let res = JsonRpcResponse::success(req_id, results);
                 let val = serde_json::to_value(res).map_err(|e| {
                     tonic::Status::internal(format!("Failed to serialize response: {}", e))
@@ -208,12 +265,25 @@ impl RpcCall {
                 Ok(val)
             }
             RpcCall::RotateKey(req) => {
+                tracing::debug!(
+                    "Executing KMS RotateKey RPC [id={} key_id={}]",
+                    req_id,
+                    req.key_id
+                );
                 let grpc_client = plugin_catalog
                     .get_kms_client()
                     .await
                     .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
                 let mut svc = KmsService::new(grpc_client);
                 let results: RotateKeyResponse = svc.rotate_key(req).await?;
+                if let Some(metadata) = results.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS RotateKey RPC succeeded [id={} key_id={} primary_version={}]",
+                        req_id,
+                        metadata.key_id,
+                        metadata.primary_version
+                    );
+                }
                 let res = JsonRpcResponse::success(req_id, results);
                 let val = serde_json::to_value(res).map_err(|e| {
                     tonic::Status::internal(format!("Failed to serialize response: {}", e))
