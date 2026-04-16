@@ -35,8 +35,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: spacecomputer-io/openbao-eth-plugin-poc
+          ref: main
           path: openbao-eth-plugin-poc
-
+          fetch-depth: 1
+          token: ${{ secrets.OPENBAO_ETH_PLUGIN_PAT }}
       - name: Build docker images
         run: |
           make docker-build
