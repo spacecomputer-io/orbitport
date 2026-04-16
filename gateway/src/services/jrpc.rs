@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::proto::services::ctrng::CTrngRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
+use crate::services::plugin::{self, PluginCallRequest};
 
 #[derive(Serialize)]
 pub struct JsonRpcError {
@@ -69,6 +70,10 @@ impl<T> JsonRpcResponse<T> {
 pub enum RpcCall {
     #[serde(rename = "ctrng.Get")]
     GetCTRNG(CTrngRequest),
+    /// Generic passthrough to any plugin loaded via `ORBITPORT_PLUGIN_*`.
+    /// New plugins route through here with no changes to this enum.
+    #[serde(rename = "plugin.Call")]
+    Plugin(PluginCallRequest),
 }
 
 impl RpcCall {
@@ -84,6 +89,10 @@ impl RpcCall {
                         return Err("Chunks must be at least 1".to_string());
                     }
                 }
+            }
+            RpcCall::Plugin(_) => {
+                // Schema validation happens at transcode time in the
+                // dispatcher (unknown plugin → 404, malformed request → 400).
             }
         }
         Ok(())
@@ -108,6 +117,14 @@ impl RpcCall {
                     tonic::Status::internal("Failed to get mixed cTRNG")
                 })?;
                 let res = JsonRpcResponse::success(req_id, results);
+                let val = serde_json::to_value(res).map_err(|e| {
+                    tonic::Status::internal(format!("Failed to serialize response: {}", e))
+                })?;
+                Ok(val)
+            }
+            RpcCall::Plugin(call) => {
+                let result = plugin::dispatch(plugin_catalog, call).await?;
+                let res = JsonRpcResponse::success(req_id, result);
                 let val = serde_json::to_value(res).map_err(|e| {
                     tonic::Status::internal(format!("Failed to serialize response: {}", e))
                 })?;

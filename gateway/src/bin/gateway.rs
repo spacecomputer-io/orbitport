@@ -10,10 +10,6 @@ struct Args {
     http_port: u16,
     #[clap(long, env = "ORBITPORT_METRICS_PORT", default_value = "9100")]
     metric_port: u16,
-    #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
-    auth_plugin: String,
-    #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
-    masterseed_plugin: String,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
@@ -41,6 +37,28 @@ async fn main() -> Result<(), GatewayError> {
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
 
+    let plugin_catalog = gateway::plugins::PluginCatalog::from_env();
+
+    // Plugins required by the gateway's built-in code paths.
+    // Any *additional* plugin only needs an `ORBITPORT_PLUGIN_<NAME>` env
+    // var — no code change here.
+    let auth_url = plugin_catalog
+        .url("auth")
+        .ok_or_else(|| {
+            GatewayError::ServiceConnectionError(
+                "ORBITPORT_PLUGIN_AUTH must be set".to_string(),
+            )
+        })?
+        .to_string();
+    let masterseed_url = plugin_catalog
+        .url("masterseed")
+        .ok_or_else(|| {
+            GatewayError::ServiceConnectionError(
+                "ORBITPORT_PLUGIN_MASTERSEED must be set".to_string(),
+            )
+        })?
+        .to_string();
+
     let shutdown = Arc::new(Notify::new());
     {
         let shutdown = shutdown.clone();
@@ -53,10 +71,7 @@ async fn main() -> Result<(), GatewayError> {
     }
 
     plugins::wait_for(
-        vec![
-            args.auth_plugin.to_string(),
-            args.masterseed_plugin.to_string(),
-        ],
+        plugin_catalog.urls(),
         std::time::Duration::from_secs(60),
         shutdown.clone(),
     )
@@ -66,7 +81,7 @@ async fn main() -> Result<(), GatewayError> {
         GatewayError::ServiceConnectionError(e.to_string())
     })?;
     let service_manager =
-        service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
+        service_manager::ServiceManager::new(&auth_url, &masterseed_url).await?;
 
     let metrics_port = args.metric_port;
     tokio::spawn(async move {
@@ -74,10 +89,7 @@ async fn main() -> Result<(), GatewayError> {
     });
 
     let service_manager = Arc::new(service_manager);
-    let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
-        &args.auth_plugin,
-        &args.masterseed_plugin,
-    ));
+    let plugin_catalog = Arc::new(plugin_catalog);
     server::start(
         args.http_port,
         service_manager.clone(),

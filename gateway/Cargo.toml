@@ -20,6 +20,9 @@ futures = "0.3.31"
 clap = { version = "4.6.0", features = ["derive", "env"] }
 warp = { version = "0.4.2", features = ["server"] }
 prost = "0.14.3"
+prost-reflect = { version = "0.16", features = ["serde"] }
+bytes = "1"
+http = "1"
 tonic = "0.14.5"
 tonic-prost = "0.14.5"
 tonic-health = "0.14.5"

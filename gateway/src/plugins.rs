@@ -118,14 +118,37 @@ pub struct PluginCatalog {
 }
 
 impl PluginCatalog {
-    pub fn new(auth_url: &str, masterseed_url: &str) -> Self {
-        let mut urls = HashMap::new();
-        urls.insert("auth".to_string(), auth_url.to_string());
-        urls.insert("masterseed".to_string(), masterseed_url.to_string());
-
+    /// Build a catalog from an explicit name→URL map. Typically constructed
+    /// from `ORBITPORT_PLUGIN_*` environment variables; see `from_env`.
+    pub fn new(urls: HashMap<String, String>) -> Self {
         PluginCatalog {
             urls: Arc::new(urls),
         }
+    }
+
+    /// Build a catalog by scanning the environment for variables matching
+    /// `ORBITPORT_PLUGIN_<NAME>=<url>`. `<NAME>` is lowercased and becomes
+    /// the key. Adding a plugin therefore requires no code change here —
+    /// just set the env var and its URL is registered automatically.
+    pub fn from_env() -> Self {
+        const PREFIX: &str = "ORBITPORT_PLUGIN_";
+        let urls = std::env::vars()
+            .filter_map(|(k, v)| {
+                k.strip_prefix(PREFIX)
+                    .map(|suffix| (suffix.to_lowercase(), v))
+            })
+            .collect();
+        Self::new(urls)
+    }
+
+    /// All registered plugin URLs (unordered). Used by `wait_for` at startup.
+    pub fn urls(&self) -> Vec<String> {
+        self.urls.values().cloned().collect()
+    }
+
+    /// Look up a plugin URL by name without opening a connection.
+    pub fn url(&self, plugin_name: &str) -> Option<&str> {
+        self.urls.get(plugin_name).map(|s| s.as_str())
     }
 
     pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {
