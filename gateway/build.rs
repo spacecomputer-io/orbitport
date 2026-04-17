@@ -25,23 +25,23 @@ fn apply_kms_service_attributes(config: tonic_prost_build::Builder) -> tonic_pro
         .fold(config, |config, ty| config.type_attribute(*ty, PASCAL_CASE))
 }
 
-fn build_plugins(proto_dir: &str) -> std::io::Result<()> {
+fn build_plugins(proto_dir: &str) -> Result<()> {
+    let (_, plugin_protos) = protos_in_dir(proto_dir)?;
+
     tonic_prost_build::configure()
         .build_server(false)
         .protoc_arg("--experimental_allow_proto3_optional")
         .compile_protos(
-            &[
-                "auth.proto",
-                "ao.proto",
-                "ipfs.proto",
-                "kms.proto",
-                "masterseed.proto",
-            ],
-            &[proto_dir], // specify the root location to search proto dependencies
-        )
+            &plugin_protos.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+            &[proto_dir],
+        )?;
+
+    Ok(())
 }
 
-fn build_services(proto_dir: &str) -> std::io::Result<()> {
+fn build_services(proto_dir: &str) -> Result<()> {
+    let (_, service_protos) = protos_in_dir(proto_dir)?;
+
     let config = apply_kms_service_attributes(
         tonic_prost_build::configure()
             .build_server(false)
@@ -51,21 +51,47 @@ fn build_services(proto_dir: &str) -> std::io::Result<()> {
     );
 
     config.compile_protos(
-        &["ctrng.proto", "kms.proto"],
-        &[proto_dir], // specify the root location to search proto dependencies
-    )
+        &service_protos.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &[proto_dir],
+    )?;
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
     if let Err(_e) = build_plugins("../proto/plugins") {
-        // trying from current directory if the first path doesn't work
-        build_plugins("./proto/plugins").unwrap();
+        build_plugins("./proto/plugins")?;
     }
 
     if let Err(_e) = build_services("../proto/services") {
-        // trying from current directory if the first path doesn't work
-        build_services("./proto/services").unwrap();
+        build_services("./proto/services")?;
     }
 
     Ok(())
+}
+
+fn protos_in_dir(dir: &str) -> Result<(String, Vec<String>)> {
+    if !std::path::Path::new(dir).exists() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Directory {} not found", dir),
+        ));
+    }
+
+    let mut protos = Vec::new();
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if entry.file_type()?.is_dir() {
+            let (_, mut nested_protos) = protos_in_dir(entry.path().to_str().unwrap())?;
+            protos.append(&mut nested_protos);
+            continue;
+        }
+
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) == Some("proto") {
+            protos.push(path.to_str().unwrap().to_string());
+        }
+    }
+
+    Ok((dir.to_string(), protos))
 }
