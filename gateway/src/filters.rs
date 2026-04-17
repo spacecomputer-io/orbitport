@@ -18,6 +18,12 @@ use warp::{
 
 const BEARER: &str = "Bearer ";
 
+#[derive(Clone, Debug)]
+pub struct AuthContext {
+    pub jwt: String,
+    pub client_id: String,
+}
+
 /// Rate limit structure
 pub type RateLimit = (u32, Instant);
 /// Rate limit items
@@ -44,7 +50,7 @@ impl RateLimiter {
 /// Creates an authentication filter that validates JWTs using the auth plugin.
 pub fn with_auth(
     auth_client: AuthPluginClient<Channel>,
-) -> impl Filter<Extract = (String,), Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (AuthContext,), Error = warp::Rejection> + Clone {
     headers_cloned()
         .map(move |headers: HeaderMap<HeaderValue>| (headers, auth_client.clone()))
         .and_then(authorize)
@@ -56,7 +62,7 @@ type ApiResult<T> = std::result::Result<T, warp::Rejection>;
 /// validates it using the auth plugin, and returns the JWT if valid.
 async fn authorize(
     (headers, mut auth_client): (HeaderMap<HeaderValue>, AuthPluginClient<Channel>),
-) -> ApiResult<String> {
+) -> ApiResult<AuthContext> {
     let timer = Instant::now();
     match jwt_from_header(&headers) {
         Ok(jwt) => {
@@ -83,9 +89,15 @@ async fn authorize(
                 metrics::record_auth("rejected", timer.elapsed().as_secs_f64());
                 return Err(warp::reject::custom(GatewayError::AuthenticationFailed));
             }
+            let client_id = response.client_id.trim().to_string();
+            if client_id.is_empty() {
+                metrics::record_auth("failed", timer.elapsed().as_secs_f64());
+                tracing::error!("Auth plugin validated JWT but returned empty client_id");
+                return Err(warp::reject::custom(GatewayError::AuthenticationFailed));
+            }
             metrics::record_auth("ok", timer.elapsed().as_secs_f64());
             tracing::debug!("JWT authorized successfully");
-            Ok(jwt)
+            Ok(AuthContext { jwt, client_id })
         }
         Err(GatewayError::NoAuthHeaderError) => {
             metrics::record_auth("missing_header", timer.elapsed().as_secs_f64());
@@ -123,9 +135,9 @@ fn extract_jwt(auth_header: &str) -> Result<String, GatewayError> {
 
 // Create a rate limiter filter
 pub fn with_rate_limiter(
-    auth_filter: impl Filter<Extract = (String,), Error = warp::Rejection> + Clone,
+    auth_filter: impl Filter<Extract = (AuthContext,), Error = warp::Rejection> + Clone,
     rate_limiter: Arc<RateLimiter>,
-) -> impl Filter<Extract = (String,), Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (AuthContext,), Error = warp::Rejection> + Clone {
     auth_filter
         .and(warp::any().map(move || rate_limiter.clone()))
         .and_then(rate_limit)
@@ -133,12 +145,12 @@ pub fn with_rate_limiter(
 
 /// Rate limiting logic.
 async fn rate_limit(
-    jwt: String,
+    auth: AuthContext,
     rate_limiter: Arc<RateLimiter>,
-) -> Result<String, warp::Rejection> {
+) -> Result<AuthContext, warp::Rejection> {
     // Hash the token to avoid storing it directly.
     let mut hasher = Sha256::new();
-    hasher.update(&jwt);
+    hasher.update(&auth.jwt);
     let token_hash = format!("{:x}", hasher.finalize());
 
     let mut items = rate_limiter.items.lock().await;
@@ -161,7 +173,7 @@ async fn rate_limit(
     }
 
     metrics::record_rate_limit("ok");
-    Ok(jwt)
+    Ok(auth)
 }
 
 #[cfg(test)]
@@ -188,14 +200,17 @@ mod test {
     #[tokio::test]
     async fn test_rate_limiter() {
         let rate_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(10)));
-        let token = "test_token".to_string();
+        let auth = AuthContext {
+            jwt: "test_token".to_string(),
+            client_id: "client".to_string(),
+        };
 
         for _i in 0..5 {
-            rate_limit(token.clone(), rate_limiter.clone())
+            rate_limit(auth.clone(), rate_limiter.clone())
                 .await
                 .unwrap();
         }
-        match rate_limit(token.clone(), rate_limiter.clone()).await {
+        match rate_limit(auth, rate_limiter.clone()).await {
             Ok(_) => panic!("Rate limit should have been exceeded"),
             Err(e) => {
                 assert_eq!(

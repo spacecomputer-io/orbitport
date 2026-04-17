@@ -7,7 +7,7 @@ use crate::metrics;
 use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
-use crate::filters::{RateLimiter, with_auth, with_rate_limiter};
+use crate::filters::{AuthContext, RateLimiter, with_auth, with_rate_limiter};
 use crate::plugins::PluginCatalog;
 use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
 use crate::trng::SRC_DERIVED_TRNG;
@@ -110,7 +110,7 @@ pub async fn start(
 }
 
 async fn handle_rpc(
-    _jwt: String,
+    auth: AuthContext,
     body: JsonRpcRequest,
     plugin_catalog: Arc<PluginCatalog>,
 ) -> Result<impl Reply, Rejection> {
@@ -124,8 +124,14 @@ async fn handle_rpc(
         return Ok(warp::reply::json(&res));
     }
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+    let client_id = auth.client_id;
 
-    match timeout(REQUEST_TIMEOUT, rpc_call.execute(req_id, &plugin_catalog)).await {
+    match timeout(
+        REQUEST_TIMEOUT,
+        rpc_call.execute(req_id, &client_id, &plugin_catalog),
+    )
+    .await
+    {
         Ok(Ok(result)) => {
             tracing::debug!("RPC executed successfully [id={}]", req_id);
             Ok(warp::reply::json(&result))
@@ -150,7 +156,7 @@ async fn handle_rpc(
 
 async fn handle_get(
     service: String,
-    _jwt: String,
+    _auth: AuthContext,
     query: QueryParams,
     service_manager: Arc<ServiceManager>,
     bulk_max: usize,
@@ -198,7 +204,7 @@ async fn handle_get(
 
 async fn handle_post(
     service: String,
-    _jwt: String,
+    _auth: AuthContext,
     body: PostBody,
     query: QueryParams,
     service_manager: Arc<ServiceManager>,

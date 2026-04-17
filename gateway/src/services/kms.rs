@@ -1,3 +1,4 @@
+use serde::Serialize;
 use tonic::transport::Channel;
 
 use crate::proto::plugins::kms::{
@@ -189,6 +190,126 @@ impl DataKeySpec {
     }
 }
 
+#[derive(Debug)]
+pub enum KmsRpcCall {
+    Encrypt(EncryptRequest),
+    Decrypt(DecryptRequest),
+    Sign(SignRequest),
+    CreateKey(CreateKeyRequest),
+    GenerateDataKey(GenerateDataKeyRequest),
+    RotateKey(RotateKeyRequest),
+}
+
+impl KmsRpcCall {
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            Self::Encrypt(req) => KmsService::validate_encrypt(req),
+            Self::Decrypt(req) => KmsService::validate_decrypt(req),
+            Self::Sign(req) => KmsService::validate_sign(req),
+            Self::CreateKey(req) => KmsService::validate_create_key(req),
+            Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
+            Self::RotateKey(req) => KmsService::validate_rotate_key(req),
+        }
+    }
+
+    fn log_start(&self, req_id: u64) {
+        match self {
+            Self::Encrypt(req) => tracing::debug!(
+                "Executing KMS Encrypt RPC [id={} key_id={}]",
+                req_id,
+                req.key_id
+            ),
+            Self::Decrypt(req) => tracing::debug!(
+                "Executing KMS Decrypt RPC [id={} key_id={}]",
+                req_id,
+                req.key_id.as_deref().unwrap_or("<blob>")
+            ),
+            Self::Sign(req) => tracing::debug!(
+                "Executing KMS Sign RPC [id={} key_id={} signing_algorithm={}]",
+                req_id,
+                req.key_id,
+                req.signing_algorithm
+            ),
+            Self::CreateKey(req) => tracing::debug!(
+                "Executing KMS CreateKey RPC [id={} scheme={} key_spec={} key_usage={}]",
+                req_id,
+                req.scheme.as_deref().unwrap_or("TRANSIT"),
+                req.key_spec,
+                req.key_usage
+            ),
+            Self::GenerateDataKey(req) => tracing::debug!(
+                "Executing KMS GenerateDataKey RPC [id={} key_id={}]",
+                req_id,
+                req.key_id
+            ),
+            Self::RotateKey(req) => tracing::debug!(
+                "Executing KMS RotateKey RPC [id={} key_id={}]",
+                req_id,
+                req.key_id
+            ),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum KmsRpcResult {
+    Encrypt(EncryptResponse),
+    Decrypt(DecryptResponse),
+    Sign(SignResponse),
+    CreateKey(CreateKeyResponse),
+    GenerateDataKey(GenerateDataKeyResponse),
+    RotateKey(RotateKeyResponse),
+}
+
+impl KmsRpcResult {
+    fn log_success(&self, req_id: u64) {
+        match self {
+            Self::Encrypt(result) => tracing::debug!(
+                "KMS Encrypt RPC succeeded [id={} key_id={}]",
+                req_id,
+                result.key_id
+            ),
+            Self::Decrypt(result) => tracing::debug!(
+                "KMS Decrypt RPC succeeded [id={} key_id={}]",
+                req_id,
+                result.key_id
+            ),
+            Self::Sign(result) => tracing::debug!(
+                "KMS Sign RPC succeeded [id={} key_id={} signing_algorithm={}]",
+                req_id,
+                result.key_id,
+                result.signing_algorithm
+            ),
+            Self::CreateKey(result) => {
+                if let Some(metadata) = result.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS CreateKey RPC succeeded [id={} key_id={} scheme={}]",
+                        req_id,
+                        metadata.key_id,
+                        metadata.scheme
+                    );
+                }
+            }
+            Self::GenerateDataKey(result) => tracing::debug!(
+                "KMS GenerateDataKey RPC succeeded [id={} key_id={}]",
+                req_id,
+                result.key_id
+            ),
+            Self::RotateKey(result) => {
+                if let Some(metadata) = result.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS RotateKey RPC succeeded [id={} key_id={} primary_version={}]",
+                        req_id,
+                        metadata.key_id,
+                        metadata.primary_version
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct KmsService {
     client: KmsPluginClient<Channel>,
@@ -282,13 +403,45 @@ impl KmsService {
         validate_required("KeyId", &req.key_id)
     }
 
-    pub async fn encrypt(&mut self, req: EncryptRequest) -> Result<EncryptResponse, tonic::Status> {
+    pub async fn execute(
+        &mut self,
+        client_id: &str,
+        req_id: u64,
+        call: KmsRpcCall,
+    ) -> Result<KmsRpcResult, tonic::Status> {
+        call.log_start(req_id);
+
+        let result = match call {
+            KmsRpcCall::Encrypt(req) => KmsRpcResult::Encrypt(self.encrypt(client_id, req).await?),
+            KmsRpcCall::Decrypt(req) => KmsRpcResult::Decrypt(self.decrypt(client_id, req).await?),
+            KmsRpcCall::Sign(req) => KmsRpcResult::Sign(self.sign(client_id, req).await?),
+            KmsRpcCall::CreateKey(req) => {
+                KmsRpcResult::CreateKey(self.create_key(client_id, req).await?)
+            }
+            KmsRpcCall::GenerateDataKey(req) => {
+                KmsRpcResult::GenerateDataKey(self.generate_data_key(client_id, req).await?)
+            }
+            KmsRpcCall::RotateKey(req) => {
+                KmsRpcResult::RotateKey(self.rotate_key(client_id, req).await?)
+            }
+        };
+
+        result.log_success(req_id);
+        Ok(result)
+    }
+
+    pub async fn encrypt(
+        &mut self,
+        client_id: &str,
+        req: EncryptRequest,
+    ) -> Result<EncryptResponse, tonic::Status> {
         let response: PluginEncryptResponse = self
             .client
             .encrypt(tonic::Request::new(PluginEncryptRequest {
                 key_id: req.key_id,
                 plaintext: req.plaintext,
                 encryption_algorithm: req.encryption_algorithm,
+                client_id: client_id.to_string(),
             }))
             .await?
             .into_inner();
@@ -300,13 +453,18 @@ impl KmsService {
         })
     }
 
-    pub async fn decrypt(&mut self, req: DecryptRequest) -> Result<DecryptResponse, tonic::Status> {
+    pub async fn decrypt(
+        &mut self,
+        client_id: &str,
+        req: DecryptRequest,
+    ) -> Result<DecryptResponse, tonic::Status> {
         let response: PluginDecryptResponse = self
             .client
             .decrypt(tonic::Request::new(PluginDecryptRequest {
                 ciphertext_blob: req.ciphertext_blob,
                 key_id: req.key_id,
                 encryption_algorithm: req.encryption_algorithm,
+                client_id: client_id.to_string(),
             }))
             .await?
             .into_inner();
@@ -318,7 +476,11 @@ impl KmsService {
         })
     }
 
-    pub async fn sign(&mut self, req: SignRequest) -> Result<SignResponse, tonic::Status> {
+    pub async fn sign(
+        &mut self,
+        client_id: &str,
+        req: SignRequest,
+    ) -> Result<SignResponse, tonic::Status> {
         let response: PluginSignResponse = self
             .client
             .sign(tonic::Request::new(PluginSignRequest {
@@ -326,6 +488,7 @@ impl KmsService {
                 message: req.message,
                 signing_algorithm: req.signing_algorithm,
                 message_type: req.message_type,
+                client_id: client_id.to_string(),
             }))
             .await?
             .into_inner();
@@ -339,6 +502,7 @@ impl KmsService {
 
     pub async fn create_key(
         &mut self,
+        client_id: &str,
         req: CreateKeyRequest,
     ) -> Result<CreateKeyResponse, tonic::Status> {
         let response: PluginCreateKeyResponse = self
@@ -356,6 +520,7 @@ impl KmsService {
                         tag_value: tag.tag_value,
                     })
                     .collect(),
+                client_id: client_id.to_string(),
             }))
             .await?
             .into_inner();
@@ -367,6 +532,7 @@ impl KmsService {
 
     pub async fn generate_data_key(
         &mut self,
+        client_id: &str,
         req: GenerateDataKeyRequest,
     ) -> Result<GenerateDataKeyResponse, tonic::Status> {
         let response: PluginGenerateDataKeyResponse = self
@@ -375,6 +541,7 @@ impl KmsService {
                 key_id: req.key_id,
                 data_key_spec: req.data_key_spec,
                 number_of_bytes: req.number_of_bytes,
+                client_id: client_id.to_string(),
             }))
             .await?
             .into_inner();
@@ -388,12 +555,14 @@ impl KmsService {
 
     pub async fn rotate_key(
         &mut self,
+        client_id: &str,
         req: RotateKeyRequest,
     ) -> Result<RotateKeyResponse, tonic::Status> {
         let response: PluginRotateKeyResponse = self
             .client
             .rotate_key(tonic::Request::new(PluginRotateKeyRequest {
                 key_id: req.key_id,
+                client_id: client_id.to_string(),
             }))
             .await?
             .into_inner();

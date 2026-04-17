@@ -2,7 +2,6 @@ package kms
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -23,7 +22,10 @@ func (p *ethereumProvider) CreateKey(ctx context.Context, req *proto.CreateKeyRe
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	providerKey := fmt.Sprintf("kms-%s", uuidNewString())
+	providerKey, err := scopedBackendKey(req.ClientId, keyID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	keyInfo, err := p.client.createEthereumKey(ctx, providerKey)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -36,6 +38,7 @@ func (p *ethereumProvider) CreateKey(ctx context.Context, req *proto.CreateKeyRe
 
 	return &keyMetadataRecord{
 		KeyID:          keyID,
+		ClientID:       req.ClientId,
 		Scheme:         schemeEthereum,
 		ProviderKey:    providerKey,
 		Description:    req.Description,

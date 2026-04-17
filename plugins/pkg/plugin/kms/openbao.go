@@ -23,6 +23,7 @@ type openBaoClient struct {
 
 type keyMetadataRecord struct {
 	KeyID          string       `json:"key_id"`
+	ClientID       string       `json:"client_id"`
 	Scheme         string       `json:"scheme"`
 	ProviderKey    string       `json:"provider_key,omitempty"`
 	TransitKey     string       `json:"transit_key,omitempty"`
@@ -40,6 +41,15 @@ type keyMetadataRecord struct {
 type pluginTag struct {
 	TagKey   string `json:"tag_key"`
 	TagValue string `json:"tag_value"`
+}
+
+type openBaoStatusError struct {
+	statusCode int
+	status     string
+}
+
+func (e *openBaoStatusError) Error() string {
+	return fmt.Sprintf("openbao returned %s", e.status)
 }
 
 type transitKeyInfo struct {
@@ -216,24 +226,31 @@ func (c *openBaoClient) signEthereum(ctx context.Context, keyName string, body m
 	return &resp.Data, nil
 }
 
-func (c *openBaoClient) putMetadata(ctx context.Context, keyID string, metadata *keyMetadataRecord) error {
-	return c.post(ctx, c.kvPath("kms", "metadata", url.PathEscape(keyID)), map[string]any{
+func (c *openBaoClient) putMetadata(ctx context.Context, clientID, keyID string, metadata *keyMetadataRecord) error {
+	return c.post(ctx, c.metadataPath(clientID, keyID), map[string]any{
 		"data": metadata,
 	}, nil)
 }
 
-func (c *openBaoClient) getMetadata(ctx context.Context, keyID string) (*keyMetadataRecord, error) {
+func (c *openBaoClient) getMetadata(ctx context.Context, clientID, keyID string) (*keyMetadataRecord, error) {
 	var resp struct {
 		Data struct {
 			Data keyMetadataRecord `json:"data"`
 		} `json:"data"`
 	}
-	if err := c.get(ctx, c.kvPath("kms", "metadata", url.PathEscape(keyID)), &resp); err != nil {
+	if err := c.get(ctx, c.metadataPath(clientID, keyID), &resp); err != nil {
 		return nil, err
 	}
 	record := &resp.Data.Data
 	record.normalize()
+	if record.ClientID != "" && record.ClientID != clientID {
+		return nil, fmt.Errorf("metadata owner does not match request owner")
+	}
 	return record, nil
+}
+
+func (c *openBaoClient) metadataPath(clientID, keyID string) string {
+	return c.kvPath("kms", "metadata", tenantNamespace(clientID), url.PathEscape(keyID))
 }
 
 func (c *openBaoClient) kvPath(parts ...string) string {
@@ -301,7 +318,10 @@ func (c *openBaoClient) do(req *http.Request, into any) error {
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
 		logger.Warnf("OpenBao returned %s for %s %s", resp.Status, req.Method, req.URL.Path)
-		return fmt.Errorf("openbao returned %s", resp.Status)
+		return &openBaoStatusError{
+			statusCode: resp.StatusCode,
+			status:     resp.Status,
+		}
 	}
 	if into == nil {
 		return nil

@@ -2,7 +2,6 @@ package kms
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -28,7 +27,10 @@ func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyReq
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	providerKey := fmt.Sprintf("kms-%s", uuidNewString())
+	providerKey, err := scopedBackendKey(req.ClientId, keyID)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
 	transitInfo, err := p.client.createTransitKey(ctx, providerKey, keyType)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
@@ -36,6 +38,7 @@ func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyReq
 
 	return &keyMetadataRecord{
 		KeyID:          keyID,
+		ClientID:       req.ClientId,
 		Scheme:         schemeTransit,
 		ProviderKey:    providerKey,
 		Description:    req.Description,

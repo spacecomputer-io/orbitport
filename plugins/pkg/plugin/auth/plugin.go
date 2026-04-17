@@ -74,13 +74,22 @@ func newAuthPlugin(auth0Domain, auth0Audience string) (*Plugin, error) {
 func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
 	logger := utils.GetLogger("orbitport:auth")
 	logger.Debug("Validating token")
-	_, err := p.jwtValidator.ValidateToken(ctx, req.Token)
+	claims, err := p.jwtValidator.ValidateToken(ctx, req.Token)
 	if err != nil {
 		logger.Warnf("Encountered error while validating JWT: %v", err)
 		return nil, fmt.Errorf("failed to validate JWT token: %w", err)
 	}
+	validatedClaims, ok := claims.(*validator.ValidatedClaims)
+	if !ok {
+		return nil, fmt.Errorf("unexpected validated claims type %T", claims)
+	}
+	clientID := validatedClaims.RegisteredClaims.Subject
+	if clientID == "" {
+		return nil, fmt.Errorf("validated JWT is missing sub claim")
+	}
 
 	return &proto.TokenValidationResponse{
-		Ok: true,
+		Ok:       true,
+		ClientId: clientID,
 	}, nil
 }

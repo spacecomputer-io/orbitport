@@ -2,7 +2,10 @@ package kms
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -51,8 +54,11 @@ func newPlugin(cfg *kmsConfig, client *openBaoClient) *Plugin {
 }
 
 func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto.EncryptResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
 	logger.Debugf("Encrypt request received for key_id=%s", req.KeyId)
-	metadata, provider, err := p.metadataProvider(ctx, req.KeyId)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
 	if err != nil {
 		logger.Warnf("Encrypt failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
@@ -67,6 +73,9 @@ func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto
 }
 
 func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto.DecryptResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
 	blob, err := decodeCiphertextBlob(req.CiphertextBlob)
 	if err != nil {
 		logger.Warn("Decrypt rejected invalid ciphertext blob")
@@ -78,10 +87,14 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 		return nil, status.Error(codes.InvalidArgument, "KeyId does not match CiphertextBlob")
 	}
 
-	provider, err := p.providerForScheme(blob.Scheme)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, blob.KeyID)
 	if err != nil {
-		logger.Warnf("Decrypt failed to resolve provider for scheme=%s key_id=%s", blob.Scheme, blob.KeyID)
+		logger.Warnf("Decrypt failed to resolve metadata for key_id=%s", blob.KeyID)
 		return nil, err
+	}
+	if metadata.KeyID != blob.KeyID || metadata.backendKey() != blob.backendKey() {
+		logger.Warnf("Decrypt rejected mismatched ciphertext blob for key_id=%s", blob.KeyID)
+		return nil, status.Error(codes.PermissionDenied, "CiphertextBlob does not belong to the authenticated client")
 	}
 	resp, err := provider.Decrypt(ctx, blob, req)
 	if err != nil {
@@ -93,13 +106,16 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 }
 
 func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
 	logger.Debugf(
 		"Sign request received for key_id=%s signing_algorithm=%s message_type=%q",
 		req.KeyId,
 		req.SigningAlgorithm,
 		optionalString(req.MessageType),
 	)
-	metadata, provider, err := p.metadataProvider(ctx, req.KeyId)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
 	if err != nil {
 		logger.Warnf("Sign failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
@@ -114,6 +130,9 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 }
 
 func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
 	scheme, err := normalizeScheme(optionalString(req.Scheme))
 	if err != nil {
 		logger.Warnf("CreateKey rejected unsupported scheme=%q", optionalString(req.Scheme))
@@ -141,7 +160,7 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	}
 
 	record.normalize()
-	if err := p.client.putMetadata(ctx, keyID, record); err != nil {
+	if err := p.client.putMetadata(ctx, req.ClientId, keyID, record); err != nil {
 		logger.Warnf("CreateKey failed to persist metadata for key_id=%s scheme=%s", keyID, scheme)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -153,8 +172,11 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 }
 
 func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKeyRequest) (*proto.GenerateDataKeyResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
 	logger.Debugf("GenerateDataKey request received for key_id=%s", req.KeyId)
-	metadata, provider, err := p.metadataProvider(ctx, req.KeyId)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
 	if err != nil {
 		logger.Warnf("GenerateDataKey failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
@@ -169,8 +191,11 @@ func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKey
 }
 
 func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*proto.RotateKeyResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
 	logger.Infof("RotateKey request received for key_id=%s", req.KeyId)
-	metadata, provider, err := p.metadataProvider(ctx, req.KeyId)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
 	if err != nil {
 		logger.Warnf("RotateKey failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
@@ -182,7 +207,7 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 		return nil, err
 	}
 	updated.normalize()
-	if err := p.client.putMetadata(ctx, updated.KeyID, updated); err != nil {
+	if err := p.client.putMetadata(ctx, req.ClientId, updated.KeyID, updated); err != nil {
 		logger.Warnf("RotateKey failed to persist metadata for key_id=%s", updated.KeyID)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -198,9 +223,14 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 	}, nil
 }
 
-func (p *Plugin) metadataProvider(ctx context.Context, keyID string) (*keyMetadataRecord, kmsProvider, error) {
-	metadata, err := p.client.getMetadata(ctx, keyID)
+func (p *Plugin) metadataProvider(ctx context.Context, clientID, keyID string) (*keyMetadataRecord, kmsProvider, error) {
+	metadata, err := p.client.getMetadata(ctx, clientID, keyID)
 	if err != nil {
+		var statusErr *openBaoStatusError
+		if errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
+			logger.Warnf("denied access to key_id=%s for requesting client", keyID)
+			return nil, nil, status.Error(codes.PermissionDenied, "key does not belong to the authenticated client")
+		}
 		logger.Warnf("failed to fetch KMS metadata for key_id=%s", keyID)
 		return nil, nil, status.Error(codes.Internal, err.Error())
 	}
@@ -211,6 +241,13 @@ func (p *Plugin) metadataProvider(ctx context.Context, keyID string) (*keyMetada
 		return nil, nil, err
 	}
 	return metadata, provider, nil
+}
+
+func requireClientID(clientID string) error {
+	if strings.TrimSpace(clientID) == "" {
+		return status.Error(codes.InvalidArgument, "client_id is required")
+	}
+	return nil
 }
 
 func (p *Plugin) providerForScheme(scheme string) (kmsProvider, error) {
