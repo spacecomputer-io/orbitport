@@ -39,11 +39,22 @@ go-e2e-offline:
 		-run "TestBeacon.*Offline$$" \
 		-timeout 10m -tags e2e -v
 
-devenv:
-	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
+# Gateway Dockerfile bind-mounts ./proto from its own build context, but the
+# canonical protos live at the repo root. Stage them into gateway/proto around
+# the build and clean up afterwards so the working tree stays pristine even
+# when the build fails.
+stage-gateway-proto:
+	@rm -rf gateway/proto
+	@cp -r proto gateway/proto
 
-devenv-up: devenv-down docker-build
-	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
+clean-gateway-proto:
+	@rm -rf gateway/proto
+
+devenv: stage-gateway-proto
+	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d; STATUS=$$?; $(MAKE) clean-gateway-proto; exit $$STATUS
+
+devenv-up: devenv-down stage-gateway-proto
+	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up --build -d; STATUS=$$?; $(MAKE) clean-gateway-proto; exit $$STATUS
 
 devenv-down:
 	@docker-compose -f dev.docker-compose.yaml down
