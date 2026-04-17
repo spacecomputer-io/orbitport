@@ -51,7 +51,10 @@ fn build_services(proto_dir: &str) -> Result<()> {
     );
 
     config.compile_protos(
-        &service_protos.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+        &service_protos
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>(),
         &[proto_dir],
     )?;
 
