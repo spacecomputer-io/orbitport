@@ -119,15 +119,29 @@ pub struct PluginCatalog {
 }
 
 impl PluginCatalog {
-    pub fn new(auth_url: &str, masterseed_url: &str, kms_url: &str) -> Self {
-        let mut urls = HashMap::new();
-        urls.insert("auth".to_string(), auth_url.to_string());
-        urls.insert("kms".to_string(), kms_url.to_string());
-        urls.insert("masterseed".to_string(), masterseed_url.to_string());
-
+    /// Scans the process environment for `ORBITPORT_PLUGIN_<NAME>=<URL>`
+    /// entries and builds the catalog. The suffix after the prefix is
+    /// lowercased to form the catalog key (`ORBITPORT_PLUGIN_MASTERSEED`
+    /// → `"masterseed"`).
+    pub fn from_env() -> Self {
+        const PREFIX: &str = "ORBITPORT_PLUGIN_";
+        let urls: HashMap<String, String> = std::env::vars()
+            .filter_map(|(k, v)| {
+                k.strip_prefix(PREFIX)
+                    .map(|name| (name.to_ascii_lowercase(), v))
+            })
+            .collect();
         PluginCatalog {
             urls: Arc::new(urls),
         }
+    }
+
+    pub fn url(&self, plugin_name: &str) -> Option<&str> {
+        self.urls.get(plugin_name).map(|s| s.as_str())
+    }
+
+    pub fn urls(&self) -> Vec<String> {
+        self.urls.values().cloned().collect()
     }
 
     pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {

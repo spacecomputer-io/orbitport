@@ -3,8 +3,11 @@
 ################################################################################
 
 ARG RUST_VERSION=1.92
+# Comma-separated list of cargo features, e.g. "reflection".
+ARG CARGO_FEATURES=
 
 FROM rust:${RUST_VERSION}-slim-trixie AS build
+ARG CARGO_FEATURES
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -29,7 +32,9 @@ RUN --mount=type=bind,source=gateway/src,target=src \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
     <<EOF
 set -e
-cargo build --locked --release --bin gateway 
+FEATURES_ARG=""
+if [ -n "${CARGO_FEATURES}" ]; then FEATURES_ARG="--features ${CARGO_FEATURES}"; fi
+cargo build --locked --release --bin gateway ${FEATURES_ARG}
 cp ./target/release/gateway /bin/gateway
 EOF
 

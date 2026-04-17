@@ -20,6 +20,9 @@ futures = "0.3.31"
 clap = { version = "4.6.0", features = ["derive", "env"] }
 warp = { version = "0.4.2", features = ["server"] }
 prost = "0.14.3"
+prost-reflect = { version = "0.16", features = ["serde"], optional = true }
+bytes = "1"
+http = "1"
 tonic = "0.14.5"
 tonic-prost = "0.14.5"
 tonic-health = "0.14.5"
@@ -37,4 +40,9 @@ tonic-prost-build = "0.14.5"
 reqwest = { version = "0.13.2", features = ["json"] }
 
 [features]
+default = []
 localtest = []
+# Enables a JSON-RPC method `plugin.Call` that dispatches to any plugin via
+# a runtime proto descriptor pool. Off by default to keep the default binary
+# free of `prost-reflect`.
+reflection = ["dep:prost-reflect"]

@@ -10,6 +10,9 @@ use crate::proto::services::kms::{
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{KmsRpcCall, KmsService};
 
+#[cfg(feature = "reflection")]
+use crate::services::plugin::{self, PluginCallRequest};
+
 #[derive(Serialize)]
 pub struct JsonRpcError {
     code: i32,
@@ -88,6 +91,9 @@ pub enum RpcCall {
     RotateKey(RotateKeyRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
+    #[cfg(feature = "reflection")]
+    #[serde(rename = "plugin.Call")]
+    PluginCall(PluginCallRequest),
 }
 
 impl RpcCall {
@@ -111,6 +117,10 @@ impl RpcCall {
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
+            #[cfg(feature = "reflection")]
+            RpcCall::PluginCall(_) => {
+                // Descriptor resolution and schema validation happen in execute().
+            }
         }
         Ok(())
     }
@@ -174,6 +184,14 @@ impl RpcCall {
                     KmsRpcCall::RotateKey(req),
                 )
                 .await
+            }
+            #[cfg(feature = "reflection")]
+            RpcCall::PluginCall(req) => {
+                let result = plugin::dispatch(plugin_catalog, req).await?;
+                let res = JsonRpcResponse::success(req_id, result);
+                serde_json::to_value(res).map_err(|e| {
+                    tonic::Status::internal(format!("Failed to serialize response: {}", e))
+                })
             }
         }
     }
