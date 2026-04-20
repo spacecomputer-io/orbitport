@@ -39,6 +39,7 @@ func (p *ethereumProvider) CreateKey(ctx context.Context, req *proto.CreateKeyRe
 	return &keyMetadataRecord{
 		KeyID:          keyID,
 		ClientID:       req.ClientId,
+		Alias:          req.Alias,
 		Scheme:         schemeEthereum,
 		ProviderKey:    providerKey,
 		Description:    req.Description,

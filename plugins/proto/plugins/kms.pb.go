@@ -91,6 +91,7 @@ type KeyMetadata struct {
 	Scheme         string                 `protobuf:"bytes,9,opt,name=scheme,proto3" json:"scheme,omitempty"`
 	PublicKey      *string                `protobuf:"bytes,10,opt,name=public_key,json=publicKey,proto3,oneof" json:"public_key,omitempty"`
 	Address        *string                `protobuf:"bytes,11,opt,name=address,proto3,oneof" json:"address,omitempty"`
+	Alias          string                 `protobuf:"bytes,12,opt,name=alias,proto3" json:"alias,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -198,6 +199,13 @@ func (x *KeyMetadata) GetPublicKey() string {
 func (x *KeyMetadata) GetAddress() string {
 	if x != nil && x.Address != nil {
 		return *x.Address
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetAlias() string {
+	if x != nil {
+		return x.Alias
 	}
 	return ""
 }
@@ -602,6 +610,7 @@ type CreateKeyRequest struct {
 	Tags          []*Tag                 `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
 	Scheme        *string                `protobuf:"bytes,5,opt,name=scheme,proto3,oneof" json:"scheme,omitempty"`
 	ClientId      string                 `protobuf:"bytes,6,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Alias         string                 `protobuf:"bytes,7,opt,name=alias,proto3" json:"alias,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -674,6 +683,13 @@ func (x *CreateKeyRequest) GetScheme() string {
 func (x *CreateKeyRequest) GetClientId() string {
 	if x != nil {
 		return x.ClientId
+	}
+	return ""
+}
+
+func (x *CreateKeyRequest) GetAlias() string {
+	if x != nil {
+		return x.Alias
 	}
 	return ""
 }
@@ -953,7 +969,7 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x17proto/plugins/kms.proto\x12\x06kmsapi\";\n" +
 	"\x03Tag\x12\x17\n" +
 	"\atag_key\x18\x01 \x01(\tR\x06tagKey\x12\x1b\n" +
-	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\xfd\x02\n" +
+	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\x93\x03\n" +
 	"\vKeyMetadata\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x19\n" +
@@ -967,7 +983,8 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\n" +
 	"public_key\x18\n" +
 	" \x01(\tH\x00R\tpublicKey\x88\x01\x01\x12\x1d\n" +
-	"\aaddress\x18\v \x01(\tH\x01R\aaddress\x88\x01\x01B\r\n" +
+	"\aaddress\x18\v \x01(\tH\x01R\aaddress\x88\x01\x01\x12\x14\n" +
+	"\x05alias\x18\f \x01(\tR\x05aliasB\r\n" +
 	"\v_public_keyB\n" +
 	"\n" +
 	"\b_address\"\xb3\x01\n" +
@@ -1002,14 +1019,15 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\fSignResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12+\n" +
-	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"\xd2\x01\n" +
+	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"\xe8\x01\n" +
 	"\x10CreateKeyRequest\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x19\n" +
 	"\bkey_spec\x18\x02 \x01(\tR\akeySpec\x12\x1b\n" +
 	"\tkey_usage\x18\x03 \x01(\tR\bkeyUsage\x12\x1f\n" +
 	"\x04tags\x18\x04 \x03(\v2\v.kmsapi.TagR\x04tags\x12\x1b\n" +
 	"\x06scheme\x18\x05 \x01(\tH\x00R\x06scheme\x88\x01\x01\x12\x1b\n" +
-	"\tclient_id\x18\x06 \x01(\tR\bclientIdB\t\n" +
+	"\tclient_id\x18\x06 \x01(\tR\bclientId\x12\x14\n" +
+	"\x05alias\x18\a \x01(\tR\x05aliasB\t\n" +
 	"\a_scheme\"K\n" +
 	"\x11CreateKeyResponse\x126\n" +
 	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\xc8\x01\n" +

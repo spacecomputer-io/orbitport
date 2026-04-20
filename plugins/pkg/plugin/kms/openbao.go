@@ -24,6 +24,7 @@ type openBaoClient struct {
 type keyMetadataRecord struct {
 	KeyID          string       `json:"key_id"`
 	ClientID       string       `json:"client_id"`
+	Alias          string       `json:"alias,omitempty"`
 	Scheme         string       `json:"scheme"`
 	ProviderKey    string       `json:"provider_key,omitempty"`
 	TransitKey     string       `json:"transit_key,omitempty"`
@@ -41,6 +42,10 @@ type keyMetadataRecord struct {
 type pluginTag struct {
 	TagKey   string `json:"tag_key"`
 	TagValue string `json:"tag_value"`
+}
+
+type aliasRecord struct {
+	KeyID string `json:"key_id"`
 }
 
 type openBaoStatusError struct {
@@ -249,8 +254,30 @@ func (c *openBaoClient) getMetadata(ctx context.Context, clientID, keyID string)
 	return record, nil
 }
 
+func (c *openBaoClient) putAlias(ctx context.Context, clientID, alias, keyID string) error {
+	return c.post(ctx, c.aliasPath(clientID, alias), map[string]any{
+		"data": aliasRecord{KeyID: keyID},
+	}, nil)
+}
+
+func (c *openBaoClient) getAlias(ctx context.Context, clientID, alias string) (string, error) {
+	var resp struct {
+		Data struct {
+			Data aliasRecord `json:"data"`
+		} `json:"data"`
+	}
+	if err := c.get(ctx, c.aliasPath(clientID, alias), &resp); err != nil {
+		return "", err
+	}
+	return resp.Data.Data.KeyID, nil
+}
+
 func (c *openBaoClient) metadataPath(clientID, keyID string) string {
 	return c.kvPath("kms", "metadata", tenantNamespace(clientID), url.PathEscape(keyID))
+}
+
+func (c *openBaoClient) aliasPath(clientID, alias string) string {
+	return c.kvPath("kms", "aliases", tenantNamespace(clientID), url.PathEscape(alias))
 }
 
 func (c *openBaoClient) kvPath(parts ...string) string {

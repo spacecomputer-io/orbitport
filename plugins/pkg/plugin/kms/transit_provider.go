@@ -39,6 +39,7 @@ func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyReq
 	return &keyMetadataRecord{
 		KeyID:          keyID,
 		ClientID:       req.ClientId,
+		Alias:          req.Alias,
 		Scheme:         schemeTransit,
 		ProviderKey:    providerKey,
 		Description:    req.Description,

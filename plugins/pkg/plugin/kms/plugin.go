@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -25,6 +26,8 @@ type Plugin struct {
 
 var uuidNewString = uuid.NewString
 var logger = utils.GetLogger("orbitport:kms")
+var aliasCharsRe = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+var reservedKmsRe = regexp.MustCompile(`^kms:`)
 
 func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
@@ -82,9 +85,16 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	logger.Debugf("Decrypt request received for key_id=%s scheme=%s", blob.KeyID, blob.Scheme)
-	if req.KeyId != nil && *req.KeyId != blob.KeyID {
-		logger.Warnf("Decrypt rejected mismatched key id: request=%s blob=%s", *req.KeyId, blob.KeyID)
-		return nil, status.Error(codes.InvalidArgument, "KeyId does not match CiphertextBlob")
+	if req.KeyId != nil {
+		resolvedKeyID, err := p.resolveKeyID(ctx, req.ClientId, *req.KeyId)
+		if err != nil {
+			logger.Warnf("Decrypt failed to resolve key reference for request key_id=%s", *req.KeyId)
+			return nil, err
+		}
+		if resolvedKeyID != blob.KeyID {
+			logger.Warnf("Decrypt rejected mismatched key id: request=%s resolved=%s blob=%s", *req.KeyId, resolvedKeyID, blob.KeyID)
+			return nil, status.Error(codes.InvalidArgument, "KeyId does not match CiphertextBlob")
+		}
 	}
 
 	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, blob.KeyID)
@@ -139,12 +149,29 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 	logger.Infof(
-		"CreateKey request received scheme=%s key_spec=%s key_usage=%s tags=%d",
+		"CreateKey request received scheme=%s key_spec=%s key_usage=%s alias=%q tags=%d",
 		scheme,
 		req.KeySpec,
 		req.KeyUsage,
+		req.Alias,
 		len(req.Tags),
 	)
+
+	alias := strings.TrimSpace(req.Alias)
+	if err := validateAlias(alias); err != nil {
+		logger.Warnf("CreateKey rejected invalid alias=%q", alias)
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if _, err := p.client.getAlias(ctx, req.ClientId, alias); err == nil {
+		logger.Warnf("CreateKey rejected duplicate alias=%q", alias)
+		return nil, status.Error(codes.AlreadyExists, "Alias already exists for this tenant")
+	} else {
+		var statusErr *openBaoStatusError
+		if !errors.As(err, &statusErr) || statusErr.statusCode != http.StatusNotFound {
+			logger.Warnf("CreateKey failed to verify alias availability alias=%q", alias)
+			return nil, status.Error(codes.Internal, err.Error())
+		}
+	}
 
 	provider, err := p.providerForScheme(scheme)
 	if err != nil {
@@ -162,6 +189,10 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	record.normalize()
 	if err := p.client.putMetadata(ctx, req.ClientId, keyID, record); err != nil {
 		logger.Warnf("CreateKey failed to persist metadata for key_id=%s scheme=%s", keyID, scheme)
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if err := p.client.putAlias(ctx, req.ClientId, alias, keyID); err != nil {
+		logger.Warnf("CreateKey failed to persist alias for key_id=%s alias=%q", keyID, alias)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	logger.Infof("CreateKey completed key_id=%s scheme=%s", keyID, scheme)
@@ -224,23 +255,46 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 }
 
 func (p *Plugin) metadataProvider(ctx context.Context, clientID, keyID string) (*keyMetadataRecord, kmsProvider, error) {
-	metadata, err := p.client.getMetadata(ctx, clientID, keyID)
+	resolvedKeyID, err := p.resolveKeyID(ctx, clientID, keyID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	metadata, err := p.client.getMetadata(ctx, clientID, resolvedKeyID)
 	if err != nil {
 		var statusErr *openBaoStatusError
 		if errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
-			logger.Warnf("denied access to key_id=%s for requesting client", keyID)
+			logger.Warnf("denied access to key_id=%s for requesting client", resolvedKeyID)
 			return nil, nil, status.Error(codes.PermissionDenied, "key does not belong to the authenticated client")
 		}
-		logger.Warnf("failed to fetch KMS metadata for key_id=%s", keyID)
+		logger.Warnf("failed to fetch KMS metadata for key_id=%s", resolvedKeyID)
 		return nil, nil, status.Error(codes.Internal, err.Error())
 	}
 
 	provider, err := p.providerForScheme(metadata.Scheme)
 	if err != nil {
-		logger.Warnf("failed to resolve provider for key_id=%s scheme=%s", keyID, metadata.Scheme)
+		logger.Warnf("failed to resolve provider for key_id=%s scheme=%s", resolvedKeyID, metadata.Scheme)
 		return nil, nil, err
 	}
 	return metadata, provider, nil
+}
+
+func (p *Plugin) resolveKeyID(ctx context.Context, clientID, keyRef string) (string, error) {
+	if _, err := orbitportKeyUUID(keyRef); err == nil {
+		return keyRef, nil
+	}
+
+	resolvedKeyID, err := p.client.getAlias(ctx, clientID, keyRef)
+	if err != nil {
+		var statusErr *openBaoStatusError
+		if errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
+			logger.Warnf("key reference %q does not belong to requesting client", keyRef)
+			return "", status.Error(codes.PermissionDenied, "key does not belong to the authenticated client")
+		}
+		return "", status.Error(codes.Internal, err.Error())
+	}
+
+	return resolvedKeyID, nil
 }
 
 func requireClientID(clientID string) error {
@@ -306,6 +360,7 @@ func toProtoMetadata(record *keyMetadataRecord) *proto.KeyMetadata {
 	if record.Address != "" {
 		metadata.Address = &record.Address
 	}
+	metadata.Alias = record.Alias
 	return metadata
 }
 
@@ -321,4 +376,22 @@ func optionalUint32(value *uint32) uint32 {
 		return 0
 	}
 	return *value
+}
+
+func validateAlias(alias string) error {
+	const maxAliasLen = 128
+
+	if alias == "" {
+		return fmt.Errorf("Alias is required")
+	}
+	if len(alias) > maxAliasLen {
+		return fmt.Errorf("Alias must be at most %d characters", maxAliasLen)
+	}
+	if reservedKmsRe.MatchString(alias) {
+		return fmt.Errorf("Alias must not use the reserved kms:<uuid> format")
+	}
+	if !aliasCharsRe.MatchString(alias) {
+		return fmt.Errorf("Alias contains unsupported characters")
+	}
+	return nil
 }

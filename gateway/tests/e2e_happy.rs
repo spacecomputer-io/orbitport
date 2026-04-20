@@ -1,4 +1,5 @@
 use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 mod common;
 
@@ -6,6 +7,14 @@ use gateway::proto::services::kms::{
     CreateKeyResponse, DecryptResponse, EncryptResponse, GenerateDataKeyResponse,
     RotateKeyResponse, SignResponse,
 };
+
+fn unique_alias(prefix: &str) -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("the system clock is earlier than UNIX_EPOCH")
+        .as_nanos();
+    format!("{prefix}/{now}")
+}
 
 /// Test e2e happy path.
 #[tokio::test]
@@ -65,6 +74,7 @@ async fn test_e2e_happy_kms_ethereum_create_key_and_sign() {
     let started = common::pre_test("happy").await.unwrap();
 
     let result = async {
+        let alias = unique_alias("e2e-ethereum");
         let create_req_id = 41;
         let create_payload = serde_json::json!({
             "jsonrpc": "2.0",
@@ -75,6 +85,7 @@ async fn test_e2e_happy_kms_ethereum_create_key_and_sign() {
                 "Scheme": "ETHEREUM",
                 "KeySpec": "ECC_SECG_P256K1",
                 "KeyUsage": "SIGN_VERIFY",
+                "Alias": &alias,
                 "Tags": [
                     {
                         "TagKey": "test",
@@ -114,6 +125,7 @@ async fn test_e2e_happy_kms_ethereum_create_key_and_sign() {
             metadata.enabled,
             "CreateKey returned disabled KeyMetadata for a new key"
         );
+        assert_eq!(metadata.alias, alias, "CreateKey did not return Alias");
         assert!(
             metadata.primary_version > 0,
             "CreateKey did not return a positive PrimaryVersion"
@@ -154,7 +166,7 @@ async fn test_e2e_happy_kms_ethereum_create_key_and_sign() {
             "id": sign_req_id,
             "method": "kms.Sign",
             "params": {
-                "KeyId": metadata.key_id,
+                "KeyId": &alias,
                 "Message": "Hello Orbitport",
                 "SigningAlgorithm": "ETHEREUM_SECP256K1",
                 "MessageType": "EIP191"
@@ -214,6 +226,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
 
     let result = async {
         let plaintext = "SGVsbG8gT3JiaXRwb3J0";
+        let alias = unique_alias("e2e-transit");
 
         let create_req_id = 51;
         let create_payload = serde_json::json!({
@@ -225,6 +238,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
                 "Scheme": "TRANSIT",
                 "KeySpec": "SYMMETRIC_DEFAULT",
                 "KeyUsage": "ENCRYPT_DECRYPT",
+                "Alias": &alias,
                 "Tags": [
                     {
                         "TagKey": "test",
@@ -272,6 +286,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             metadata.tags[0].tag_value, "transit-e2e",
             "TagValue was not preserved"
         );
+        assert_eq!(metadata.alias, alias, "CreateKey did not return Alias");
         assert!(
             metadata.public_key.is_none(),
             "Transit key should not expose PublicKey"
@@ -284,7 +299,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "id": encrypt_req_id,
             "method": "kms.Encrypt",
             "params": {
-                "KeyId": metadata.key_id,
+                "KeyId": &alias,
                 "Plaintext": plaintext,
                 "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
             }
@@ -317,7 +332,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "method": "kms.Decrypt",
             "params": {
                 "CiphertextBlob": encrypt_resp.ciphertext_blob,
-                "KeyId": metadata.key_id,
+                "KeyId": &alias,
                 "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
             }
         });
@@ -344,7 +359,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "id": data_key_req_id,
             "method": "kms.GenerateDataKey",
             "params": {
-                "KeyId": metadata.key_id,
+                "KeyId": &alias,
                 "DataKeySpec": "AES_256"
             }
         });
@@ -372,7 +387,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "method": "kms.Decrypt",
             "params": {
                 "CiphertextBlob": data_key_resp.ciphertext_blob,
-                "KeyId": metadata.key_id,
+                "KeyId": &alias,
                 "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
             }
         });
@@ -399,7 +414,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "id": rotate_req_id,
             "method": "kms.RotateKey",
             "params": {
-                "KeyId": metadata.key_id
+                "KeyId": &alias
             }
         });
 

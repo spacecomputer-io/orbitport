@@ -190,6 +190,8 @@ impl DataKeySpec {
     }
 }
 
+const MAX_ALIAS_LEN: usize = 128;
+
 #[derive(Debug)]
 pub enum KmsRpcCall {
     Encrypt(EncryptRequest),
@@ -361,6 +363,9 @@ impl KmsService {
         let key_spec = validate_key_spec(&req.key_spec, scheme)?;
         let key_usage = validate_key_usage(&req.key_usage)?;
 
+        validate_required("Alias", &req.alias)?;
+        validate_alias(&req.alias)?;
+
         if key_usage != key_spec.allowed_usage() {
             return Err(match (scheme, key_spec) {
                 (_, KeySpec::SymmetricDefault) => {
@@ -512,6 +517,7 @@ impl KmsService {
                 key_spec: req.key_spec,
                 key_usage: req.key_usage,
                 scheme: req.scheme,
+                alias: req.alias,
                 tags: req
                     .tags
                     .into_iter()
@@ -608,6 +614,23 @@ fn validate_signing_algorithm(value: &str) -> Result<SigningAlgorithm, String> {
     SigningAlgorithm::parse(value)
 }
 
+fn validate_alias(value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    if trimmed.len() > MAX_ALIAS_LEN {
+        return Err(format!("Alias must be at most {MAX_ALIAS_LEN} characters"));
+    }
+    if trimmed.starts_with("kms:") {
+        return Err("Alias must not use the reserved kms:<uuid> format".to_string());
+    }
+    if !trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))
+    {
+        return Err("Alias contains unsupported characters".to_string());
+    }
+    Ok(())
+}
+
 fn map_key_metadata(
     metadata: crate::proto::plugins::kms::KeyMetadata,
 ) -> crate::proto::services::kms::KeyMetadata {
@@ -620,6 +643,7 @@ fn map_key_metadata(
         primary_version: metadata.primary_version,
         creation_date: metadata.creation_date,
         scheme: metadata.scheme,
+        alias: metadata.alias,
         public_key: metadata.public_key,
         address: metadata.address,
         tags: metadata
@@ -644,6 +668,7 @@ mod test {
             key_spec: "SYMMETRIC_DEFAULT".to_string(),
             key_usage: "SIGN_VERIFY".to_string(),
             scheme: None,
+            alias: "transit-main".to_string(),
             tags: vec![],
         };
         let err = KmsService::validate_create_key(&req).unwrap_err();
@@ -657,9 +682,38 @@ mod test {
             key_spec: "ECC_SECG_P256K1".to_string(),
             key_usage: "SIGN_VERIFY".to_string(),
             scheme: Some("ETHEREUM".to_string()),
+            alias: "eth-main".to_string(),
             tags: vec![],
         };
         KmsService::validate_create_key(&req).unwrap();
+    }
+
+    #[test]
+    fn test_validate_create_key_alias() {
+        let req = CreateKeyRequest {
+            description: String::new(),
+            key_spec: "SYMMETRIC_DEFAULT".to_string(),
+            key_usage: "ENCRYPT_DECRYPT".to_string(),
+            scheme: None,
+            alias: "kms:11111111-1111-1111-1111-111111111111".to_string(),
+            tags: vec![],
+        };
+        let err = KmsService::validate_create_key(&req).unwrap_err();
+        assert!(err.contains("reserved kms:<uuid> format"));
+    }
+
+    #[test]
+    fn test_validate_create_key_alias_required() {
+        let req = CreateKeyRequest {
+            description: String::new(),
+            key_spec: "SYMMETRIC_DEFAULT".to_string(),
+            key_usage: "ENCRYPT_DECRYPT".to_string(),
+            scheme: None,
+            alias: String::new(),
+            tags: vec![],
+        };
+        let err = KmsService::validate_create_key(&req).unwrap_err();
+        assert!(err.contains("Alias is required"));
     }
 
     #[test]

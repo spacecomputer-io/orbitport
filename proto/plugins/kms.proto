@@ -34,6 +34,7 @@ message KeyMetadata {
   string scheme = 9;
   optional string public_key = 10;
   optional string address = 11;
+  string alias = 12;
 }
 
 message EncryptRequest {
@@ -83,6 +84,7 @@ message CreateKeyRequest {
   repeated Tag tags = 4;
   optional string scheme = 5;
   string client_id = 6;
+  string alias = 7;
 }
 
 message CreateKeyResponse {
