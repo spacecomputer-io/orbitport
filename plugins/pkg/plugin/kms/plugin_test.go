@@ -15,13 +15,15 @@ import (
 )
 
 const (
-	testTransitKeyID  = "kms:11111111-1111-1111-1111-111111111111"
-	testEthereumKeyID = "kms:22222222-2222-2222-2222-222222222222"
+	testTransitAlias  = "transit-main"
+	testTransitKeyID  = "kms:transit-main"
+	testEthereumAlias = "eth-main"
+	testEthereumKeyID = "kms:eth-main"
 )
 
 func TestCreateKeyStoresMetadata(t *testing.T) {
 	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testTransitKeyID)
+	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
 	if err != nil {
 		t.Fatalf("scopedBackendKey() error = %v", err)
 	}
@@ -31,6 +33,8 @@ func TestCreateKeyStoresMetadata(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -57,23 +61,12 @@ func TestCreateKeyStoresMetadata(t *testing.T) {
 	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 	plugin.now = func() time.Time { return time.Unix(1, 0).UTC() }
 
-	uuidCounter := 0
-	origUUIDNewString := uuidNewString
-	uuidNewString = func() string {
-		uuidCounter++
-		if uuidCounter == 1 {
-			return "11111111-1111-1111-1111-111111111111"
-		}
-		return "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-	}
-	defer func() { uuidNewString = origUUIDNewString }()
-
 	resp, err := plugin.CreateKey(context.Background(), &proto.CreateKeyRequest{
 		Description: "desc",
 		KeySpec:     keySpecSymmetric,
 		KeyUsage:    encryptDecryptUsage,
 		ClientId:    clientID,
-		Alias:       "transit/main",
+		Alias:       testTransitAlias,
 	})
 	if err != nil {
 		t.Fatalf("CreateKey returned error: %v", err)
@@ -84,103 +77,25 @@ func TestCreateKeyStoresMetadata(t *testing.T) {
 	if resp.KeyMetadata.KeyId != testTransitKeyID || resp.KeyMetadata.PrimaryVersion != 3 {
 		t.Fatalf("unexpected metadata: %+v", resp.KeyMetadata)
 	}
-	if kvBody == nil {
-		t.Fatal("expected metadata write")
+	if resp.KeyMetadata.Alias != testTransitAlias {
+		t.Fatalf("unexpected alias in response: %+v", resp.KeyMetadata)
 	}
 	data, ok := kvBody["data"].(map[string]any)
 	if !ok || data["scheme"] != schemeTransit {
 		t.Fatalf("expected transit metadata scheme, got %+v", kvBody)
 	}
-	if data["client_id"] != clientID {
-		t.Fatalf("expected client_id in metadata, got %+v", data)
-	}
-}
-
-func TestCreateKeyStoresAliasAndReturnsAlias(t *testing.T) {
-	clientID := "client-a"
-	alias := "payments/main"
-	providerKey, err := scopedBackendKey(clientID, testTransitKeyID)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
-
-	var metadataBody map[string]any
-	var aliasBody map[string]any
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/aliases/"+tenantNamespace(clientID)+"/payments%2Fmain"):
-			http.NotFound(w, r)
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
-			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
-			_, _ = w.Write([]byte(`{"data":{"latest_version":3,"type":"aes256-gcm96"}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
-			_ = json.NewDecoder(r.Body).Decode(&metadataBody)
-			_, _ = w.Write([]byte(`{}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/aliases/"+tenantNamespace(clientID)+"/payments%2Fmain"):
-			_ = json.NewDecoder(r.Body).Decode(&aliasBody)
-			_, _ = w.Write([]byte(`{}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	cfg := &kmsConfig{
-		OpenBaoProxyURL: server.URL,
-		EthereumMount:   "ethereum",
-		TransitMount:    "transit",
-		KVMount:         "secret",
-		TimeoutSecs:     10,
-	}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
-	plugin.now = func() time.Time { return time.Unix(1, 0).UTC() }
-
-	origUUIDNewString := uuidNewString
-	uuidNewString = func() string { return "11111111-1111-1111-1111-111111111111" }
-	defer func() { uuidNewString = origUUIDNewString }()
-
-	resp, err := plugin.CreateKey(context.Background(), &proto.CreateKeyRequest{
-		Description: "desc",
-		KeySpec:     keySpecSymmetric,
-		KeyUsage:    encryptDecryptUsage,
-		ClientId:    clientID,
-		Alias:       alias,
-	})
-	if err != nil {
-		t.Fatalf("CreateKey returned error: %v", err)
-	}
-
-	if resp.KeyMetadata.Alias != alias {
-		t.Fatalf("expected alias in response, got %+v", resp.KeyMetadata)
-	}
-
-	metadataData, ok := metadataBody["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected metadata write body, got %+v", metadataBody)
-	}
-	if metadataData["alias"] != alias {
-		t.Fatalf("expected alias in metadata write, got %+v", metadataData)
-	}
-
-	aliasData, ok := aliasBody["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected alias write body, got %+v", aliasBody)
-	}
-	if aliasData["key_id"] != testTransitKeyID {
-		t.Fatalf("expected alias record to point at key id, got %+v", aliasData)
+	if data["client_id"] != clientID || data["alias"] != testTransitAlias {
+		t.Fatalf("expected client_id and alias in metadata, got %+v", data)
 	}
 }
 
 func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
 	clientID := "client-a"
-	alias := "payments/main"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/aliases/"+tenantNamespace(clientID)+"/payments%2Fmain"):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitKeyID + `"}}}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitKeyID + `","client_id":"` + clientID + `","alias":"` + testTransitAlias + `","scheme":"TRANSIT","provider_key":"tenant_x_` + testTransitAlias + `","key_spec":"SYMMETRIC_DEFAULT","key_usage":"ENCRYPT_DECRYPT","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","tags":[]}}}`))
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -195,7 +110,7 @@ func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
 		KeySpec:     keySpecSymmetric,
 		KeyUsage:    encryptDecryptUsage,
 		ClientId:    clientID,
-		Alias:       alias,
+		Alias:       testTransitAlias,
 	})
 	if err == nil {
 		t.Fatal("expected CreateKey to reject duplicate alias")
@@ -207,7 +122,7 @@ func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
 
 func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testTransitKeyID)
+	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
 	if err != nil {
 		t.Fatalf("scopedBackendKey() error = %v", err)
 	}
@@ -215,7 +130,7 @@ func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitKeyID + `","client_id":"client-a","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"SYMMETRIC_DEFAULT","key_usage":"ENCRYPT_DECRYPT","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","tags":[]}}}`))
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitKeyID + `","client_id":"client-a","alias":"` + testTransitAlias + `","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"SYMMETRIC_DEFAULT","key_usage":"ENCRYPT_DECRYPT","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","tags":[]}}}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/encrypt/"+providerKey):
 			_, _ = w.Write([]byte(`{"data":{"ciphertext":"vault:v3:abc"}}`))
 		default:
@@ -228,7 +143,7 @@ func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 
 	resp, err := plugin.Encrypt(context.Background(), &proto.EncryptRequest{
-		KeyId:               testTransitKeyID,
+		KeyId:               testTransitAlias,
 		Plaintext:           "Zm9v",
 		EncryptionAlgorithm: stringPtr(keySpecSymmetric),
 		ClientId:            clientID,
@@ -243,44 +158,8 @@ func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 	if blob.Ciphertext != "vault:v3:abc" || blob.KeyID != testTransitKeyID {
 		t.Fatalf("unexpected blob: %+v", blob)
 	}
-}
-
-func TestEncryptResolvesAlias(t *testing.T) {
-	clientID := "client-a"
-	alias := "payments/main"
-	providerKey, err := scopedBackendKey(clientID, testTransitKeyID)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/aliases/"+tenantNamespace(clientID)+"/payments%2Fmain"):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitKeyID + `"}}}`))
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitKeyID + `","client_id":"client-a","alias":"` + alias + `","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"SYMMETRIC_DEFAULT","key_usage":"ENCRYPT_DECRYPT","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","tags":[]}}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/encrypt/"+providerKey):
-			_, _ = w.Write([]byte(`{"data":{"ciphertext":"vault:v3:abc"}}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
-
-	resp, err := plugin.Encrypt(context.Background(), &proto.EncryptRequest{
-		KeyId:               alias,
-		Plaintext:           "Zm9v",
-		EncryptionAlgorithm: stringPtr(keySpecSymmetric),
-		ClientId:            clientID,
-	})
-	if err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
-	}
 	if resp.KeyId != testTransitKeyID {
-		t.Fatalf("expected immutable key id in response, got %+v", resp)
+		t.Fatalf("expected canonical key id in response, got %+v", resp)
 	}
 }
 
@@ -301,7 +180,7 @@ func TestEncryptRejectsWrongTenant(t *testing.T) {
 	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 
 	_, err := plugin.Encrypt(context.Background(), &proto.EncryptRequest{
-		KeyId:               testTransitKeyID,
+		KeyId:               testTransitAlias,
 		Plaintext:           "Zm9v",
 		EncryptionAlgorithm: stringPtr(keySpecSymmetric),
 		ClientId:            requestClientID,
@@ -316,7 +195,7 @@ func TestEncryptRejectsWrongTenant(t *testing.T) {
 
 func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
 	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumKeyID)
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	if err != nil {
 		t.Fatalf("scopedBackendKey() error = %v", err)
 	}
@@ -325,6 +204,8 @@ func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/keys/"+providerKey):
 			_, _ = w.Write([]byte(`{"data":{"name":"` + providerKey + `","address":"0xabc","public_key":"0xdef","created_at":"2024-01-01T00:00:00Z"}}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
@@ -340,49 +221,35 @@ func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
 	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 	plugin.now = func() time.Time { return time.Unix(1, 0).UTC() }
 
-	origUUIDNewString := uuidNewString
-	uuidCounter := 0
-	uuidNewString = func() string {
-		uuidCounter++
-		if uuidCounter == 1 {
-			return "22222222-2222-2222-2222-222222222222"
-		}
-		return "33333333-3333-3333-3333-333333333333"
-	}
-	defer func() { uuidNewString = origUUIDNewString }()
-
 	resp, err := plugin.CreateKey(context.Background(), &proto.CreateKeyRequest{
 		Description: "eth",
 		KeySpec:     keySpecECCSecgP256K1,
 		KeyUsage:    signVerifyUsage,
 		Scheme:      stringPtr(schemeEthereum),
 		ClientId:    clientID,
-		Alias:       "eth/main",
+		Alias:       testEthereumAlias,
 	})
 	if err != nil {
 		t.Fatalf("CreateKey returned error: %v", err)
 	}
-	if resp.KeyMetadata.Scheme != schemeEthereum {
-		t.Fatalf("unexpected metadata scheme: %+v", resp.KeyMetadata)
+	if resp.KeyMetadata.Scheme != schemeEthereum || resp.KeyMetadata.KeyId != testEthereumKeyID {
+		t.Fatalf("unexpected metadata: %+v", resp.KeyMetadata)
 	}
-	if resp.KeyMetadata.KeyId != testEthereumKeyID {
-		t.Fatalf("unexpected key id: %+v", resp.KeyMetadata)
-	}
-	if resp.KeyMetadata.Address == nil || *resp.KeyMetadata.Address != "0xabc" {
-		t.Fatalf("unexpected address: %+v", resp.KeyMetadata)
+	if resp.KeyMetadata.Alias != testEthereumAlias {
+		t.Fatalf("unexpected alias: %+v", resp.KeyMetadata)
 	}
 	data, ok := kvBody["data"].(map[string]any)
 	if !ok || data["scheme"] != schemeEthereum {
 		t.Fatalf("expected ethereum metadata scheme, got %+v", kvBody)
 	}
-	if data["client_id"] != clientID {
-		t.Fatalf("expected client_id in metadata, got %+v", data)
+	if data["client_id"] != clientID || data["alias"] != testEthereumAlias {
+		t.Fatalf("expected client_id and alias in metadata, got %+v", data)
 	}
 }
 
 func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumKeyID)
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	if err != nil {
 		t.Fatalf("scopedBackendKey() error = %v", err)
 	}
@@ -390,7 +257,7 @@ func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -408,7 +275,7 @@ func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 
 	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
-		KeyId:            testEthereumKeyID,
+		KeyId:            testEthereumAlias,
 		Message:          "hello",
 		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
 		MessageType:      stringPtr(messageTypeEIP191),
@@ -417,8 +284,8 @@ func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sign returned error: %v", err)
 	}
-	if resp.Signature != "0xsigned" {
-		t.Fatalf("unexpected signature: %+v", resp)
+	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID {
+		t.Fatalf("unexpected sign response: %+v", resp)
 	}
 }
 

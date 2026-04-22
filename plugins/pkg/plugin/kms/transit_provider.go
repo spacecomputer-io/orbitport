@@ -27,7 +27,7 @@ func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyReq
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
-	providerKey, err := scopedBackendKey(req.ClientId, keyID)
+	providerKey, err := scopedBackendKey(req.ClientId, req.Alias)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

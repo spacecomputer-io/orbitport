@@ -191,6 +191,7 @@ impl DataKeySpec {
 }
 
 const MAX_ALIAS_LEN: usize = 128;
+const KEY_ID_PREFIX: &str = "kms:";
 
 #[derive(Debug)]
 pub enum KmsRpcCall {
@@ -323,7 +324,7 @@ impl KmsService {
     }
 
     pub fn validate_encrypt(req: &EncryptRequest) -> Result<(), String> {
-        validate_required("KeyId", &req.key_id)?;
+        validate_key_reference("KeyId", &req.key_id)?;
         validate_required("Plaintext", &req.plaintext)?;
 
         if let Some(algorithm) = req.encryption_algorithm.as_ref() {
@@ -335,7 +336,7 @@ impl KmsService {
     pub fn validate_decrypt(req: &DecryptRequest) -> Result<(), String> {
         validate_required("CiphertextBlob", &req.ciphertext_blob)?;
         if let Some(key_id) = req.key_id.as_ref() {
-            validate_required("KeyId", key_id)?;
+            validate_key_reference("KeyId", key_id)?;
         }
         if let Some(algorithm) = req.encryption_algorithm.as_ref() {
             validate_encryption_algorithm(algorithm)?;
@@ -344,7 +345,7 @@ impl KmsService {
     }
 
     pub fn validate_sign(req: &SignRequest) -> Result<(), String> {
-        validate_required("KeyId", &req.key_id)?;
+        validate_key_reference("KeyId", &req.key_id)?;
         validate_required("Message", &req.message)?;
         let signing_algorithm = validate_signing_algorithm(&req.signing_algorithm)?;
         if let Some(message_type) = req.message_type.as_ref() {
@@ -383,7 +384,7 @@ impl KmsService {
     }
 
     pub fn validate_generate_data_key(req: &GenerateDataKeyRequest) -> Result<(), String> {
-        validate_required("KeyId", &req.key_id)?;
+        validate_key_reference("KeyId", &req.key_id)?;
         let has_spec = req
             .data_key_spec
             .as_ref()
@@ -405,7 +406,7 @@ impl KmsService {
     }
 
     pub fn validate_rotate_key(req: &RotateKeyRequest) -> Result<(), String> {
-        validate_required("KeyId", &req.key_id)
+        validate_key_reference("KeyId", &req.key_id)
     }
 
     pub async fn execute(
@@ -619,16 +620,26 @@ fn validate_alias(value: &str) -> Result<(), String> {
     if trimmed.len() > MAX_ALIAS_LEN {
         return Err(format!("Alias must be at most {MAX_ALIAS_LEN} characters"));
     }
-    if trimmed.starts_with("kms:") {
-        return Err("Alias must not use the reserved kms:<uuid> format".to_string());
+    if trimmed.starts_with(KEY_ID_PREFIX) {
+        return Err("Alias must not use the reserved kms:<alias> format".to_string());
     }
     if !trimmed
         .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/'))
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.'))
     {
         return Err("Alias contains unsupported characters".to_string());
     }
     Ok(())
+}
+
+fn validate_key_reference(field_name: &str, value: &str) -> Result<(), String> {
+    validate_required(field_name, value)?;
+    let trimmed = value.trim();
+    let alias = trimmed.strip_prefix(KEY_ID_PREFIX).unwrap_or(trimmed);
+    if alias.is_empty() {
+        return Err(format!("{field_name} is required"));
+    }
+    validate_alias(alias)
 }
 
 fn map_key_metadata(
@@ -699,7 +710,7 @@ mod test {
             tags: vec![],
         };
         let err = KmsService::validate_create_key(&req).unwrap_err();
-        assert!(err.contains("reserved kms:<uuid> format"));
+        assert!(err.contains("reserved kms:<alias> format"));
     }
 
     #[test]

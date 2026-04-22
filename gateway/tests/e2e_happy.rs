@@ -13,7 +13,7 @@ fn unique_alias(prefix: &str) -> String {
         .duration_since(UNIX_EPOCH)
         .expect("the system clock is earlier than UNIX_EPOCH")
         .as_nanos();
-    format!("{prefix}/{now}")
+    format!("{prefix}-{now}")
 }
 
 /// Test e2e happy path.
@@ -104,10 +104,10 @@ async fn test_e2e_happy_kms_ethereum_create_key_and_sign() {
             )
         })?;
 
-        assert!(
-            metadata.key_id.starts_with("kms:"),
-            "CreateKey returned unexpected KeyId: {}",
-            metadata.key_id
+        assert_eq!(
+            metadata.key_id,
+            format!("kms:{alias}"),
+            "CreateKey returned unexpected KeyId"
         );
         assert_eq!(
             metadata.scheme, "ETHEREUM",
@@ -257,10 +257,10 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             )
         })?;
 
-        assert!(
-            metadata.key_id.starts_with("kms:"),
-            "CreateKey returned unexpected KeyId: {}",
-            metadata.key_id
+        assert_eq!(
+            metadata.key_id,
+            format!("kms:{alias}"),
+            "CreateKey returned unexpected KeyId"
         );
         assert_eq!(metadata.scheme, "TRANSIT", "CreateKey returned the wrong Scheme");
         assert_eq!(

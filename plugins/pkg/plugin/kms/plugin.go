@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"google.golang.org/grpc/codes"
@@ -24,9 +23,8 @@ type Plugin struct {
 	providers map[string]kmsProvider
 }
 
-var uuidNewString = uuid.NewString
 var logger = utils.GetLogger("orbitport:kms")
-var aliasCharsRe = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
+var aliasCharsRe = regexp.MustCompile(`^[A-Za-z0-9.-]+$`)
 var reservedKmsRe = regexp.MustCompile(`^kms:`)
 
 func NewPlugin() (*Plugin, error) {
@@ -86,10 +84,10 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 	}
 	logger.Debugf("Decrypt request received for key_id=%s scheme=%s", blob.KeyID, blob.Scheme)
 	if req.KeyId != nil {
-		resolvedKeyID, err := p.resolveKeyID(ctx, req.ClientId, *req.KeyId)
+		resolvedKeyID, err := p.resolveKeyID(*req.KeyId)
 		if err != nil {
 			logger.Warnf("Decrypt failed to resolve key reference for request key_id=%s", *req.KeyId)
-			return nil, err
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		if resolvedKeyID != blob.KeyID {
 			logger.Warnf("Decrypt rejected mismatched key id: request=%s resolved=%s blob=%s", *req.KeyId, resolvedKeyID, blob.KeyID)
@@ -162,13 +160,18 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 		logger.Warnf("CreateKey rejected invalid alias=%q", alias)
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if _, err := p.client.getAlias(ctx, req.ClientId, alias); err == nil {
+	keyID, err := canonicalKeyID(alias)
+	if err != nil {
+		logger.Warnf("CreateKey rejected alias=%q", alias)
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if _, err := p.client.getMetadata(ctx, req.ClientId, keyID); err == nil {
 		logger.Warnf("CreateKey rejected duplicate alias=%q", alias)
 		return nil, status.Error(codes.AlreadyExists, "Alias already exists for this tenant")
 	} else {
 		var statusErr *openBaoStatusError
 		if !errors.As(err, &statusErr) || statusErr.statusCode != http.StatusNotFound {
-			logger.Warnf("CreateKey failed to verify alias availability alias=%q", alias)
+			logger.Warnf("CreateKey failed to verify key availability alias=%q", alias)
 			return nil, status.Error(codes.Internal, err.Error())
 		}
 	}
@@ -179,8 +182,9 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 		return nil, err
 	}
 
-	keyID := fmt.Sprintf("kms:%s", uuidNewString())
-	record, err := provider.CreateKey(ctx, req, keyID, p.now().UTC())
+	reqCopy := *req
+	reqCopy.Alias = alias
+	record, err := provider.CreateKey(ctx, &reqCopy, keyID, p.now().UTC())
 	if err != nil {
 		logger.Warnf("CreateKey failed for key_id=%s scheme=%s", keyID, scheme)
 		return nil, err
@@ -189,10 +193,6 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	record.normalize()
 	if err := p.client.putMetadata(ctx, req.ClientId, keyID, record); err != nil {
 		logger.Warnf("CreateKey failed to persist metadata for key_id=%s scheme=%s", keyID, scheme)
-		return nil, status.Error(codes.Internal, err.Error())
-	}
-	if err := p.client.putAlias(ctx, req.ClientId, alias, keyID); err != nil {
-		logger.Warnf("CreateKey failed to persist alias for key_id=%s alias=%q", keyID, alias)
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	logger.Infof("CreateKey completed key_id=%s scheme=%s", keyID, scheme)
@@ -255,9 +255,9 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 }
 
 func (p *Plugin) metadataProvider(ctx context.Context, clientID, keyID string) (*keyMetadataRecord, kmsProvider, error) {
-	resolvedKeyID, err := p.resolveKeyID(ctx, clientID, keyID)
+	resolvedKeyID, err := p.resolveKeyID(keyID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	metadata, err := p.client.getMetadata(ctx, clientID, resolvedKeyID)
@@ -279,22 +279,9 @@ func (p *Plugin) metadataProvider(ctx context.Context, clientID, keyID string) (
 	return metadata, provider, nil
 }
 
-func (p *Plugin) resolveKeyID(ctx context.Context, clientID, keyRef string) (string, error) {
-	if _, err := orbitportKeyUUID(keyRef); err == nil {
-		return keyRef, nil
-	}
-
-	resolvedKeyID, err := p.client.getAlias(ctx, clientID, keyRef)
-	if err != nil {
-		var statusErr *openBaoStatusError
-		if errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
-			logger.Warnf("key reference %q does not belong to requesting client", keyRef)
-			return "", status.Error(codes.PermissionDenied, "key does not belong to the authenticated client")
-		}
-		return "", status.Error(codes.Internal, err.Error())
-	}
-
-	return resolvedKeyID, nil
+func (p *Plugin) resolveKeyID(keyRef string) (string, error) {
+	resolvedKeyID, _, err := resolveKeyRef(keyRef)
+	return resolvedKeyID, err
 }
 
 func requireClientID(clientID string) error {
@@ -388,7 +375,7 @@ func validateAlias(alias string) error {
 		return fmt.Errorf("Alias must be at most %d characters", maxAliasLen)
 	}
 	if reservedKmsRe.MatchString(alias) {
-		return fmt.Errorf("Alias must not use the reserved kms:<uuid> format")
+		return fmt.Errorf("Alias must not use the reserved kms:<alias> format")
 	}
 	if !aliasCharsRe.MatchString(alias) {
 		return fmt.Errorf("Alias contains unsupported characters")
