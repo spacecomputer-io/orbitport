@@ -51,7 +51,7 @@ impl Scheme {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum KeySpec {
-    SymmetricDefault,
+    Aes256Gcm96,
     EcdsaP256,
     EcdsaP384,
     Ed25519,
@@ -62,7 +62,7 @@ enum KeySpec {
 impl KeySpec {
     fn parse(value: &str) -> Result<Self, String> {
         match value {
-            "SYMMETRIC_DEFAULT" => Ok(Self::SymmetricDefault),
+            "AES_256_GCM96" => Ok(Self::Aes256Gcm96),
             "ECDSA_P256" => Ok(Self::EcdsaP256),
             "ECDSA_P384" => Ok(Self::EcdsaP384),
             "ED25519" => Ok(Self::Ed25519),
@@ -74,7 +74,7 @@ impl KeySpec {
 
     fn allowed_usage(self) -> KeyUsage {
         match self {
-            Self::SymmetricDefault => KeyUsage::EncryptDecrypt,
+            Self::Aes256Gcm96 => KeyUsage::EncryptDecrypt,
             Self::EcdsaP256
             | Self::EcdsaP384
             | Self::Ed25519
@@ -86,7 +86,7 @@ impl KeySpec {
     fn requires_scheme(self) -> Scheme {
         match self {
             Self::EccSecgP256k1 => Scheme::Ethereum,
-            Self::SymmetricDefault
+            Self::Aes256Gcm96
             | Self::EcdsaP256
             | Self::EcdsaP384
             | Self::Ed25519
@@ -113,14 +113,14 @@ impl KeyUsage {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum EncryptionAlgorithm {
-    SymmetricDefault,
+    Aes256Gcm96,
 }
 
 impl EncryptionAlgorithm {
     fn parse(value: &str) -> Result<Self, String> {
         match value {
-            "SYMMETRIC_DEFAULT" => Ok(Self::SymmetricDefault),
-            _ => Err("EncryptionAlgorithm must be SYMMETRIC_DEFAULT".to_string()),
+            "AES_256_GCM96" => Ok(Self::Aes256Gcm96),
+            _ => Err("EncryptionAlgorithm must be AES_256_GCM96".to_string()),
         }
     }
 }
@@ -369,8 +369,8 @@ impl KmsService {
 
         if key_usage != key_spec.allowed_usage() {
             return Err(match (scheme, key_spec) {
-                (_, KeySpec::SymmetricDefault) => {
-                    "SYMMETRIC_DEFAULT keys must use ENCRYPT_DECRYPT".to_string()
+                (_, KeySpec::Aes256Gcm96) => {
+                    "AES_256_GCM96 keys must use ENCRYPT_DECRYPT".to_string()
                 }
                 (Scheme::Ethereum, _) => "ETHEREUM keys must use SIGN_VERIFY".to_string(),
                 (Scheme::Transit, _) => "Asymmetric KMS keys must use SIGN_VERIFY".to_string(),
@@ -676,7 +676,7 @@ mod test {
     fn test_validate_create_key_usage() {
         let req = CreateKeyRequest {
             description: String::new(),
-            key_spec: "SYMMETRIC_DEFAULT".to_string(),
+            key_spec: "AES_256_GCM96".to_string(),
             key_usage: "SIGN_VERIFY".to_string(),
             scheme: None,
             alias: "transit-main".to_string(),
@@ -703,7 +703,7 @@ mod test {
     fn test_validate_create_key_alias() {
         let req = CreateKeyRequest {
             description: String::new(),
-            key_spec: "SYMMETRIC_DEFAULT".to_string(),
+            key_spec: "AES_256_GCM96".to_string(),
             key_usage: "ENCRYPT_DECRYPT".to_string(),
             scheme: None,
             alias: "kms:11111111-1111-1111-1111-111111111111".to_string(),
@@ -717,7 +717,7 @@ mod test {
     fn test_validate_create_key_alias_required() {
         let req = CreateKeyRequest {
             description: String::new(),
-            key_spec: "SYMMETRIC_DEFAULT".to_string(),
+            key_spec: "AES_256_GCM96".to_string(),
             key_usage: "ENCRYPT_DECRYPT".to_string(),
             scheme: None,
             alias: String::new(),

@@ -207,7 +207,7 @@ mod test {
             "params": {
                 "KeyId": "kms:abc",
                 "Plaintext": "Zm9v",
-                "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
+                "EncryptionAlgorithm": "AES_256_GCM96"
             }
         });
 
@@ -218,7 +218,7 @@ mod test {
                 assert_eq!(params.plaintext, "Zm9v");
                 assert_eq!(
                     params.encryption_algorithm.as_deref(),
-                    Some("SYMMETRIC_DEFAULT")
+                    Some("AES_256_GCM96")
                 );
             }
             _ => panic!("expected kms.Encrypt"),
