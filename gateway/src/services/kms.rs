@@ -724,7 +724,7 @@ mod test {
             tags: vec![],
         };
         let err = KmsService::validate_create_key(&req).unwrap_err();
-        assert!(err.contains("alias is required"));
+        assert!(err.to_ascii_lowercase().contains("alias is required"));
     }
 
     #[test]
