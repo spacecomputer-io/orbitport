@@ -182,9 +182,8 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 		return nil, err
 	}
 
-	reqCopy := *req
-	reqCopy.Alias = alias
-	record, err := provider.CreateKey(ctx, &reqCopy, keyID, p.now().UTC())
+	req.Alias = alias
+	record, err := provider.CreateKey(ctx, req, keyID, p.now().UTC())
 	if err != nil {
 		logger.Warnf("CreateKey failed for key_id=%s scheme=%s", keyID, scheme)
 		return nil, err
