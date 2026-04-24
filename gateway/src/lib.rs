@@ -11,6 +11,9 @@ pub mod proto {
         pub mod ipfs {
             tonic::include_proto!("ipfs");
         }
+        pub mod kms {
+            tonic::include_proto!("kmsapi");
+        }
         pub mod masterseed {
             tonic::include_proto!("masterseed");
         }
@@ -19,6 +22,9 @@ pub mod proto {
     pub mod services {
         pub mod ctrng {
             tonic::include_proto!("ctrng");
+        }
+        pub mod kms {
+            tonic::include_proto!("kms");
         }
     }
 }

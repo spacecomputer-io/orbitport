@@ -2,6 +2,8 @@ package authnoop
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -21,9 +23,11 @@ func NewPlugin() (*Plugin, error) {
 }
 
 // ValidateToken handles the ValidateToken RPC call.
-func (p *Plugin) ValidateToken(_ context.Context, _ *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
+func (p *Plugin) ValidateToken(_ context.Context, req *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
 	utils.GetLogger("orbitport:authnoop").Warn("Processing request with noop authentication")
+	sum := sha256.Sum256([]byte(req.Token))
 	return &proto.TokenValidationResponse{
-		Ok: true,
+		Ok:       true,
+		ClientId: "dev_" + hex.EncodeToString(sum[:8]),
 	}, nil
 }

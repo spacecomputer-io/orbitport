@@ -2,8 +2,13 @@ use crate::{plugins::PluginCatalog, proto::services::ctrng::CTrngResponse};
 use serde::{Deserialize, Serialize};
 
 use crate::proto::services::ctrng::CTrngRequest;
+use crate::proto::services::kms::{
+    CreateKeyRequest, DecryptRequest, EncryptRequest, GenerateDataKeyRequest, RotateKeyRequest,
+    SignRequest,
+};
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
+use crate::services::kms::{KmsRpcCall, KmsService};
 
 #[derive(Serialize)]
 pub struct JsonRpcError {
@@ -69,6 +74,18 @@ impl<T> JsonRpcResponse<T> {
 pub enum RpcCall {
     #[serde(rename = "ctrng.Get")]
     GetCTRNG(CTrngRequest),
+    #[serde(rename = "kms.CreateKey")]
+    CreateKey(CreateKeyRequest),
+    #[serde(rename = "kms.Decrypt")]
+    Decrypt(DecryptRequest),
+    #[serde(rename = "kms.Encrypt")]
+    Encrypt(EncryptRequest),
+    #[serde(rename = "kms.GenerateDataKey")]
+    GenerateDataKey(GenerateDataKeyRequest),
+    #[serde(rename = "kms.RotateKey")]
+    RotateKey(RotateKeyRequest),
+    #[serde(rename = "kms.Sign")]
+    Sign(SignRequest),
 }
 
 impl RpcCall {
@@ -85,6 +102,12 @@ impl RpcCall {
                     }
                 }
             }
+            RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
+            RpcCall::Decrypt(req) => KmsService::validate_decrypt(req)?,
+            RpcCall::Sign(req) => KmsService::validate_sign(req)?,
+            RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
+            RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
+            RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
         }
         Ok(())
     }
@@ -93,6 +116,7 @@ impl RpcCall {
     pub async fn execute(
         self,
         req_id: u64,
+        client_id: &str,
         plugin_catalog: &PluginCatalog,
     ) -> Result<serde_json::Value, tonic::Status> {
         match self {
@@ -113,6 +137,91 @@ impl RpcCall {
                 })?;
                 Ok(val)
             }
+            RpcCall::Encrypt(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Encrypt(req)).await
+            }
+            RpcCall::Decrypt(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Decrypt(req)).await
+            }
+            RpcCall::Sign(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Sign(req)).await
+            }
+            RpcCall::CreateKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::CreateKey(req),
+                )
+                .await
+            }
+            RpcCall::GenerateDataKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::GenerateDataKey(req),
+                )
+                .await
+            }
+            RpcCall::RotateKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::RotateKey(req),
+                )
+                .await
+            }
+        }
+    }
+}
+
+async fn execute_kms(
+    req_id: u64,
+    client_id: &str,
+    plugin_catalog: &PluginCatalog,
+    call: KmsRpcCall,
+) -> Result<serde_json::Value, tonic::Status> {
+    let grpc_client = plugin_catalog
+        .get_kms_client()
+        .await
+        .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
+    let mut svc = KmsService::new(grpc_client);
+    let results = svc.execute(client_id, req_id, call).await?;
+    let res = JsonRpcResponse::success(req_id, results);
+    serde_json::to_value(res)
+        .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {}", e)))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_deserialize_kms_encrypt_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 7,
+            "method": "kms.Encrypt",
+            "params": {
+                "KeyId": "kms:abc",
+                "Plaintext": "Zm9v",
+                "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::Encrypt(params) => {
+                assert_eq!(params.key_id, "kms:abc");
+                assert_eq!(params.plaintext, "Zm9v");
+                assert_eq!(
+                    params.encryption_algorithm.as_deref(),
+                    Some("SYMMETRIC_DEFAULT")
+                );
+            }
+            _ => panic!("expected kms.Encrypt"),
         }
     }
 }

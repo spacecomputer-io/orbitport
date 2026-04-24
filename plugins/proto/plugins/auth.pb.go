@@ -68,6 +68,7 @@ func (x *TokenValidationRequest) GetToken() string {
 type TokenValidationResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -109,15 +110,23 @@ func (x *TokenValidationResponse) GetOk() bool {
 	return false
 }
 
+func (x *TokenValidationResponse) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
 var File_proto_plugins_auth_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_auth_proto_rawDesc = "" +
 	"\n" +
 	"\x18proto/plugins/auth.proto\x12\x04auth\".\n" +
 	"\x16TokenValidationRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\")\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"F\n" +
 	"\x17TokenValidationResponse\x12\x0e\n" +
-	"\x02ok\x18\x01 \x01(\bR\x02ok2Z\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId2Z\n" +
 	"\n" +
 	"AuthPlugin\x12L\n" +
 	"\rValidateToken\x12\x1c.auth.TokenValidationRequest\x1a\x1d.auth.TokenValidationResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"

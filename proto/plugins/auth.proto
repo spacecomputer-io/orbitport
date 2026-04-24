@@ -14,4 +14,5 @@ message TokenValidationRequest {
 
 message TokenValidationResponse {
     bool ok = 1;
+    string client_id = 2;
 }

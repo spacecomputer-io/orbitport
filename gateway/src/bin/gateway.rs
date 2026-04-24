@@ -12,6 +12,8 @@ struct Args {
     metric_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
     auth_plugin: String,
+    #[clap(long, env = "ORBITPORT_KMS_PLUGIN")]
+    kms_plugin: String,
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
     masterseed_plugin: String,
     /// Rate limit per access token, 4 requests per second
@@ -55,6 +57,7 @@ async fn main() -> Result<(), GatewayError> {
     plugins::wait_for(
         vec![
             args.auth_plugin.to_string(),
+            args.kms_plugin.to_string(),
             args.masterseed_plugin.to_string(),
         ],
         std::time::Duration::from_secs(60),
@@ -77,6 +80,7 @@ async fn main() -> Result<(), GatewayError> {
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
         &args.masterseed_plugin,
+        &args.kms_plugin,
     ));
     server::start(
         args.http_port,
