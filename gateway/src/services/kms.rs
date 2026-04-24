@@ -618,16 +618,16 @@ fn validate_signing_algorithm(value: &str) -> Result<SigningAlgorithm, String> {
 fn validate_alias(value: &str) -> Result<(), String> {
     let trimmed = value.trim();
     if trimmed.len() > MAX_ALIAS_LEN {
-        return Err(format!("Alias must be at most {MAX_ALIAS_LEN} characters"));
+        return Err(format!("alias must be at most {MAX_ALIAS_LEN} characters"));
     }
     if trimmed.starts_with(KEY_ID_PREFIX) {
-        return Err("Alias must not use the reserved kms:<alias> format".to_string());
+        return Err("alias must not use the reserved kms:<alias> format".to_string());
     }
     if !trimmed
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.'))
     {
-        return Err("Alias contains unsupported characters".to_string());
+        return Err("alias contains unsupported characters".to_string());
     }
     Ok(())
 }
@@ -724,7 +724,7 @@ mod test {
             tags: vec![],
         };
         let err = KmsService::validate_create_key(&req).unwrap_err();
-        assert!(err.contains("Alias is required"));
+        assert!(err.contains("alias is required"));
     }
 
     #[test]

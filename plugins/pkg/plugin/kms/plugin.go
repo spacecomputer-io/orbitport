@@ -368,16 +368,16 @@ func validateAlias(alias string) error {
 	const maxAliasLen = 128
 
 	if alias == "" {
-		return fmt.Errorf("Alias is required")
+		return fmt.Errorf("alias is required")
 	}
 	if len(alias) > maxAliasLen {
-		return fmt.Errorf("Alias must be at most %d characters", maxAliasLen)
+		return fmt.Errorf("alias must be at most %d characters", maxAliasLen)
 	}
 	if reservedKmsRe.MatchString(alias) {
-		return fmt.Errorf("Alias must not use the reserved kms:<alias> format")
+		return fmt.Errorf("alias must not use the reserved kms:<alias> format")
 	}
 	if !aliasCharsRe.MatchString(alias) {
-		return fmt.Errorf("Alias contains unsupported characters")
+		return fmt.Errorf("alias contains unsupported characters")
 	}
 	return nil
 }
