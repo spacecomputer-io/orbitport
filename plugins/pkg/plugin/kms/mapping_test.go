@@ -4,11 +4,11 @@ import "testing"
 
 func TestTransitKeyType(t *testing.T) {
 	tests := map[string]string{
-		keySpecSymmetric: "aes256-gcm96",
-		keySpecECDSAP256: "ecdsa-p256",
-		keySpecECDSAP384: "ecdsa-p384",
-		keySpecED25519:   "ed25519",
-		keySpecRSA4096:   "rsa-4096",
+		keySpecAES256GCM96: "aes256-gcm96",
+		keySpecECDSAP256:   "ecdsa-p256",
+		keySpecECDSAP384:   "ecdsa-p384",
+		keySpecED25519:     "ed25519",
+		keySpecRSA4096:     "rsa-4096",
 	}
 
 	for input, expected := range tests {

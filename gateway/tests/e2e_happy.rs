@@ -236,7 +236,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "params": {
                 "Description": "gateway e2e transit key",
                 "Scheme": "TRANSIT",
-                "KeySpec": "SYMMETRIC_DEFAULT",
+                "KeySpec": "AES_256_GCM96",
                 "KeyUsage": "ENCRYPT_DECRYPT",
                 "Alias": &alias,
                 "Tags": [
@@ -264,7 +264,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
         );
         assert_eq!(metadata.scheme, "TRANSIT", "CreateKey returned the wrong Scheme");
         assert_eq!(
-            metadata.key_spec, "SYMMETRIC_DEFAULT",
+            metadata.key_spec, "AES_256_GCM96",
             "CreateKey returned the wrong KeySpec"
         );
         assert_eq!(
@@ -289,7 +289,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
         assert_eq!(metadata.alias, alias, "CreateKey did not return Alias");
         assert!(
             metadata.public_key.is_none(),
-            "Transit key should not expose PublicKey"
+            "Transit symmetric key should not expose PublicKey"
         );
         assert!(metadata.address.is_none(), "Transit key should not expose Address");
 
@@ -301,7 +301,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "params": {
                 "KeyId": &alias,
                 "Plaintext": plaintext,
-                "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
+                "EncryptionAlgorithm": "AES_256_GCM96"
             }
         });
 
@@ -313,7 +313,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "Encrypt returned a different KeyId"
         );
         assert_eq!(
-            encrypt_resp.encryption_algorithm, "SYMMETRIC_DEFAULT",
+            encrypt_resp.encryption_algorithm, "AES_256_GCM96",
             "Encrypt returned the wrong EncryptionAlgorithm"
         );
         assert!(
@@ -333,7 +333,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "params": {
                 "CiphertextBlob": encrypt_resp.ciphertext_blob,
                 "KeyId": &alias,
-                "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
+                "EncryptionAlgorithm": "AES_256_GCM96"
             }
         });
 
@@ -345,7 +345,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "Decrypt returned a different KeyId"
         );
         assert_eq!(
-            decrypt_resp.encryption_algorithm, "SYMMETRIC_DEFAULT",
+            decrypt_resp.encryption_algorithm, "AES_256_GCM96",
             "Decrypt returned the wrong EncryptionAlgorithm"
         );
         assert_eq!(
@@ -388,7 +388,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
             "params": {
                 "CiphertextBlob": data_key_resp.ciphertext_blob,
                 "KeyId": &alias,
-                "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
+                "EncryptionAlgorithm": "AES_256_GCM96"
             }
         });
 
@@ -432,7 +432,7 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
         );
         assert_eq!(rotated.scheme, "TRANSIT", "RotateKey returned the wrong Scheme");
         assert_eq!(
-            rotated.key_spec, "SYMMETRIC_DEFAULT",
+            rotated.key_spec, "AES_256_GCM96",
             "RotateKey returned the wrong KeySpec"
         );
         assert_eq!(

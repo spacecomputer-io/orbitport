@@ -6,12 +6,13 @@ const (
 	dataKeySpecAES128                 = "AES_128"
 	dataKeySpecAES256                 = "AES_256"
 	encryptDecryptUsage               = "ENCRYPT_DECRYPT"
+	encryptionAlgorithmAES256GCM96    = "AES_256_GCM96"
 	keySpecECCSecgP256K1              = "ECC_SECG_P256K1"
 	keySpecECDSAP256                  = "ECDSA_P256"
 	keySpecECDSAP384                  = "ECDSA_P384"
 	keySpecED25519                    = "ED25519"
 	keySpecRSA4096                    = "RSA_4096"
-	keySpecSymmetric                  = "SYMMETRIC_DEFAULT"
+	keySpecAES256GCM96                = encryptionAlgorithmAES256GCM96
 	messageTypeDigest                 = "DIGEST"
 	messageTypeEIP191                 = "EIP191"
 	messageTypeRaw                    = "RAW"
@@ -27,9 +28,22 @@ type signMapping struct {
 	prehashed          bool
 }
 
-func transitKeyType(keySpec string) (string, error) {
+func validateTransitKeySpec(keySpec string) error {
 	switch keySpec {
-	case keySpecSymmetric:
+	case keySpecECDSAP256, keySpecECDSAP384, keySpecED25519, keySpecRSA4096, keySpecAES256GCM96:
+		return nil
+	default:
+		return fmt.Errorf("unsupported KeySpec %q", keySpec)
+	}
+}
+
+func transitKeyType(keySpec string) (string, error) {
+	if err := validateTransitKeySpec(keySpec); err != nil {
+		return "", err
+	}
+
+	switch keySpec {
+	case keySpecAES256GCM96:
 		return "aes256-gcm96", nil
 	case keySpecECDSAP256:
 		return "ecdsa-p256", nil
@@ -55,7 +69,7 @@ func normalizeScheme(scheme string) (string, error) {
 }
 
 func supportsEncryption(keySpec string) bool {
-	return keySpec == keySpecSymmetric
+	return keySpec == keySpecAES256GCM96
 }
 
 func supportsSigning(keySpec string) bool {
@@ -68,10 +82,14 @@ func supportsSigning(keySpec string) bool {
 }
 
 func validateTransitKeyUsage(keySpec, keyUsage string) error {
+	if err := validateTransitKeySpec(keySpec); err != nil {
+		return err
+	}
+
 	switch keySpec {
-	case keySpecSymmetric:
+	case keySpecAES256GCM96:
 		if keyUsage != encryptDecryptUsage {
-			return fmt.Errorf("SYMMETRIC_DEFAULT keys must use ENCRYPT_DECRYPT")
+			return fmt.Errorf("%s keys must use ENCRYPT_DECRYPT", keySpecAES256GCM96)
 		}
 	default:
 		if keyUsage != signVerifyUsage {
@@ -92,8 +110,8 @@ func validateEthereumKeyUsage(keySpec, keyUsage string) error {
 }
 
 func normalizeEncryptionAlgorithm(algorithm string) (string, error) {
-	if algorithm == "" || algorithm == keySpecSymmetric {
-		return keySpecSymmetric, nil
+	if algorithm == "" || algorithm == keySpecAES256GCM96 {
+		return encryptionAlgorithmAES256GCM96, nil
 	}
 	return "", fmt.Errorf("unsupported EncryptionAlgorithm %q", algorithm)
 }
