@@ -17,6 +17,10 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.GenerateDataKeyResponse",
     "kms.RotateKeyRequest",
     "kms.RotateKeyResponse",
+    "kms.GetCapabilitiesRequest",
+    "kms.GetCapabilitiesResponse",
+    "kms.SigningCapability",
+    "kms.SchemeCapability",
 ];
 
 fn apply_kms_service_attributes(config: tonic_prost_build::Builder) -> tonic_prost_build::Builder {

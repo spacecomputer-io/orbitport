@@ -13,8 +13,9 @@ use crate::proto::plugins::kms::{
 };
 use crate::proto::services::kms::{
     CreateKeyRequest, CreateKeyResponse, DecryptRequest, DecryptResponse, EncryptRequest,
-    EncryptResponse, GenerateDataKeyRequest, GenerateDataKeyResponse, RotateKeyRequest,
-    RotateKeyResponse, SignRequest, SignResponse, Tag,
+    EncryptResponse, GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
+    RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest, SignResponse,
+    SigningCapability, Tag,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,6 +47,13 @@ impl Scheme {
                 | (Self::Transit, SigningAlgorithm::RsassaPssSha256)
                 | (Self::Ethereum, SigningAlgorithm::EthereumSecp256k1)
         )
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Transit => "TRANSIT",
+            Self::Ethereum => "ETHEREUM",
+        }
     }
 }
 
@@ -93,6 +101,17 @@ impl KeySpec {
             | Self::Rsa4096 => Scheme::Transit,
         }
     }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Aes256Gcm96 => "AES_256_GCM96",
+            Self::EcdsaP256 => "ECDSA_P256",
+            Self::EcdsaP384 => "ECDSA_P384",
+            Self::Ed25519 => "ED25519",
+            Self::Rsa4096 => "RSA_4096",
+            Self::EccSecgP256k1 => "ECC_SECG_P256K1",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,6 +128,13 @@ impl KeyUsage {
             _ => Err("KeyUsage must be ENCRYPT_DECRYPT or SIGN_VERIFY".to_string()),
         }
     }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::EncryptDecrypt => "ENCRYPT_DECRYPT",
+            Self::SignVerify => "SIGN_VERIFY",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -121,6 +147,12 @@ impl EncryptionAlgorithm {
         match value {
             "AES_256_GCM96" => Ok(Self::Aes256Gcm96),
             _ => Err("EncryptionAlgorithm must be AES_256_GCM96".to_string()),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Aes256Gcm96 => "AES_256_GCM96",
         }
     }
 }
@@ -145,6 +177,17 @@ impl SigningAlgorithm {
             "RSASSA_PKCS1_V1_5_SHA_256" => Ok(Self::RsassaPkcs1V15Sha256),
             "RSASSA_PSS_SHA_256" => Ok(Self::RsassaPssSha256),
             _ => Err("SigningAlgorithm is not supported".to_string()),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::EcdsaSha256 => "ECDSA_SHA_256",
+            Self::EcdsaSha384 => "ECDSA_SHA_384",
+            Self::Ed25519 => "ED25519",
+            Self::EthereumSecp256k1 => "ETHEREUM_SECP256K1",
+            Self::RsassaPkcs1V15Sha256 => "RSASSA_PKCS1_V1_5_SHA_256",
+            Self::RsassaPssSha256 => "RSASSA_PSS_SHA_256",
         }
     }
 }
@@ -172,6 +215,14 @@ impl MessageType {
             Self::Eip191 => Scheme::Ethereum.supports_signing_algorithm(signing_algorithm),
         }
     }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Raw => "RAW",
+            Self::Digest => "DIGEST",
+            Self::Eip191 => "EIP191",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -186,6 +237,13 @@ impl DataKeySpec {
             "AES_128" => Ok(Self::Aes128),
             "AES_256" => Ok(Self::Aes256),
             _ => Err("DataKeySpec must be AES_128 or AES_256".to_string()),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Aes128 => "AES_128",
+            Self::Aes256 => "AES_256",
         }
     }
 }
@@ -409,6 +467,12 @@ impl KmsService {
         validate_key_reference("KeyId", &req.key_id)
     }
 
+    pub fn get_capabilities() -> GetCapabilitiesResponse {
+        GetCapabilitiesResponse {
+            schemes: vec![transit_capability(), ethereum_capability()],
+        }
+    }
+
     pub async fn execute(
         &mut self,
         client_id: &str,
@@ -580,6 +644,88 @@ impl KmsService {
     }
 }
 
+fn transit_capability() -> SchemeCapability {
+    SchemeCapability {
+        scheme: Scheme::Transit.as_str().to_string(),
+        key_specs: vec![
+            KeySpec::Aes256Gcm96,
+            KeySpec::EcdsaP256,
+            KeySpec::EcdsaP384,
+            KeySpec::Ed25519,
+            KeySpec::Rsa4096,
+        ]
+        .into_iter()
+        .map(|spec| spec.as_str().to_string())
+        .collect(),
+        key_usages: vec![KeyUsage::EncryptDecrypt, KeyUsage::SignVerify]
+            .into_iter()
+            .map(|usage| usage.as_str().to_string())
+            .collect(),
+        encryption_algorithms: vec![EncryptionAlgorithm::Aes256Gcm96.as_str().to_string()],
+        data_key_specs: vec![DataKeySpec::Aes128, DataKeySpec::Aes256]
+            .into_iter()
+            .map(|spec| spec.as_str().to_string())
+            .collect(),
+        signing_capabilities: vec![
+            signing_capability(
+                SigningAlgorithm::EcdsaSha256,
+                &[MessageType::Raw, MessageType::Digest],
+            ),
+            signing_capability(
+                SigningAlgorithm::EcdsaSha384,
+                &[MessageType::Raw, MessageType::Digest],
+            ),
+            signing_capability(
+                SigningAlgorithm::Ed25519,
+                &[MessageType::Raw, MessageType::Digest],
+            ),
+            signing_capability(
+                SigningAlgorithm::RsassaPkcs1V15Sha256,
+                &[MessageType::Raw, MessageType::Digest],
+            ),
+            signing_capability(
+                SigningAlgorithm::RsassaPssSha256,
+                &[MessageType::Raw, MessageType::Digest],
+            ),
+        ],
+        supports_encrypt: true,
+        supports_decrypt: true,
+        supports_generate_data_key: true,
+        supports_rotate_key: true,
+    }
+}
+
+fn ethereum_capability() -> SchemeCapability {
+    SchemeCapability {
+        scheme: Scheme::Ethereum.as_str().to_string(),
+        key_specs: vec![KeySpec::EccSecgP256k1.as_str().to_string()],
+        key_usages: vec![KeyUsage::SignVerify.as_str().to_string()],
+        encryption_algorithms: vec![],
+        data_key_specs: vec![],
+        signing_capabilities: vec![signing_capability(
+            SigningAlgorithm::EthereumSecp256k1,
+            &[MessageType::Raw, MessageType::Digest, MessageType::Eip191],
+        )],
+        supports_encrypt: false,
+        supports_decrypt: false,
+        supports_generate_data_key: false,
+        supports_rotate_key: false,
+    }
+}
+
+fn signing_capability(
+    signing_algorithm: SigningAlgorithm,
+    message_types: &[MessageType],
+) -> SigningCapability {
+    SigningCapability {
+        signing_algorithm: signing_algorithm.as_str().to_string(),
+        message_types: message_types
+            .iter()
+            .map(|message_type| message_type.as_str().to_string())
+            .collect(),
+    }
+}
+
 fn validate_required(field_name: &str, value: &str) -> Result<(), String> {
     if value.trim().is_empty() {
         return Err(format!("{field_name} is required"));
@@ -748,6 +894,41 @@ mod test {
         };
         let err = KmsService::validate_sign(&req).unwrap_err();
         assert!(err.contains("MessageType"));
+    }
+
+    #[test]
+    fn test_get_capabilities_includes_transit_and_ethereum() {
+        let capabilities = KmsService::get_capabilities();
+
+        let transit = capabilities
+            .schemes
+            .iter()
+            .find(|scheme| scheme.scheme == "TRANSIT")
+            .expect("missing TRANSIT capability");
+        assert!(transit.key_specs.contains(&"AES_256_GCM96".to_string()));
+        assert!(
+            transit
+                .encryption_algorithms
+                .contains(&"AES_256_GCM96".to_string())
+        );
+        assert!(transit.supports_encrypt);
+        assert!(transit.supports_decrypt);
+        assert!(transit.supports_generate_data_key);
+        assert!(transit.supports_rotate_key);
+
+        let ethereum = capabilities
+            .schemes
+            .iter()
+            .find(|scheme| scheme.scheme == "ETHEREUM")
+            .expect("missing ETHEREUM capability");
+        assert!(ethereum.key_specs.contains(&"ECC_SECG_P256K1".to_string()));
+        assert!(ethereum.signing_capabilities.iter().any(|capability| {
+            capability.signing_algorithm == "ETHEREUM_SECP256K1"
+                && capability.message_types.contains(&"EIP191".to_string())
+        }));
+        assert!(!ethereum.supports_encrypt);
+        assert!(!ethereum.supports_generate_data_key);
+        assert!(!ethereum.supports_rotate_key);
     }
 
     #[test]
