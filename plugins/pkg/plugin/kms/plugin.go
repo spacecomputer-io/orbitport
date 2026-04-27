@@ -64,7 +64,12 @@ func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto
 		logger.Warnf("Encrypt failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
-	resp, err := provider.Encrypt(ctx, metadata, req)
+	encryptor, err := requireCipherProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("Encrypt failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	resp, err := encryptor.Encrypt(ctx, metadata, req)
 	if err != nil {
 		logger.Warnf("Encrypt failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
@@ -104,7 +109,12 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 		logger.Warnf("Decrypt rejected mismatched ciphertext blob for key_id=%s", blob.KeyID)
 		return nil, status.Error(codes.PermissionDenied, "CiphertextBlob does not belong to the authenticated client")
 	}
-	resp, err := provider.Decrypt(ctx, blob, req)
+	decryptor, err := requireCipherProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("Decrypt failed for key_id=%s scheme=%s", blob.KeyID, blob.Scheme)
+		return nil, err
+	}
+	resp, err := decryptor.Decrypt(ctx, blob, req)
 	if err != nil {
 		logger.Warnf("Decrypt failed for key_id=%s scheme=%s", blob.KeyID, blob.Scheme)
 		return nil, err
@@ -128,7 +138,12 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 		logger.Warnf("Sign failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
-	resp, err := provider.Sign(ctx, metadata, req)
+	signer, err := requireSignProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("Sign failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	resp, err := signer.Sign(ctx, metadata, req)
 	if err != nil {
 		logger.Warnf("Sign failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
@@ -211,7 +226,12 @@ func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKey
 		logger.Warnf("GenerateDataKey failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
-	resp, err := provider.GenerateDataKey(ctx, metadata, req)
+	generator, err := requireDataKeyProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("GenerateDataKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	resp, err := generator.GenerateDataKey(ctx, metadata, req)
 	if err != nil {
 		logger.Warnf("GenerateDataKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
@@ -231,7 +251,12 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 		return nil, err
 	}
 
-	updated, err := provider.RotateKey(ctx, metadata)
+	rotator, err := requireRotateKeyProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("RotateKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	updated, err := rotator.RotateKey(ctx, metadata)
 	if err != nil {
 		logger.Warnf("RotateKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
