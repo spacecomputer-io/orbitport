@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::proto::services::ctrng::CTrngRequest;
 use crate::proto::services::kms::{
-    CreateKeyRequest, DecryptRequest, EncryptRequest, GenerateDataKeyRequest, RotateKeyRequest,
-    SignRequest,
+    CreateKeyRequest, DecryptRequest, EncryptRequest, GenerateDataKeyRequest,
+    GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
 };
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
@@ -74,6 +74,8 @@ impl<T> JsonRpcResponse<T> {
 pub enum RpcCall {
     #[serde(rename = "ctrng.Get")]
     GetCTRNG(CTrngRequest),
+    #[serde(rename = "kms.GetCapabilities")]
+    GetCapabilities(GetCapabilitiesRequest),
     #[serde(rename = "kms.CreateKey")]
     CreateKey(CreateKeyRequest),
     #[serde(rename = "kms.Decrypt")]
@@ -102,6 +104,7 @@ impl RpcCall {
                     }
                 }
             }
+            RpcCall::GetCapabilities(_) => {}
             RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
             RpcCall::Decrypt(req) => KmsService::validate_decrypt(req)?,
             RpcCall::Sign(req) => KmsService::validate_sign(req)?,
@@ -131,11 +134,10 @@ impl RpcCall {
                     tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
                     tonic::Status::internal("Failed to get mixed cTRNG")
                 })?;
-                let res = JsonRpcResponse::success(req_id, results);
-                let val = serde_json::to_value(res).map_err(|e| {
-                    tonic::Status::internal(format!("Failed to serialize response: {}", e))
-                })?;
-                Ok(val)
+                serialize_success_response(req_id, results)
+            }
+            RpcCall::GetCapabilities(_) => {
+                serialize_success_response(req_id, KmsService::get_capabilities())
             }
             RpcCall::Encrypt(req) => {
                 execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Encrypt(req)).await
@@ -177,6 +179,15 @@ impl RpcCall {
     }
 }
 
+fn serialize_success_response<T: Serialize>(
+    req_id: u64,
+    result: T,
+) -> Result<serde_json::Value, tonic::Status> {
+    let res = JsonRpcResponse::success(req_id, result);
+    serde_json::to_value(res)
+        .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {}", e)))
+}
+
 async fn execute_kms(
     req_id: u64,
     client_id: &str,
@@ -189,9 +200,7 @@ async fn execute_kms(
         .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
     let mut svc = KmsService::new(grpc_client);
     let results = svc.execute(client_id, req_id, call).await?;
-    let res = JsonRpcResponse::success(req_id, results);
-    serde_json::to_value(res)
-        .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {}", e)))
+    serialize_success_response(req_id, results)
 }
 
 #[cfg(test)]
@@ -207,7 +216,7 @@ mod test {
             "params": {
                 "KeyId": "kms:abc",
                 "Plaintext": "Zm9v",
-                "EncryptionAlgorithm": "SYMMETRIC_DEFAULT"
+                "EncryptionAlgorithm": "AES_256_GCM96"
             }
         });
 
@@ -218,10 +227,26 @@ mod test {
                 assert_eq!(params.plaintext, "Zm9v");
                 assert_eq!(
                     params.encryption_algorithm.as_deref(),
-                    Some("SYMMETRIC_DEFAULT")
+                    Some("AES_256_GCM96")
                 );
             }
             _ => panic!("expected kms.Encrypt"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_get_capabilities_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "kms.GetCapabilities",
+            "params": {}
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::GetCapabilities(_) => {}
+            _ => panic!("expected kms.GetCapabilities"),
         }
     }
 }

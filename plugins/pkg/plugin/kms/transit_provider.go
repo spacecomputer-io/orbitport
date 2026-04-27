@@ -22,6 +22,10 @@ func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyReq
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
+	if err := validateTransitKeySpec(req.KeySpec); err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+
 	keyType, err := transitKeyType(req.KeySpec)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -48,6 +52,7 @@ func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyReq
 		Enabled:        true,
 		PrimaryVersion: transitInfo.LatestVersion,
 		CreatedAt:      now.UTC().Format(time.RFC3339),
+		PublicKey:      transitInfo.PublicKey,
 		Tags:           toRecordTags(req.Tags),
 	}, nil
 }
@@ -125,7 +130,13 @@ func (p *transitProvider) GenerateDataKey(ctx context.Context, metadata *keyMeta
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	blob, err := encodeCiphertextBlob(metadata.Scheme, metadata.KeyID, metadata.backendKey(), ciphertext, keySpecSymmetric)
+	blob, err := encodeCiphertextBlob(
+		metadata.Scheme,
+		metadata.KeyID,
+		metadata.backendKey(),
+		ciphertext,
+		encryptionAlgorithmAES256GCM96,
+	)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -144,5 +155,6 @@ func (p *transitProvider) RotateKey(ctx context.Context, metadata *keyMetadataRe
 	}
 
 	metadata.PrimaryVersion = transitInfo.LatestVersion
+	metadata.PublicKey = transitInfo.PublicKey
 	return metadata, nil
 }
