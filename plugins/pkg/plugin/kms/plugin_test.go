@@ -379,7 +379,7 @@ func TestEncryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	_, err = plugin.Encrypt(context.Background(), &proto.EncryptRequest{
 		KeyId:               testEthereumAlias,
 		Plaintext:           "Zm9v",
-		EncryptionAlgorithm: stringPtr(keySpecSymmetric),
+		EncryptionAlgorithm: stringPtr(encryptionAlgorithmAES256GCM96),
 		ClientId:            clientID,
 	})
 	if err == nil {
@@ -413,7 +413,7 @@ func TestDecryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
 	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 
-	ciphertextBlob, err := encodeCiphertextBlob(schemeEthereum, testEthereumKeyID, providerKey, "0xdeadbeef", keySpecSymmetric)
+	ciphertextBlob, err := encodeCiphertextBlob(schemeEthereum, testEthereumKeyID, providerKey, "0xdeadbeef", encryptionAlgorithmAES256GCM96)
 	if err != nil {
 		t.Fatalf("encodeCiphertextBlob() error = %v", err)
 	}
