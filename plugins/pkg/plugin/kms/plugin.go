@@ -64,9 +64,9 @@ func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto
 		logger.Warnf("Encrypt failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
-	encryptor, err := requireCipherProvider(provider, metadata.Scheme)
+	encryptor, err := requireEncryptProvider(provider, metadata.Scheme)
 	if err != nil {
-		logger.Warnf("Encrypt failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		logger.Warnf("Encrypt rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
 	resp, err := encryptor.Encrypt(ctx, metadata, req)
@@ -109,9 +109,9 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 		logger.Warnf("Decrypt rejected mismatched ciphertext blob for key_id=%s", blob.KeyID)
 		return nil, status.Error(codes.PermissionDenied, "CiphertextBlob does not belong to the authenticated client")
 	}
-	decryptor, err := requireCipherProvider(provider, metadata.Scheme)
+	decryptor, err := requireDecryptProvider(provider, metadata.Scheme)
 	if err != nil {
-		logger.Warnf("Decrypt failed for key_id=%s scheme=%s", blob.KeyID, blob.Scheme)
+		logger.Warnf("Decrypt rejected: unsupported operation for key_id=%s scheme=%s", blob.KeyID, metadata.Scheme)
 		return nil, err
 	}
 	resp, err := decryptor.Decrypt(ctx, blob, req)
@@ -140,7 +140,7 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 	}
 	signer, err := requireSignProvider(provider, metadata.Scheme)
 	if err != nil {
-		logger.Warnf("Sign failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		logger.Warnf("Sign rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
 	resp, err := signer.Sign(ctx, metadata, req)
@@ -228,7 +228,7 @@ func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKey
 	}
 	generator, err := requireDataKeyProvider(provider, metadata.Scheme)
 	if err != nil {
-		logger.Warnf("GenerateDataKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		logger.Warnf("GenerateDataKey rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
 	resp, err := generator.GenerateDataKey(ctx, metadata, req)
@@ -253,7 +253,7 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 
 	rotator, err := requireRotateKeyProvider(provider, metadata.Scheme)
 	if err != nil {
-		logger.Warnf("RotateKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		logger.Warnf("RotateKey rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
 	updated, err := rotator.RotateKey(ctx, metadata)
