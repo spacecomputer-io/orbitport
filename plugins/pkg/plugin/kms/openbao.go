@@ -56,6 +56,7 @@ func (e *openBaoStatusError) Error() string {
 type transitKeyInfo struct {
 	LatestVersion uint32 `json:"latest_version"`
 	Type          string `json:"type"`
+	PublicKey     string `json:"public_key"`
 }
 
 type ethereumKeyInfo struct {

@@ -16,6 +16,7 @@ service KmsService {
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
 }
 
 message Tag {
@@ -106,4 +107,28 @@ message RotateKeyRequest {
 
 message RotateKeyResponse {
   KeyMetadata key_metadata = 1;
+}
+
+message GetCapabilitiesRequest {}
+
+message SigningCapability {
+  string signing_algorithm = 1;
+  repeated string message_types = 2;
+}
+
+message SchemeCapability {
+  string scheme = 1;
+  repeated string key_specs = 2;
+  repeated string key_usages = 3;
+  repeated string encryption_algorithms = 4;
+  repeated string data_key_specs = 5;
+  repeated SigningCapability signing_capabilities = 6;
+  bool supports_encrypt = 7;
+  bool supports_decrypt = 8;
+  bool supports_generate_data_key = 9;
+  bool supports_rotate_key = 10;
+}
+
+message GetCapabilitiesResponse {
+  repeated SchemeCapability schemes = 1;
 }
