@@ -15,6 +15,4 @@ local test setups can skip Auth0 configuration. It replaces the old
 selecting a different plugin binary rather than a runtime flag, making it
 harder to ship to prod by accident.
 
-## Configuration
-
-None.
+Takes no configuration.

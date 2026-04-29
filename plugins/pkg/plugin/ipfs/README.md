@@ -18,16 +18,8 @@ Implements `IpfsPlugin` (`proto/plugins/ipfs.proto`) with:
 The plugin talks to a Kubo node over its HTTP API (`ORBITPORT_IPFS_ADDRESS`)
 and fronts it with an LRU cache sized by `ORBITPORT_PLUGIN_CACHE_SIZE`.
 Oversized payloads bypass the cache to avoid OOM on Add/Get, and `Add`/`Get`
-enforce per-request byte ceilings (`PLUGIN_MAX_ADD_BYTES`,
-`PLUGIN_MAX_GET_BYTES`). Published IPNS records use
+enforce per-request byte ceilings (`ORBITPORT_PLUGIN_MAX_ADD_BYTES`,
+`ORBITPORT_PLUGIN_MAX_GET_BYTES`). Published IPNS records use
 `ORBITPORT_IPNS_LEASE_DURATION` as the record lifetime.
 
-## Configuration
-
-| Env var                         | Default                 | Description                      |
-| ------------------------------- | ----------------------- | -------------------------------- |
-| `ORBITPORT_IPFS_ADDRESS`        | `http://localhost:5001` | Kubo HTTP API endpoint           |
-| `ORBITPORT_PLUGIN_CACHE_SIZE`   | `100`                   | LRU cache entry count            |
-| `ORBITPORT_IPNS_LEASE_DURATION` | `24h`                   | IPNS record lifetime             |
-| `ORBITPORT_PLUGIN_MAX_ADD_BYTES`| `1048576`               | Max bytes accepted by `Add`      |
-| `ORBITPORT_PLUGIN_MAX_GET_BYTES`| `1048576`               | Max bytes returned by `Get`      |
+Configuration: see [CONTEXT.md → Plugin: `ipfs`](../../../../CONTEXT.md#plugin-ipfs).

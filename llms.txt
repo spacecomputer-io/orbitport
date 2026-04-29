@@ -1,0 +1,49 @@
+# Orbitport
+
+> Unified gateway to space-based orbital services by SpaceComputer. Rust HTTP/JSON-RPC gateway that fans out to a set of Go gRPC plugin sidecars. Currently exposes cTRNG (cosmic true random numbers) backed by the Aptos Orbital satellites, plus a randomness beacon published to IPFS/IPNS.
+
+## Entrypoints
+
+- [README.md](README.md): User-facing intro, services overview, quickstart, HTTP/JSON-RPC API.
+- [CONTEXT.md](CONTEXT.md): Deep architecture, repository layout, full env-var reference, protobuf workflow, test profiles, CI/CD.
+- [.example.env](.example.env): Credentials needed to run the production compose stack against real upstreams.
+
+## Code layout
+
+- [gateway/](gateway/): Rust HTTP + JSON-RPC server (Warp + Tonic).
+  - [gateway/src/services/](gateway/src/services/): External service layer (`ctrng`, `jrpc`).
+  - [gateway/src/plugins.rs](gateway/src/plugins.rs): Plugin catalog and gRPC client wiring.
+  - [gateway/src/filters.rs](gateway/src/filters.rs): Auth middleware and per-JWT rate limiter.
+  - [gateway/src/metrics.rs](gateway/src/metrics.rs): Prometheus metrics.
+  - [gateway/build.rs](gateway/build.rs): `tonic-build` configuration; reads protos from top-level `proto/`.
+- [plugins/](plugins/): Go gRPC plugin services.
+  - [plugins/cmd/plugin/](plugins/cmd/plugin/): Plugin dispatcher binary; selects implementation via `ORBITPORT_PLUGIN`.
+  - [plugins/cmd/mocker/](plugins/cmd/mocker/): Aptos Orbital API mock used in dev/e2e.
+  - [plugins/pkg/plugin/](plugins/pkg/plugin/): Plugin implementations (one subdir per plugin).
+  - [plugins/pkg/core/health/](plugins/pkg/core/health/): gRPC dependency health-check waiter.
+  - [plugins/proto/plugins/](plugins/proto/plugins/): Generated Go bindings for internal plugin protos.
+  - [plugins/test/](plugins/test/): E2E tests (happy / offline profiles).
+- [proto/](proto/): Protobuf source of truth.
+  - [proto/services/](proto/services/): External gateway service contracts (e.g. `ctrng.proto`).
+  - [proto/plugins/](proto/plugins/): Internal gRPC contracts between gateway and plugins.
+
+## Plugins
+
+- [plugins/pkg/plugin/aptosorbital/README.md](plugins/pkg/plugin/aptosorbital/README.md): Wraps `api.aptosorbital.com` for satellite-derived TRNG.
+- [plugins/pkg/plugin/auth/README.md](plugins/pkg/plugin/auth/README.md): Fail-closed Auth0 JWT validation.
+- [plugins/pkg/plugin/authnoop/README.md](plugins/pkg/plugin/authnoop/README.md): Dev-only noop auth that accepts every token.
+- [plugins/pkg/plugin/ipfs/README.md](plugins/pkg/plugin/ipfs/README.md): Kubo wrapper with LRU cache and IPNS publishing.
+- [plugins/pkg/plugin/masterseed/README.md](plugins/pkg/plugin/masterseed/README.md): Rolling pool of satellite seeds with offset-reserved derivation.
+- [plugins/pkg/plugin/beacon/README.md](plugins/pkg/plugin/beacon/README.md): Background service that publishes the randomness beacon to IPFS/IPNS.
+
+## Compose stacks
+
+- [docker-compose.yaml](docker-compose.yaml): Stack against real Aptos Orbital and Auth0; requires credentials in `.env`.
+- [dev.docker-compose.yaml](dev.docker-compose.yaml): Dev stack with `authnoop` and the Aptos Orbital mocker; no external credentials needed.
+- [beacons.yaml](beacons.yaml): Public beacon registry consumed by the beacon plugin.
+
+## Other
+
+- [docs/](docs/): Internal/dev documentation (design notes, roadmap, dev guide).
+- [CONTRIBUTING.md](CONTRIBUTING.md): Contribution guidelines.
+- [LICENSE](LICENSE): Apache License 2.0.

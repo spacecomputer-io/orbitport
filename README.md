@@ -11,14 +11,14 @@
 
 Orbitport is a unified gateway to space-based orbital services operated by SpaceComputer. It gives web2 and web3 applications a single, secure entry point to services served from multiple providers and satellites — today that means `cTRNG` (cosmic True Random Number Generation) backed by the Aptos Orbital satellites, with more services on the roadmap.
 
-The project is split across two languages. A **Rust gateway** terminates HTTP and JSON-RPC at the edge, handles JWT authentication and per-token rate limiting, and fans out to a set of **Go plugins** over gRPC. Plugins are stateless sidecars that either wrap an upstream provider (e.g. Aptos Orbital, IPFS) or run a background service (e.g. the randomness beacon). The whole thing is packaged as Docker images and runs from a single `docker-compose` command.
+The project is a **Rust gateway** that terminates HTTP and JSON-RPC at the edge and fans out to a set of **Go plugins** over gRPC. The whole thing is packaged as Docker images and runs from a single `docker-compose` command.
 
 ## Services
 
-- **cTRNG** — cosmic true random numbers. Exposed as `POST /api/v1/rpc` (`ctrng.Get`) and `GET /api/v1/services/trng`. Served by the `masterseed` plugin, which derives on-demand seeds from a rolling pool of satellite-harvested entropy fetched through the `aptosorbital` plugin.
-- **Randomness Beacon** — a background service that pins a continuously updated beacon record to IPFS and republishes it under a stable IPNS name. Implemented by the `beacon` plugin; the public registry is declared in [`beacons.yaml`](beacons.yaml).
+- **cTRNG** — cosmic true random numbers, served by the `masterseed` plugin from a rolling pool of satellite-harvested entropy.
+- **Randomness Beacon** — a background service that pins a continuously updated beacon record to IPFS and republishes it under a stable IPNS name. Public registry: [`beacons.yaml`](beacons.yaml).
 - **Threshold consumption** *(experimental)* — clients can request encrypted output by passing `key=threshold@<pubkey>` on TRNG requests, so random values are never seen in plaintext by any single party.
-- **spaceTEE** — Space Trusted Execution Environment. Planned; the gateway surface is designed to accommodate additional services as they come online.
+- **spaceTEE** — Space Trusted Execution Environment. Planned.
 
 ## Architecture
 
@@ -41,48 +41,7 @@ The project is split across two languages. A **Rust gateway** terminates HTTP an
                   └──────────────┘ ──▶ plugin-masterseed
 ```
 
-The gateway is a [Warp](https://github.com/seanmonstar/warp) + [Tonic](https://github.com/hyperium/tonic) server. At startup it performs a gRPC health-check wait on the `auth` and `masterseed` plugins (60 s deadline) before it accepts traffic, so a half-started stack never serves requests. Once live it listens on two ports: HTTP on `8080` and Prometheus metrics on `9100`.
-
-All plugins share a single `op-plugin` binary that dispatches to the right implementation based on the `ORBITPORT_PLUGIN` env var — which is how one Docker image ends up running six different services in the compose stack. Plugin-to-plugin discovery is env-var driven (`ORBITPORT_APTOS_PLUGIN`, `ORBITPORT_IPFS_PLUGIN`, etc.), and every plugin exports its own Prometheus metrics on port `9000`.
-
-Protobuf definitions live at the top-level [`proto/`](proto/) directory, split into `proto/services/` (external contracts the gateway exposes to clients, e.g. `ctrng.proto`) and `proto/plugins/` (internal gRPC contracts between gateway and plugins). Rust bindings are generated at build time via `tonic-build`; Go bindings are checked in under `plugins/proto/plugins/`.
-
-## Repository layout
-
-```
-gateway/                    Rust HTTP + JSON-RPC server (Warp + Tonic)
-  src/services/             External service layer (ctrng, jrpc)
-  src/plugins.rs            Plugin catalog / gRPC client wiring
-  src/filters.rs            Auth middleware + per-JWT rate limiter
-  src/metrics.rs            Prometheus metrics
-
-plugins/                    Go gRPC plugin services
-  cmd/plugin/               Plugin dispatcher binary (selects via ORBITPORT_PLUGIN)
-  cmd/mocker/               Mock Aptos Orbital API for dev/e2e
-  pkg/plugin/               Plugin implementations (see below)
-  pkg/core/health/          gRPC health-check dependency waiter
-  proto/plugins/            Generated Go code for internal plugin protos
-  test/                     E2E tests (happy / offline profiles)
-
-proto/                      Protobuf source of truth
-  services/                 External gateway services (ctrng.proto)
-  plugins/                  Internal plugin RPCs (ao, auth, ipfs, masterseed)
-
-docker-compose.yaml         Production stack (real Aptos Orbital + Auth0)
-dev.docker-compose.yaml     Dev stack (mocker + authnoop, no external credentials)
-beacons.yaml                Public beacon registry
-```
-
-Each plugin is documented in its own README:
-
-| Plugin | Purpose |
-| --- | --- |
-| [`aptosorbital`](plugins/pkg/plugin/aptosorbital/README.md) | Fetches true random seeds from the Aptos Orbital satellite API |
-| [`auth`](plugins/pkg/plugin/auth/README.md) | Fail-closed Auth0 JWT validation |
-| [`authnoop`](plugins/pkg/plugin/authnoop/README.md) | Dev-only noop auth — accepts every token |
-| [`ipfs`](plugins/pkg/plugin/ipfs/README.md) | Kubo wrapper with LRU cache, size ceilings, and IPNS publishing |
-| [`masterseed`](plugins/pkg/plugin/masterseed/README.md) | Rolling pool of satellite seeds with offset-reserved derivation |
-| [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS |
+For a deeper walk-through (gRPC wiring, plugin internals, env-var reference, protobuf workflow, test profiles), see [`CONTEXT.md`](CONTEXT.md). A flat repo map is in [`llms.txt`](llms.txt).
 
 ## Running locally
 
@@ -111,38 +70,9 @@ Teardown:
 make devenv-down
 ```
 
-### Production mode
+### Running against real upstreams
 
-`docker-compose.yaml` runs the same stack against real Aptos Orbital and real Auth0. You will need:
-
-- `ORBITPORT_APTOS_ORBITAL_CLIENT_ID` / `ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET` — OAuth credentials for the Aptos Orbital API.
-- `ORBITPORT_AUTH0_DOMAIN` / `ORBITPORT_AUTH0_AUDIENCE` — Auth0 tenant config. The `auth` plugin is fail-closed and refuses to start without these.
-
-See [`.example.env`](.example.env) for the full list.
-
-## Configuration
-
-All env vars are prefixed `ORBITPORT_` and can be supplied via `.env` (gateway also reads `.gateway.env` if present). Gateway-specific vars:
-
-| Env var | Default | Purpose |
-| --- | --- | --- |
-| `ORBITPORT_HTTP_PORT` | `8080` | HTTP server port |
-| `ORBITPORT_METRICS_PORT` | `9100` | Prometheus metrics port |
-| `ORBITPORT_AUTH_PLUGIN` | — | gRPC URL of the auth plugin (required) |
-| `ORBITPORT_MASTERSEED_PLUGIN` | — | gRPC URL of the masterseed plugin (required) |
-| `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
-| `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
-| `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
-
-Plugin dispatcher vars (apply to every `op-plugin` container):
-
-| Env var | Default | Purpose |
-| --- | --- | --- |
-| `ORBITPORT_PLUGIN` | `aptosorbital` | Which plugin this binary runs |
-| `ORBITPORT_GRPC_PORT` | `50001` | gRPC listen port |
-| `ORBITPORT_METRICS_PORT` | `9000` | Prometheus metrics port |
-
-Plugin-specific vars (Auth0, Aptos Orbital, IPFS, masterseed, beacon) are documented in the per-plugin READMEs linked above.
+`docker-compose.yaml` runs the same stack against real Aptos Orbital and real Auth0. You will need OAuth credentials for the Aptos Orbital API and an Auth0 tenant — see [`.example.env`](.example.env) for the full list. Note that this compose file is intended for local/staging use against live upstreams; production deployments require the operator's own infrastructure (orchestration, secret management, observability, networking).
 
 ## HTTP & JSON-RPC API
 
@@ -156,8 +86,6 @@ Plugin-specific vars (Auth0, Aptos Orbital, IPFS, masterseed, beacon) are docume
 All authenticated endpoints go through the same per-JWT rate limiter (SHA-256 hashed token). The current JSON-RPC surface exposes a single method:
 
 - `ctrng.Get({ "version": 1, "chunks": N })` — returns `N` random values (max 10) as `{ items: [{ value, src }] }`.
-
-### Sample: JSON-RPC
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/rpc \
@@ -179,14 +107,18 @@ curl -X POST http://localhost:8080/api/v1/rpc \
 }
 ```
 
-### Sample: REST
+REST shorthand:
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \
   'http://localhost:8080/api/v1/services/trng?bulk=3'
 ```
 
-Prometheus metrics are served separately on port `9100`; see [`gateway/src/metrics.rs`](gateway/src/metrics.rs) for the full surface.
+Prometheus metrics are served separately on port `9100`.
+
+## Configuration
+
+All env vars are prefixed `ORBITPORT_`. The full list, including defaults, is the source-controlled [`.example.env`](.example.env); per-knob descriptions live in [`CONTEXT.md`](CONTEXT.md#configuration). For local dev, the defaults in `.example.env` are sufficient.
 
 ## Testing
 
@@ -195,20 +127,9 @@ make test                       # unit tests (Rust + Go)
 make lint                       # clippy + golangci-lint
 make e2e                        # happy-path e2e against dev compose
 make E2E_PROFILE=offline e2e    # fallback path (Aptos unreachable)
-make e2e-all                    # all e2e suites
-make go-e2e                     # Go beacon e2e
 ```
 
-E2E tests stand up their own dev compose stack. Two profiles are supported: `happy` (all upstreams available) and `offline` (Aptos Orbital unreachable, exercising the masterseed and beacon fallback paths).
-
-## Docker images
-
-Images are published to [`ghcr.io/spacecomputer-io/orbitport/`](https://github.com/orgs/spacecomputer-io/packages) on semver tags via `.github/workflows/build_push.yml`:
-
-- `op-gateway:<tag>` — the Rust gateway.
-- `op-plugin:<tag>` — the multi-purpose Go plugin binary (dispatched by `ORBITPORT_PLUGIN`).
-
-Both run as unprivileged users. Build locally with `make docker-build`.
+See [`CONTEXT.md`](CONTEXT.md#testing) for the full e2e matrix.
 
 ## Links
 
