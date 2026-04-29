@@ -48,6 +48,7 @@ beacons.yaml                Public beacon registry
 | [`ipfs`](plugins/pkg/plugin/ipfs/README.md) | Kubo wrapper with LRU cache, size ceilings, and IPNS publishing | Backs the beacon |
 | [`masterseed`](plugins/pkg/plugin/masterseed/README.md) | Rolling pool of satellite seeds with offset-reserved derivation | Serves cTRNG to the gateway |
 | [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS | No RPC; consumes the others |
+| [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate) backed by OpenBao | Wraps Transit + Ethereum secrets engines |
 
 ## Configuration
 
@@ -61,6 +62,8 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_METRICS_PORT` | `9100` | Prometheus metrics port |
 | `ORBITPORT_AUTH_PLUGIN` | — | gRPC URL of the auth plugin (required) |
 | `ORBITPORT_MASTERSEED_PLUGIN` | — | gRPC URL of the masterseed plugin (required) |
+| `ORBITPORT_TRNG_PLUGIN` | — | gRPC URL of the cTRNG plugin (`aptosorbital`) |
+| `ORBITPORT_KMS_PLUGIN` | — | gRPC URL of the KMS plugin |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
@@ -128,6 +131,16 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | `ORBITPORT_BEACON_UPDATE_INTERVAL` | `60` | Scheduler tick in seconds |
 | `ORBITPORT_IPFS_ADDRESS` | `http://ipfs-node:5001` | Kubo HTTP API (for direct IPNS key operations) |
 | `ORBITPORT_REGISTRY_RETRIEVAL_TIMEOUT` | `90` | Seconds to wait when loading the registry |
+
+### Plugin: `kms`
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_KMS_OPENBAO_PROXY_URL` | — | HTTP base URL of the OpenBao proxy (required) |
+| `ORBITPORT_KMS_TRANSIT_MOUNT` | `transit` | Mount path of OpenBao's Transit Secrets Engine |
+| `ORBITPORT_KMS_ETHEREUM_MOUNT` | `ethereum` | Mount path of the Ethereum Secrets Engine |
+| `ORBITPORT_KMS_KV_MOUNT` | `secret` | KV v2 mount used to persist key metadata |
+| `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 
 ## Protobuf workflow
 

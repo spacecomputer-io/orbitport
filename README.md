@@ -17,6 +17,7 @@ The project is a **Rust gateway** that terminates HTTP and JSON-RPC at the edge 
 
 - **cTRNG** — cosmic true random numbers, served by the `masterseed` plugin from a rolling pool of satellite-harvested entropy.
 - **Randomness Beacon** — a background service that pins a continuously updated beacon record to IPFS and republishes it under a stable IPNS name. Public registry: [`beacons.yaml`](beacons.yaml).
+- **KMS** — multi-tenant Key Management Service backed by OpenBao. Encrypt/decrypt with Transit (`AES_256_GCM96`), sign with Transit (ECDSA, Ed25519, RSA) or with the Ethereum engine (secp256k1, including EIP-191). See the [`kms`](plugins/pkg/plugin/kms/README.md) plugin.
 - **Threshold consumption** *(experimental)* — clients can request encrypted output by passing `key=threshold@<pubkey>` on TRNG requests, so random values are never seen in plaintext by any single party.
 - **spaceTEE** — Space Trusted Execution Environment. Planned.
 
@@ -83,9 +84,10 @@ make devenv-down
 | `POST /api/v1/services/{service}` | Bearer JWT | JSON body: `src`, `bulk`, `key`, `args`. 1 KB body limit |
 | `POST /api/v1/rpc` | Bearer JWT | JSON-RPC 2.0. 1 KB body limit, 10 s per-request timeout |
 
-All authenticated endpoints go through the same per-JWT rate limiter (SHA-256 hashed token). The current JSON-RPC surface exposes a single method:
+All authenticated endpoints go through the same per-JWT rate limiter (SHA-256 hashed token). The current JSON-RPC surface:
 
 - `ctrng.Get({ "version": 1, "chunks": N })` — returns `N` random values (max 10) as `{ items: [{ value, src }] }`.
+- `kms.GetCapabilities` / `kms.CreateKey` / `kms.Encrypt` / `kms.Decrypt` / `kms.Sign` / `kms.GenerateDataKey` / `kms.RotateKey` — multi-tenant key management; see [`plugins/pkg/plugin/kms/README.md`](plugins/pkg/plugin/kms/README.md) and `proto/services/kms.proto` for the request/response shapes.
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/rpc \

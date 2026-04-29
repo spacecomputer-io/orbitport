@@ -35,6 +35,7 @@
 - [plugins/pkg/plugin/ipfs/README.md](plugins/pkg/plugin/ipfs/README.md): Kubo wrapper with LRU cache and IPNS publishing.
 - [plugins/pkg/plugin/masterseed/README.md](plugins/pkg/plugin/masterseed/README.md): Rolling pool of satellite seeds with offset-reserved derivation.
 - [plugins/pkg/plugin/beacon/README.md](plugins/pkg/plugin/beacon/README.md): Background service that publishes the randomness beacon to IPFS/IPNS.
+- [plugins/pkg/plugin/kms/README.md](plugins/pkg/plugin/kms/README.md): Multi-tenant Key Management Service backed by OpenBao (Transit + Ethereum engines).
 
 ## Compose stacks
 
