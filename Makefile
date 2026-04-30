@@ -42,8 +42,8 @@ go-e2e-offline:
 devenv:
 	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
 
-devenv-up: devenv-down
-	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up --build -d
+devenv-up: devenv-down docker-build
+	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
 
 devenv-down:
 	@docker-compose -f dev.docker-compose.yaml down
