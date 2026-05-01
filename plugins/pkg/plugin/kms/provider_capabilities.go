@@ -7,17 +7,17 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-func requireEncryptProvider(provider kmsProvider, scheme string) (cipherProvider, error) {
-	return requireCipherProvider(provider, scheme, "encryption")
-}
+type cipherOperation string
 
-func requireDecryptProvider(provider kmsProvider, scheme string) (cipherProvider, error) {
-	return requireCipherProvider(provider, scheme, "decryption")
-}
+const (
+	cipherOperationEncryption cipherOperation = "encryption"
+	cipherOperationDecryption cipherOperation = "decryption"
+)
 
-func requireCipherProvider(provider kmsProvider, scheme, operation string) (cipherProvider, error) {
+func requireCipherProvider(provider kmsProvider, keyID, scheme string, operation cipherOperation) (cipherProvider, error) {
 	typed, ok := provider.(cipherProvider)
 	if !ok {
+		logger.Warnf("%s rejected: unsupported operation for key_id=%s scheme=%s", operation, keyID, scheme)
 		return nil, status.Error(codes.FailedPrecondition, fmt.Sprintf("%s keys do not support %s", scheme, operation))
 	}
 	return typed, nil

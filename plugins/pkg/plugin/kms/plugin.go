@@ -64,9 +64,8 @@ func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto
 		logger.Warnf("Encrypt failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
-	encryptor, err := requireEncryptProvider(provider, metadata.Scheme)
+	encryptor, err := requireCipherProvider(provider, req.KeyId, metadata.Scheme, cipherOperationEncryption)
 	if err != nil {
-		logger.Warnf("Encrypt rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
 	resp, err := encryptor.Encrypt(ctx, metadata, req)
@@ -109,9 +108,8 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 		logger.Warnf("Decrypt rejected mismatched ciphertext blob for key_id=%s", blob.KeyID)
 		return nil, status.Error(codes.PermissionDenied, "CiphertextBlob does not belong to the authenticated client")
 	}
-	decryptor, err := requireDecryptProvider(provider, metadata.Scheme)
+	decryptor, err := requireCipherProvider(provider, blob.KeyID, metadata.Scheme, cipherOperationDecryption)
 	if err != nil {
-		logger.Warnf("Decrypt rejected: unsupported operation for key_id=%s scheme=%s", blob.KeyID, metadata.Scheme)
 		return nil, err
 	}
 	resp, err := decryptor.Decrypt(ctx, blob, req)
