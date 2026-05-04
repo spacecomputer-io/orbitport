@@ -448,6 +448,140 @@ func TestEthereumSignRawRejectsInvalidBase64(t *testing.T) {
 	}
 }
 
+func TestEthereumSignDigestNormalizesBase64Digest(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+
+	digestBytes, err := hex.DecodeString("25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45")
+	if err != nil {
+		t.Fatalf("hex.DecodeString() error = %v", err)
+	}
+	encodedDigest := base64.StdEncoding.EncodeToString(digestBytes)
+	expectedHash := "0x" + hex.EncodeToString(digestBytes)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["hash"] != expectedHash {
+				t.Fatalf("unexpected sign body: %+v", body)
+			}
+			if _, ok := body["message"]; ok {
+				t.Fatalf("expected DIGEST signing to use hash body, got %+v", body)
+			}
+			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"raw_hash","address":"0xabc"}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
+		KeyId:            testEthereumAlias,
+		Message:          encodedDigest,
+		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
+		MessageType:      stringPtr(messageTypeDigest),
+		ClientId:         clientID,
+	})
+	if err != nil {
+		t.Fatalf("Sign returned error: %v", err)
+	}
+	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID {
+		t.Fatalf("unexpected sign response: %+v", resp)
+	}
+}
+
+func TestEthereumSignDigestAcceptsHexDigest(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+
+	expectedHash := "0x25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["hash"] != expectedHash {
+				t.Fatalf("unexpected sign body: %+v", body)
+			}
+			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"raw_hash","address":"0xabc"}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
+		KeyId:            testEthereumAlias,
+		Message:          expectedHash,
+		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
+		MessageType:      stringPtr(messageTypeDigest),
+		ClientId:         clientID,
+	})
+	if err != nil {
+		t.Fatalf("Sign returned error: %v", err)
+	}
+	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID {
+		t.Fatalf("unexpected sign response: %+v", resp)
+	}
+}
+
+func TestEthereumSignDigestRejectsWrongLength(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	_, err = plugin.Sign(context.Background(), &proto.SignRequest{
+		KeyId:            testEthereumAlias,
+		Message:          "0x1234",
+		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
+		MessageType:      stringPtr(messageTypeDigest),
+		ClientId:         clientID,
+	})
+	if err == nil {
+		t.Fatal("expected Sign to reject short DIGEST message")
+	}
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
+	}
+	if status.Convert(err).Message() != "ETHEREUM DIGEST messages must be exactly 32 bytes" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestEncryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)

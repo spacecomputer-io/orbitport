@@ -61,6 +61,8 @@ Wraps a custom OpenBao Ethereum Secrets Engine mounted at
 - Signing algorithm: `ETHEREUM_SECP256K1` with message types `RAW`,
   `DIGEST`, and `EIP191` (the `personal_sign` standard). `RAW` expects
   base64-encoded bytes, which Orbitport Keccak-hashes before direct signing.
+  `DIGEST` accepts either base64-encoded 32-byte digests or validated
+  `0x`-prefixed hex digests.
 - `CreateKey` returns both `public_key` and the derived Ethereum `address`.
 - Encrypt / Decrypt / GenerateDataKey / RotateKey are intentionally rejected
   with `FailedPrecondition` — Ethereum keys are sign-only.

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -81,7 +82,11 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 	case messageTypeEIP191:
 		signResp, err = p.client.signEthereumMessage(ctx, metadata.backendKey(), req.Message)
 	case messageTypeDigest:
-		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), req.Message)
+		hashHex, err := normalizeEthereumDigest(req.Message)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), hashHex)
 	default:
 		return nil, status.Error(codes.InvalidArgument, "ETHEREUM keys support MessageType EIP191, RAW, or DIGEST")
 	}
@@ -106,4 +111,27 @@ func rawEthereumHash(message string) (string, error) {
 	_, _ = hasher.Write(rawBytes)
 
 	return "0x" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func normalizeEthereumDigest(message string) (string, error) {
+	var (
+		rawBytes []byte
+		err      error
+	)
+
+	switch {
+	case strings.HasPrefix(message, "0x"), strings.HasPrefix(message, "0X"):
+		rawBytes, err = hex.DecodeString(message[2:])
+	default:
+		rawBytes, err = base64.StdEncoding.DecodeString(message)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("ETHEREUM DIGEST messages must be base64-encoded bytes or 0x-prefixed hex")
+	}
+	if len(rawBytes) != 32 {
+		return "", fmt.Errorf("ETHEREUM DIGEST messages must be exactly 32 bytes")
+	}
+
+	return "0x" + hex.EncodeToString(rawBytes), nil
 }
