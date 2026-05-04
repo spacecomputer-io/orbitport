@@ -369,7 +369,9 @@ func TestEthereumSignRawHashesDecodedBytes(t *testing.T) {
 	rawMessage := []byte("deploy-bytes")
 	encodedMessage := base64.StdEncoding.EncodeToString(rawMessage)
 	hasher := sha3.NewLegacyKeccak256()
-	_, _ = hasher.Write(rawMessage)
+	if _, err := hasher.Write(rawMessage); err != nil {
+		t.Fatalf("hasher.Write() error = %v", err)
+	}
 	expectedHash := "0x" + hex.EncodeToString(hasher.Sum(nil))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -420,7 +422,9 @@ func TestEthereumSignDefaultsMissingMessageTypeToRaw(t *testing.T) {
 	rawMessage := []byte("deploy-bytes")
 	encodedMessage := base64.StdEncoding.EncodeToString(rawMessage)
 	hasher := sha3.NewLegacyKeccak256()
-	_, _ = hasher.Write(rawMessage)
+	if _, err := hasher.Write(rawMessage); err != nil {
+		t.Fatalf("hasher.Write() error = %v", err)
+	}
 	expectedHash := "0x" + hex.EncodeToString(hasher.Sum(nil))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

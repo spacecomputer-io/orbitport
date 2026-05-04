@@ -120,7 +120,9 @@ func rawEthereumHash(message string) (string, error) {
 	}
 
 	hasher := sha3.NewLegacyKeccak256()
-	_, _ = hasher.Write(rawBytes)
+	if _, err := hasher.Write(rawBytes); err != nil {
+		return "", fmt.Errorf("keccak hash write: %w", err)
+	}
 
 	return "0x" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
