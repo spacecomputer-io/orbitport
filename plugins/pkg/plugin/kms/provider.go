@@ -9,9 +9,21 @@ import (
 
 type kmsProvider interface {
 	CreateKey(context.Context, *proto.CreateKeyRequest, string, time.Time) (*keyMetadataRecord, error)
+}
+
+type cipherProvider interface {
 	Encrypt(context.Context, *keyMetadataRecord, *proto.EncryptRequest) (*proto.EncryptResponse, error)
 	Decrypt(context.Context, *ciphertextBlob, *proto.DecryptRequest) (*proto.DecryptResponse, error)
+}
+
+type signProvider interface {
 	Sign(context.Context, *keyMetadataRecord, *proto.SignRequest) (*proto.SignResponse, error)
+}
+
+type dataKeyProvider interface {
 	GenerateDataKey(context.Context, *keyMetadataRecord, *proto.GenerateDataKeyRequest) (*proto.GenerateDataKeyResponse, error)
+}
+
+type rotateKeyProvider interface {
 	RotateKey(context.Context, *keyMetadataRecord) (*keyMetadataRecord, error)
 }

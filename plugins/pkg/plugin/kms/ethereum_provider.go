@@ -54,14 +54,6 @@ func (p *ethereumProvider) CreateKey(ctx context.Context, req *proto.CreateKeyRe
 	}, nil
 }
 
-func (p *ethereumProvider) Encrypt(context.Context, *keyMetadataRecord, *proto.EncryptRequest) (*proto.EncryptResponse, error) {
-	return nil, status.Error(codes.FailedPrecondition, "ETHEREUM keys do not support encryption")
-}
-
-func (p *ethereumProvider) Decrypt(context.Context, *ciphertextBlob, *proto.DecryptRequest) (*proto.DecryptResponse, error) {
-	return nil, status.Error(codes.FailedPrecondition, "ETHEREUM keys do not support decryption")
-}
-
 func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord, req *proto.SignRequest) (*proto.SignResponse, error) {
 	if metadata.KeySpec != keySpecECCSecgP256K1 || metadata.KeyUsage != signVerifyUsage {
 		return nil, status.Error(codes.FailedPrecondition, "key does not support ethereum signing")
@@ -92,12 +84,4 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 		Signature:        signResp.Signature,
 		SigningAlgorithm: req.SigningAlgorithm,
 	}, nil
-}
-
-func (p *ethereumProvider) GenerateDataKey(context.Context, *keyMetadataRecord, *proto.GenerateDataKeyRequest) (*proto.GenerateDataKeyResponse, error) {
-	return nil, status.Error(codes.FailedPrecondition, "ETHEREUM keys do not support data key generation")
-}
-
-func (p *ethereumProvider) RotateKey(context.Context, *keyMetadataRecord) (*keyMetadataRecord, error) {
-	return nil, status.Error(codes.Unimplemented, "ETHEREUM key rotation is not implemented")
 }

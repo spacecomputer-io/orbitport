@@ -356,6 +356,118 @@ func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 	}
 }
 
+func TestEncryptRejectsUnsupportedEthereumOperation(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	_, err = plugin.Encrypt(context.Background(), &proto.EncryptRequest{
+		KeyId:               testEthereumAlias,
+		Plaintext:           "Zm9v",
+		EncryptionAlgorithm: stringPtr(encryptionAlgorithmAES256GCM96),
+		ClientId:            clientID,
+	})
+	if err == nil {
+		t.Fatal("expected Encrypt to reject ethereum keys")
+	}
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("expected FailedPrecondition, got %v", status.Code(err))
+	}
+	if status.Convert(err).Message() != "ETHEREUM keys do not support encryption" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestDecryptRejectsUnsupportedEthereumOperation(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	ciphertextBlob, err := encodeCiphertextBlob(schemeEthereum, testEthereumKeyID, providerKey, "0xdeadbeef", encryptionAlgorithmAES256GCM96)
+	if err != nil {
+		t.Fatalf("encodeCiphertextBlob() error = %v", err)
+	}
+
+	_, err = plugin.Decrypt(context.Background(), &proto.DecryptRequest{
+		CiphertextBlob: ciphertextBlob,
+		ClientId:       clientID,
+	})
+	if err == nil {
+		t.Fatal("expected Decrypt to reject ethereum keys")
+	}
+	if status.Code(err) != codes.FailedPrecondition {
+		t.Fatalf("expected FailedPrecondition, got %v", status.Code(err))
+	}
+	if status.Convert(err).Message() != "ETHEREUM keys do not support decryption" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRotateKeyRejectsUnsupportedEthereumOperation(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	_, err = plugin.RotateKey(context.Background(), &proto.RotateKeyRequest{
+		KeyId:    testEthereumAlias,
+		ClientId: clientID,
+	})
+	if err == nil {
+		t.Fatal("expected RotateKey to reject ethereum keys")
+	}
+	if status.Code(err) != codes.Unimplemented {
+		t.Fatalf("expected Unimplemented, got %v", status.Code(err))
+	}
+	if status.Convert(err).Message() != "ETHEREUM key rotation is not implemented" {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func stringPtr(value string) *string {
 	return &value
 }
