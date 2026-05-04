@@ -16,6 +16,7 @@ const (
 	messageTypeDigest                 = "DIGEST"
 	messageTypeEIP191                 = "EIP191"
 	messageTypeRaw                    = "RAW"
+	ethereumSignMethodRawHash         = "raw_hash"
 	schemeEthereum                    = "ETHEREUM"
 	schemeTransit                     = "TRANSIT"
 	signVerifyUsage                   = "SIGN_VERIFY"

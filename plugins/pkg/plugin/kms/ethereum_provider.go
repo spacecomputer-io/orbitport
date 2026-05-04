@@ -69,29 +69,41 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 
 	messageType := optionalString(req.MessageType)
 	var (
-		signResp *ethereumSignInfo
-		err      error
+		expectedHash   string
+		expectedMethod string
+		hashHex        string
+		signResp       *ethereumSignInfo
+		err            error
 	)
 	switch messageType {
 	case "", messageTypeRaw:
-		hashHex, err := rawEthereumHash(req.Message)
+		hashHex, err = rawEthereumHash(req.Message)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
+		expectedHash = hashHex
+		expectedMethod = ethereumSignMethodRawHash
 		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), hashHex)
 	case messageTypeEIP191:
 		signResp, err = p.client.signEthereumMessage(ctx, metadata.backendKey(), req.Message)
 	case messageTypeDigest:
-		hashHex, err := normalizeEthereumDigest(req.Message)
+		hashHex, err = normalizeEthereumDigest(req.Message)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
+		expectedHash = hashHex
+		expectedMethod = ethereumSignMethodRawHash
 		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), hashHex)
 	default:
 		return nil, status.Error(codes.InvalidArgument, "ETHEREUM keys support MessageType EIP191, RAW, or DIGEST")
 	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if expectedMethod != "" {
+		if err := validateEthereumHashSignResponse(signResp, expectedHash, expectedMethod); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	return &proto.SignResponse{
@@ -134,4 +146,17 @@ func normalizeEthereumDigest(message string) (string, error) {
 	}
 
 	return "0x" + hex.EncodeToString(rawBytes), nil
+}
+
+func validateEthereumHashSignResponse(signResp *ethereumSignInfo, expectedHash, expectedMethod string) error {
+	if signResp == nil {
+		return fmt.Errorf("ethereum signing response missing data")
+	}
+	if signResp.Hash != expectedHash {
+		return fmt.Errorf("ethereum signing response hash mismatch")
+	}
+	if signResp.Method != expectedMethod {
+		return fmt.Errorf("ethereum signing response method mismatch")
+	}
+	return nil
 }
