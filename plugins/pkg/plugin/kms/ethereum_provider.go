@@ -2,9 +2,14 @@ package kms
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
+	"strings"
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
+	"golang.org/x/crypto/sha3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -64,19 +69,41 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 
 	messageType := optionalString(req.MessageType)
 	var (
-		signResp *ethereumSignInfo
-		err      error
+		expectedHash   string
+		expectedMethod string
+		hashHex        string
+		signResp       *ethereumSignInfo
+		err            error
 	)
 	switch messageType {
-	case "", messageTypeEIP191, messageTypeRaw:
+	case "", messageTypeRaw:
+		hashHex, err = rawEthereumHash(req.Message)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		expectedHash = hashHex
+		expectedMethod = ethereumSignMethodRawHash
+		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), hashHex)
+	case messageTypeEIP191:
 		signResp, err = p.client.signEthereumMessage(ctx, metadata.backendKey(), req.Message)
 	case messageTypeDigest:
-		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), req.Message)
+		hashHex, err = normalizeEthereumDigest(req.Message)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		expectedHash = hashHex
+		expectedMethod = ethereumSignMethodRawHash
+		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), hashHex)
 	default:
 		return nil, status.Error(codes.InvalidArgument, "ETHEREUM keys support MessageType EIP191, RAW, or DIGEST")
 	}
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if expectedMethod != "" {
+		if err := validateEthereumHashSignResponse(signResp, expectedHash, expectedMethod); err != nil {
+			return nil, status.Error(codes.Internal, err.Error())
+		}
 	}
 
 	return &proto.SignResponse{
@@ -84,4 +111,54 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 		Signature:        signResp.Signature,
 		SigningAlgorithm: req.SigningAlgorithm,
 	}, nil
+}
+
+func rawEthereumHash(message string) (string, error) {
+	rawBytes, err := base64.StdEncoding.DecodeString(message)
+	if err != nil {
+		return "", fmt.Errorf("ETHEREUM RAW messages must be base64-encoded bytes")
+	}
+
+	hasher := sha3.NewLegacyKeccak256()
+	if _, err := hasher.Write(rawBytes); err != nil {
+		return "", fmt.Errorf("keccak hash write: %w", err)
+	}
+
+	return "0x" + hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func normalizeEthereumDigest(message string) (string, error) {
+	var (
+		rawBytes []byte
+		err      error
+	)
+
+	switch {
+	case strings.HasPrefix(message, "0x"), strings.HasPrefix(message, "0X"):
+		rawBytes, err = hex.DecodeString(message[2:])
+	default:
+		rawBytes, err = base64.StdEncoding.DecodeString(message)
+	}
+
+	if err != nil {
+		return "", fmt.Errorf("ETHEREUM DIGEST messages must be base64-encoded bytes or 0x-prefixed hex")
+	}
+	if len(rawBytes) != 32 {
+		return "", fmt.Errorf("ETHEREUM DIGEST messages must be exactly 32 bytes")
+	}
+
+	return "0x" + hex.EncodeToString(rawBytes), nil
+}
+
+func validateEthereumHashSignResponse(signResp *ethereumSignInfo, expectedHash, expectedMethod string) error {
+	if signResp == nil {
+		return fmt.Errorf("ethereum signing response missing data")
+	}
+	if signResp.Hash != expectedHash {
+		return fmt.Errorf("ethereum signing response hash mismatch")
+	}
+	if signResp.Method != expectedMethod {
+		return fmt.Errorf("ethereum signing response method mismatch")
+	}
+	return nil
 }
