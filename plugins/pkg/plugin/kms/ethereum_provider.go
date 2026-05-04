@@ -2,9 +2,13 @@ package kms
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
+	"golang.org/x/crypto/sha3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -68,7 +72,13 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 		err      error
 	)
 	switch messageType {
-	case "", messageTypeEIP191, messageTypeRaw:
+	case "", messageTypeRaw:
+		hashHex, err := rawEthereumHash(req.Message)
+		if err != nil {
+			return nil, status.Error(codes.InvalidArgument, err.Error())
+		}
+		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), hashHex)
+	case messageTypeEIP191:
 		signResp, err = p.client.signEthereumMessage(ctx, metadata.backendKey(), req.Message)
 	case messageTypeDigest:
 		signResp, err = p.client.signEthereumHash(ctx, metadata.backendKey(), req.Message)
@@ -84,4 +94,16 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 		Signature:        signResp.Signature,
 		SigningAlgorithm: req.SigningAlgorithm,
 	}, nil
+}
+
+func rawEthereumHash(message string) (string, error) {
+	rawBytes, err := base64.StdEncoding.DecodeString(message)
+	if err != nil {
+		return "", fmt.Errorf("ETHEREUM RAW messages must be base64-encoded bytes")
+	}
+
+	hasher := sha3.NewLegacyKeccak256()
+	_, _ = hasher.Write(rawBytes)
+
+	return "0x" + hex.EncodeToString(hasher.Sum(nil)), nil
 }
