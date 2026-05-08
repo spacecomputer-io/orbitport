@@ -3,9 +3,14 @@ package masterseed
 import (
 	"encoding/hex"
 	"fmt"
+	"sync"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/chacha20"
 )
+
+// configMu guards all package-level config variables against concurrent
+// reads during a live LoadMasterSeedConfig reload in a running gRPC server.
+var configMu sync.RWMutex
 
 var (
 	TRNGSize           = 32  // default
@@ -20,6 +25,8 @@ type MasterSeed struct {
 }
 
 func LoadMasterSeedConfig(cfg *masterSeedConfig) {
+	configMu.Lock()
+	defer configMu.Unlock()
 	TRNGSize = cfg.MasterSeedTRNGSize
 	MaxMasterSeeds = cfg.MasterSeedMaxMasterSeeds
 	MaserSeedPeriod = cfg.MaserSeedPeriod
@@ -54,13 +61,17 @@ func (m MasterSeed) DeriveBulkAtOffset(n int, offsetBytes uint64) ([]string, err
 		return []string{}, nil
 	}
 
+	configMu.RLock()
 	outLen := TRNGSize
+	maxCount := MaxCountPerRequest
+	configMu.RUnlock()
+
 	if outLen <= 0 || outLen > 1024 {
 		outLen = 32
 	}
 
-	if n > MaxCountPerRequest {
-		return nil, fmt.Errorf("n too large: %d (max %d)", n, MaxCountPerRequest)
+	if n > maxCount {
+		return nil, fmt.Errorf("n too large: %d (max %d)", n, maxCount)
 	}
 
 	need, ok := mulUint64Checked(uint64(n), uint64(outLen))
