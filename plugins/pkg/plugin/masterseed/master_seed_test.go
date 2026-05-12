@@ -54,25 +54,25 @@ func TestMasterSeed_DeriveBulk(t *testing.T) {
 	m := MasterSeed{Seed: fixedSeed32Hex()}
 
 	t.Run("bulk derivation produces n values", func(t *testing.T) {
-		vals, err := m.DeriveBulk(5)
+		vals, err := m.DeriveBulk(5, 32)
 		require.NoError(t, err)
 		require.Len(t, vals, 5)
 
 		for _, v := range vals {
-			require.Len(t, v, TRNGSize*2)
+			require.Len(t, v, 64)
 		}
 	})
 
 	t.Run("bulk derivation is deterministic for same seed and n", func(t *testing.T) {
-		vals1, err1 := m.DeriveBulk(10)
-		vals2, err2 := m.DeriveBulk(10)
+		vals1, err1 := m.DeriveBulk(10, 32)
+		vals2, err2 := m.DeriveBulk(10, 32)
 		require.NoError(t, err1)
 		require.NoError(t, err2)
 		require.Equal(t, vals1, vals2)
 	})
 
 	t.Run("bulk derivation produces unique values within a batch", func(t *testing.T) {
-		vals, err := m.DeriveBulk(50)
+		vals, err := m.DeriveBulk(50, 32)
 		require.NoError(t, err)
 
 		seen := map[string]struct{}{}
@@ -82,22 +82,27 @@ func TestMasterSeed_DeriveBulk(t *testing.T) {
 			seen[v] = struct{}{}
 		}
 	})
+
+	t.Run("bulk derivation supports configured output size", func(t *testing.T) {
+		vals, err := m.DeriveBulk(3, 16)
+		require.NoError(t, err)
+		require.Len(t, vals, 3)
+		for _, v := range vals {
+			require.Len(t, v, 32)
+		}
+	})
 }
 
 func TestMasterSeed_DeriveBulkAtOffset(t *testing.T) {
 	m := MasterSeed{Seed: fixedSeed32Hex()}
-
-	outLen := TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
+	const outLen = 32
 
 	t.Run("same offset yields deterministic results", func(t *testing.T) {
 		const n = 10
 		const off = uint64(0)
 
-		vals1, err1 := m.DeriveBulkAtOffset(n, off)
-		vals2, err2 := m.DeriveBulkAtOffset(n, off)
+		vals1, err1 := m.DeriveBulkAtOffset(n, off, outLen)
+		vals2, err2 := m.DeriveBulkAtOffset(n, off, outLen)
 		require.NoError(t, err1)
 		require.NoError(t, err2)
 		require.Equal(t, vals1, vals2)
@@ -106,11 +111,11 @@ func TestMasterSeed_DeriveBulkAtOffset(t *testing.T) {
 	t.Run("different offsets change results", func(t *testing.T) {
 		const n = 10
 
-		vals0, err0 := m.DeriveBulkAtOffset(n, 0)
+		vals0, err0 := m.DeriveBulkAtOffset(n, 0, outLen)
 		require.NoError(t, err0)
 
 		// shift by 1 byte (valid; stream is byte-addressable)
-		vals1, err1 := m.DeriveBulkAtOffset(n, 1)
+		vals1, err1 := m.DeriveBulkAtOffset(n, 1, outLen)
 		require.NoError(t, err1)
 
 		require.NotEqual(t, vals0, vals1)
@@ -121,13 +126,13 @@ func TestMasterSeed_DeriveBulkAtOffset(t *testing.T) {
 		const n = 5
 		startOff := uint64(0)
 
-		first, err := m.DeriveBulkAtOffset(n, startOff)
+		first, err := m.DeriveBulkAtOffset(n, startOff, outLen)
 		require.NoError(t, err)
 		require.Len(t, first, n)
 
 		// Advance offset by exactly the bytes served.
 		needBytes := uint64(n * outLen)
-		second, err := m.DeriveBulkAtOffset(n, startOff+needBytes)
+		second, err := m.DeriveBulkAtOffset(n, startOff+needBytes, outLen)
 		require.NoError(t, err)
 		require.Len(t, second, n)
 
@@ -152,7 +157,7 @@ func TestDeriveOneAndBulkFromSeedHex(t *testing.T) {
 	t.Run("DeriveOneFromSeedHex matches first element of DeriveBulkFromSeedHex(1)", func(t *testing.T) {
 		one, err := DeriveOneFromSeedHex(seedHex)
 		require.NoError(t, err)
-		require.Len(t, one, TRNGSize*2)
+		require.Len(t, one, 64)
 
 		vals, err := DeriveBulkFromSeedHex(seedHex, 1)
 		require.NoError(t, err)
@@ -172,6 +177,32 @@ func TestDeriveOneAndBulkFromSeedHex(t *testing.T) {
 	})
 }
 
+func TestPluginReserveSeedOffsetUsesConfiguredLimit(t *testing.T) {
+	p := &Plugin{
+		trngSize:           32,
+		maxMasterSeeds:     100,
+		maxCountPerRequest: 2,
+		masterSeeds:        []MasterSeed{{Seed: fixedSeed32Hex()}},
+	}
+
+	_, _, err := p.reserveSeedOffset(3)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "count too large")
+}
+
+func TestPluginAddMasterSeedUsesConfiguredCapacity(t *testing.T) {
+	p := &Plugin{
+		trngSize:       32,
+		maxMasterSeeds: 1,
+		masterSeeds:    make([]MasterSeed, 0, 1),
+	}
+
+	p.addMasterSeed(fixedSeed32Hex())
+	p.addMasterSeed(generateTestSeed(t))
+
+	require.Len(t, p.masterSeeds, 1)
+}
+
 func TestDeriveBulk_Uniqueness_100k(t *testing.T) {
 	t.Skip("expensive; run manually when needed")
 
@@ -179,7 +210,7 @@ func TestDeriveBulk_Uniqueness_100k(t *testing.T) {
 	seedHex := generateTestSeed(t)
 	ms := MasterSeed{Seed: seedHex}
 
-	results, err := ms.DeriveBulk(count)
+	results, err := ms.DeriveBulk(count, 32)
 	require.NoError(t, err)
 	require.Len(t, results, count)
 
