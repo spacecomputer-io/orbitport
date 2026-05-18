@@ -24,7 +24,10 @@ jobs:
 
     outputs:
       digest: ${{ steps.build.outputs.digest }}
-      image:  ${{ env.GATEWAY_IMAGE }}
+      # image must come from a step output, NOT env context.
+      # env vars are not propagated across reusable workflow boundaries,
+      # which caused UNTRUSTED_IMAGE to be empty in the SLSA generator.
+      image: ${{ steps.image.outputs.name }}
 
     steps:
       - name: Checkout
@@ -42,6 +45,10 @@ jobs:
       - name: Get SOURCE_DATE_EPOCH
         id: source_date
         run: echo "epoch=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
+
+      - name: Set image name output
+        id: image
+        run: echo "name=${{ env.GATEWAY_IMAGE }}" >> $GITHUB_OUTPUT
 
       - name: Build and Push Gateway
         id: build
@@ -132,7 +139,7 @@ jobs:
 
     outputs:
       digest: ${{ steps.build.outputs.digest }}
-      image:  ${{ env.PLUGIN_IMAGE }}
+      image: ${{ steps.image.outputs.name }}
 
     steps:
       - name: Checkout
@@ -150,6 +157,10 @@ jobs:
       - name: Get SOURCE_DATE_EPOCH
         id: source_date
         run: echo "epoch=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
+
+      - name: Set image name output
+        id: image
+        run: echo "name=${{ env.PLUGIN_IMAGE }}" >> $GITHUB_OUTPUT
 
       - name: Build and Push Plugin
         id: build
