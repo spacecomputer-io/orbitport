@@ -1,6 +1,9 @@
 package kms
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestTenantNamespaceIsDeterministic(t *testing.T) {
 	first := tenantNamespace("auth0|tenant-a")
@@ -15,6 +18,13 @@ func TestTenantNamespaceIsDeterministic(t *testing.T) {
 	}
 	if first == third {
 		t.Fatalf("expected different client IDs to produce different namespaces, got %q", first)
+	}
+}
+
+func TestTenantNamespaceUsesSixteenBytesOfHash(t *testing.T) {
+	namespace := tenantNamespace("auth0|tenant-a")
+	if got := len(strings.TrimPrefix(namespace, tenantNamespacePrefix)); got != tenantNamespaceBytes*2 {
+		t.Fatalf("expected %d hex chars in tenant namespace, got %d", tenantNamespaceBytes*2, got)
 	}
 }
 

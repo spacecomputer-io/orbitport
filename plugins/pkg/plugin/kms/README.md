@@ -72,7 +72,7 @@ Wraps a custom OpenBao Ethereum Secrets Engine mounted at
 Every gateway request carries a `client_id` that the plugin uses to scope
 keys. Tenant isolation is enforced in two places:
 
-- **Backend key names** — `tenant_<sha256(client_id)[:8]>_<alias>`, so two
+- **Backend key names** — `tenant_<sha256(client_id)[:16]>_<alias>`, so two
   tenants can pick the same alias and never collide in OpenBao.
 - **Metadata storage** — written to OpenBao's KV v2 mount
   (`ORBITPORT_KMS_KV_MOUNT`, default `secret`) under

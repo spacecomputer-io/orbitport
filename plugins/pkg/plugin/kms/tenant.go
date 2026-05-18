@@ -8,10 +8,19 @@ import (
 )
 
 const keyIDPrefix = "kms:"
+const tenantNamespacePrefix = "tenant_"
+const tenantNamespaceBytes = 16
 
 func tenantNamespace(clientID string) string {
+	return tenantNamespaceForBytes(clientID, tenantNamespaceBytes)
+}
+
+func tenantNamespaceForBytes(clientID string, size int) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(clientID)))
-	return "tenant_" + hex.EncodeToString(sum[:8])
+	if size > len(sum) {
+		size = len(sum)
+	}
+	return tenantNamespacePrefix + hex.EncodeToString(sum[:size])
 }
 
 func scopedBackendKey(clientID, alias string) (string, error) {
