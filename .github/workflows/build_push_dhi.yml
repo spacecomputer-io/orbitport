@@ -77,6 +77,9 @@ jobs:
     with:
       image: ${{ needs.build-gateway.outputs.image }}
       digest: ${{ needs.build-gateway.outputs.digest }}
+      # Required for private repos: without this the generator halts to avoid
+      # leaking the repo name to the public Rekor transparency log.
+      private-repository: true
     secrets:
       # registry-username must be passed as a secret for normal usernames.
       # Passing it via 'with' as a plain string causes GH Actions to mask/drop it.
@@ -174,6 +177,9 @@ jobs:
     with:
       image: ${{ needs.build-plugin.outputs.image }}
       digest: ${{ needs.build-plugin.outputs.digest }}
+      # Required for private repos: without this the generator halts to avoid
+      # leaking the repo name to the public Rekor transparency log.
+      private-repository: true
     secrets:
       registry-username: ${{ secrets.DOCKER_USERNAME }}
       registry-password: ${{ secrets.DOCKER_PASSWORD }}
