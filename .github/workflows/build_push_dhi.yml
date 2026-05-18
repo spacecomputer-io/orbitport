@@ -5,6 +5,10 @@ on:
     branches:
       - feat/docker-hardened-images
 
+# Image names as workflow-level constants.
+# These are referenced as literals in the SLSA generator's with: block
+# because needs.*.outputs propagation of env-derived values is unreliable
+# across reusable workflow boundaries (causes UNTRUSTED_IMAGE to be empty).
 env:
   GATEWAY_IMAGE: docker.io/spacecomp/orbitport
   PLUGIN_IMAGE: docker.io/spacecomp/orbitport
@@ -24,10 +28,6 @@ jobs:
 
     outputs:
       digest: ${{ steps.build.outputs.digest }}
-      # image must come from a step output, NOT env context.
-      # env vars are not propagated across reusable workflow boundaries,
-      # which caused UNTRUSTED_IMAGE to be empty in the SLSA generator.
-      image: ${{ steps.image.outputs.name }}
 
     steps:
       - name: Checkout
@@ -45,10 +45,6 @@ jobs:
       - name: Get SOURCE_DATE_EPOCH
         id: source_date
         run: echo "epoch=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
-
-      - name: Set image name output
-        id: image
-        run: echo "name=${{ env.GATEWAY_IMAGE }}" >> $GITHUB_OUTPUT
 
       - name: Build and Push Gateway
         id: build
@@ -68,11 +64,6 @@ jobs:
           attests: type=sbom
 
   # ── 2. SLSA L3 Provenance for Gateway ────────────────────────────────────────
-  #
-  # Runs in a fully isolated reusable workflow job with its own OIDC identity.
-  # This is what makes it L3: the provenance signer is separate from the build
-  # environment and cannot be tampered with by build-time code.
-  #
   provenance-gateway:
     name: SLSA L3 Provenance — Gateway
     needs: build-gateway
@@ -82,14 +73,12 @@ jobs:
       packages: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      image: ${{ needs.build-gateway.outputs.image }}
+      # Hardcoded literal — avoids the needs.*.outputs env propagation bug
+      # that left UNTRUSTED_IMAGE empty in previous runs.
+      image: docker.io/spacecomp/orbitport
       digest: ${{ needs.build-gateway.outputs.digest }}
-      # Required for private repos: without this the generator halts to avoid
-      # leaking the repo name to the public Rekor transparency log.
       private-repository: true
     secrets:
-      # registry-username must be passed as a secret for normal usernames.
-      # Passing it via 'with' as a plain string causes GH Actions to mask/drop it.
       registry-username: ${{ secrets.DOCKER_USERNAME }}
       registry-password: ${{ secrets.DOCKER_PASSWORD }}
 
@@ -112,19 +101,17 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Sign the exact digest — this is what gets measured in RTMR[3].
-      # By this point the digest already has SLSA L3 provenance attached.
       - name: Sign Gateway digest (keyless)
         run: |
           cosign sign --yes \
-            ${{ needs.build-gateway.outputs.image }}@${{ needs.build-gateway.outputs.digest }}
+            docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
 
       - name: Verify Gateway signature
         run: |
           cosign verify \
             --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-            ${{ needs.build-gateway.outputs.image }}@${{ needs.build-gateway.outputs.digest }}
+            docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
 
   # ── 4. Build Plugin ───────────────────────────────────────────────────────────
   build-plugin:
@@ -139,7 +126,6 @@ jobs:
 
     outputs:
       digest: ${{ steps.build.outputs.digest }}
-      image: ${{ steps.image.outputs.name }}
 
     steps:
       - name: Checkout
@@ -157,10 +143,6 @@ jobs:
       - name: Get SOURCE_DATE_EPOCH
         id: source_date
         run: echo "epoch=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
-
-      - name: Set image name output
-        id: image
-        run: echo "name=${{ env.PLUGIN_IMAGE }}" >> $GITHUB_OUTPUT
 
       - name: Build and Push Plugin
         id: build
@@ -186,10 +168,8 @@ jobs:
       packages: write
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
     with:
-      image: ${{ needs.build-plugin.outputs.image }}
+      image: docker.io/spacecomp/orbitport
       digest: ${{ needs.build-plugin.outputs.digest }}
-      # Required for private repos: without this the generator halts to avoid
-      # leaking the repo name to the public Rekor transparency log.
       private-repository: true
     secrets:
       registry-username: ${{ secrets.DOCKER_USERNAME }}
@@ -217,11 +197,11 @@ jobs:
       - name: Sign Plugin digest (keyless)
         run: |
           cosign sign --yes \
-            ${{ needs.build-plugin.outputs.image }}@${{ needs.build-plugin.outputs.digest }}
+            docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
 
       - name: Verify Plugin signature
         run: |
           cosign verify \
             --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-            ${{ needs.build-plugin.outputs.image }}@${{ needs.build-plugin.outputs.digest }}
+            docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
