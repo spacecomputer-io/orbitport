@@ -23,6 +23,10 @@ pub enum GatewayError {
     AuthenticationFailed,
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
+    #[error("Insufficient credits")]
+    InsufficientCredits,
+    #[error("Account plugin unavailable: {0}")]
+    AccountPluginUnavailable(String),
     #[error("Error while waiting for termination signal: {0}")]
     TerminationError(String),
     #[error("Invalid encryption key")]

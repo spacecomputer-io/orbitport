@@ -10,6 +10,7 @@ use tonic_health::pb::{
 
 use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 
+use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
 
@@ -119,15 +120,27 @@ pub struct PluginCatalog {
 }
 
 impl PluginCatalog {
-    pub fn new(auth_url: &str, masterseed_url: &str, kms_url: &str) -> Self {
+    pub fn new(
+        auth_url: &str,
+        masterseed_url: &str,
+        kms_url: &str,
+        account_url: Option<&str>,
+    ) -> Self {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
         urls.insert("kms".to_string(), kms_url.to_string());
         urls.insert("masterseed".to_string(), masterseed_url.to_string());
+        if let Some(url) = account_url {
+            urls.insert("account".to_string(), url.to_string());
+        }
 
         PluginCatalog {
             urls: Arc::new(urls),
         }
+    }
+
+    pub fn has_account(&self) -> bool {
+        self.urls.contains_key("account")
     }
 
     pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {
@@ -158,5 +171,10 @@ impl PluginCatalog {
     pub async fn get_kms_client(&self) -> Result<KmsPluginClient<Channel>, PluginError> {
         let channel = self.get_client("kms").await?;
         Ok(KmsPluginClient::new(channel))
+    }
+
+    pub async fn get_account_client(&self) -> Result<AccountPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("account").await?;
+        Ok(AccountPluginClient::new(channel))
     }
 }

@@ -2,6 +2,9 @@
 // It is important to maintain the same structure as in the proto.
 pub mod proto {
     pub mod plugins {
+        pub mod account {
+            tonic::include_proto!("account");
+        }
         pub mod auth {
             tonic::include_proto!("auth");
         }

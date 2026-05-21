@@ -164,6 +164,21 @@ services:
       - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
       - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
 
+  plugin-account:
+    <<: *plugin-base
+    container_name: plugin-account
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=account
+      - ORBITPORT_GRPC_PORT=50005
+      - ORBITPORT_ACCOUNT_DASHBOARD_URL=${ORBITPORT_ACCOUNT_DASHBOARD_URL}
+      - ORBITPORT_ACCOUNT_AUTH0_DOMAIN=${ORBITPORT_ACCOUNT_AUTH0_DOMAIN}
+      - ORBITPORT_ACCOUNT_AUTH0_AUDIENCE=${ORBITPORT_ACCOUNT_AUTH0_AUDIENCE}
+      - ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID}
+      - ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET}
+      - ORBITPORT_ACCOUNT_CREDITS_PER_UNIT=${ORBITPORT_ACCOUNT_CREDITS_PER_UNIT:-1}
+      - ORBITPORT_ACCOUNT_HTTP_TIMEOUT_SECS=${ORBITPORT_ACCOUNT_HTTP_TIMEOUT_SECS:-5}
+
   ipfs-node:
     image: ipfs/kubo:release
     container_name: ipfs-node
@@ -193,10 +208,12 @@ services:
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
+      - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
     depends_on:
       - plugin-aptos-orbital
       - plugin-auth
       - plugin-kms
+      - plugin-account
     ports:
       - 8080:8080
     healthcheck:

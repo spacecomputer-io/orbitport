@@ -16,6 +16,11 @@ struct Args {
     kms_plugin: String,
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
     masterseed_plugin: String,
+    /// Optional account plugin gRPC URL. When set, JWT-authenticated routes
+    /// hold credits via the account plugin before serving the request and
+    /// release on downstream failure.
+    #[clap(long, env = "ORBITPORT_ACCOUNT_PLUGIN")]
+    account_plugin: Option<String>,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
@@ -54,20 +59,20 @@ async fn main() -> Result<(), GatewayError> {
         });
     }
 
-    plugins::wait_for(
-        vec![
-            args.auth_plugin.to_string(),
-            args.kms_plugin.to_string(),
-            args.masterseed_plugin.to_string(),
-        ],
-        std::time::Duration::from_secs(60),
-        shutdown.clone(),
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!("Failed while waiting for plugins to be healthy: {}", e);
-        GatewayError::ServiceConnectionError(e.to_string())
-    })?;
+    let mut deps = vec![
+        args.auth_plugin.to_string(),
+        args.kms_plugin.to_string(),
+        args.masterseed_plugin.to_string(),
+    ];
+    if let Some(ref url) = args.account_plugin {
+        deps.push(url.to_string());
+    }
+    plugins::wait_for(deps, std::time::Duration::from_secs(60), shutdown.clone())
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed while waiting for plugins to be healthy: {}", e);
+            GatewayError::ServiceConnectionError(e.to_string())
+        })?;
     let service_manager =
         service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
 
@@ -81,7 +86,25 @@ async fn main() -> Result<(), GatewayError> {
         &args.auth_plugin,
         &args.masterseed_plugin,
         &args.kms_plugin,
+        args.account_plugin.as_deref(),
     ));
+
+    let account_client = if plugin_catalog.has_account() {
+        match plugin_catalog.get_account_client().await {
+            Ok(client) => {
+                tracing::info!("Account plugin wired in — credit gating ON");
+                Some(client)
+            }
+            Err(e) => {
+                tracing::error!("Failed to connect to account plugin: {}", e);
+                return Err(GatewayError::ServiceConnectionError(e.to_string()));
+            }
+        }
+    } else {
+        tracing::warn!("ORBITPORT_ACCOUNT_PLUGIN unset — credit gating OFF");
+        None
+    };
+
     server::start(
         args.http_port,
         service_manager.clone(),
@@ -89,6 +112,7 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
+        account_client,
     )
     .await;
 

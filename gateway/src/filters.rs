@@ -1,4 +1,5 @@
 use crate::metrics;
+use crate::proto::plugins::account::{HoldRequest, account_plugin_client::AccountPluginClient};
 use crate::proto::plugins::auth::{
     TokenValidationRequest, TokenValidationResponse, auth_plugin_client::AuthPluginClient,
 };
@@ -22,6 +23,15 @@ const BEARER: &str = "Bearer ";
 pub struct AuthContext {
     pub jwt: String,
     pub client_id: String,
+}
+
+/// AuthContextWithHold carries both the validated JWT context and the
+/// dashboard CreditLedger row id minted by the account plugin's Hold RPC.
+/// The ledger_id is empty when the account plugin is unconfigured.
+#[derive(Clone, Debug)]
+pub struct AuthContextWithHold {
+    pub auth: AuthContext,
+    pub ledger_id: String,
 }
 
 /// Rate limit structure
@@ -141,6 +151,118 @@ pub fn with_rate_limiter(
     auth_filter
         .and(warp::any().map(move || rate_limiter.clone()))
         .and_then(rate_limit)
+}
+
+/// Wraps an auth filter with a credit-hold step against the account plugin.
+/// When `account_client` is `None`, the filter passes through with an empty
+/// ledger_id — i.e. no credit gating. Otherwise it calls Hold(client_id, units,
+/// operation); on `insufficient_credits` it rejects with HTTP 402, on
+/// transport failure with HTTP 503 (fail-closed).
+pub fn with_account_hold(
+    auth_filter: impl Filter<Extract = (AuthContext,), Error = warp::Rejection> + Clone,
+    account_client: Option<AccountPluginClient<Channel>>,
+    units: u32,
+    operation: &'static str,
+) -> impl Filter<Extract = (AuthContextWithHold,), Error = warp::Rejection> + Clone {
+    auth_filter
+        .and(warp::any().map(move || account_client.clone()))
+        .and(warp::any().map(move || (units, operation)))
+        .and_then(account_hold)
+}
+
+async fn account_hold(
+    auth: AuthContext,
+    account_client: Option<AccountPluginClient<Channel>>,
+    (units, operation): (u32, &'static str),
+) -> Result<AuthContextWithHold, warp::Rejection> {
+    let Some(mut client) = account_client else {
+        return Ok(AuthContextWithHold {
+            auth,
+            ledger_id: String::new(),
+        });
+    };
+
+    let request = tonic::Request::new(HoldRequest {
+        client_id: auth.client_id.clone(),
+        units,
+        operation: operation.to_string(),
+    });
+
+    match client.hold(request).await {
+        Ok(resp) => {
+            let body = resp.into_inner();
+            if !body.ok {
+                if body.error == "insufficient_credits" {
+                    metrics::record_account_hold("insufficient_credits");
+                    return Err(warp::reject::custom(GatewayError::InsufficientCredits));
+                }
+                metrics::record_account_hold("plugin_error");
+                tracing::error!("Account plugin returned ok=false: {}", body.error);
+                return Err(warp::reject::custom(
+                    GatewayError::AccountPluginUnavailable(body.error),
+                ));
+            }
+            metrics::record_account_hold("ok");
+            Ok(AuthContextWithHold {
+                auth,
+                ledger_id: body.ledger_id,
+            })
+        }
+        Err(e) => match e.code() {
+            tonic::Code::FailedPrecondition => {
+                metrics::record_account_hold("insufficient_credits");
+                Err(warp::reject::custom(GatewayError::InsufficientCredits))
+            }
+            _ => {
+                metrics::record_account_hold("plugin_unavailable");
+                tracing::error!("Account plugin Hold failed: {}", e);
+                Err(warp::reject::custom(
+                    GatewayError::AccountPluginUnavailable(e.message().to_string()),
+                ))
+            }
+        },
+    }
+}
+
+/// Best-effort release. Logs + ignores failure. The dashboard sweeper backstops
+/// at 5 min. Times out at 2 s regardless of the per-plugin HTTP timeout.
+pub async fn account_release(
+    account_client: Option<AccountPluginClient<Channel>>,
+    ledger_id: &str,
+) {
+    if ledger_id.is_empty() {
+        return;
+    }
+    let Some(mut client) = account_client else {
+        return;
+    };
+
+    let req = tonic::Request::new(crate::proto::plugins::account::ReleaseRequest {
+        ledger_id: ledger_id.to_string(),
+    });
+
+    let release = tokio::time::timeout(Duration::from_secs(2), client.release(req)).await;
+    match release {
+        Ok(Ok(_)) => {
+            metrics::record_account_release("ok");
+            tracing::debug!("Account release succeeded for ledger_id={}", ledger_id);
+        }
+        Ok(Err(e)) => {
+            metrics::record_account_release("plugin_error");
+            tracing::warn!(
+                "Account release failed for ledger_id={}: {}. Sweeper will backstop.",
+                ledger_id,
+                e
+            );
+        }
+        Err(_) => {
+            metrics::record_account_release("timeout");
+            tracing::warn!(
+                "Account release timed out for ledger_id={}. Sweeper will backstop.",
+                ledger_id
+            );
+        }
+    }
 }
 
 /// Rate limiting logic.

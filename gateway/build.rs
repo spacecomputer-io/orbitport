@@ -32,8 +32,10 @@ fn apply_kms_service_attributes(config: tonic_prost_build::Builder) -> tonic_pro
 fn build_plugins(proto_dir: &str) -> Result<()> {
     let (_, plugin_protos) = protos_in_dir(proto_dir)?;
 
+    // Enable server stubs only for protos that need to be mocked in
+    // gateway-side integration tests. Today: account.
     tonic_prost_build::configure()
-        .build_server(false)
+        .build_server(true)
         .protoc_arg("--experimental_allow_proto3_optional")
         .compile_protos(
             &plugin_protos.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
