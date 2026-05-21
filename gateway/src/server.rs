@@ -194,9 +194,30 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         };
         return Ok(warp::reply::with_status(warp::reply::json(&body), status));
     }
+    if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(
+                &serde_json::json!({"error": format!("Request body deserialize error: {e}")}),
+            ),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    if err.is_not_found() {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({"error": "not_found"})),
+            StatusCode::NOT_FOUND,
+        ));
+    }
+    if err.find::<warp::reject::MethodNotAllowed>().is_some() {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({"error": "method_not_allowed"})),
+            StatusCode::METHOD_NOT_ALLOWED,
+        ));
+    }
+    tracing::error!("unhandled rejection: {err:?}");
     Ok(warp::reply::with_status(
-        warp::reply::json(&serde_json::json!({"error": "not_found"})),
-        StatusCode::NOT_FOUND,
+        warp::reply::json(&serde_json::json!({"error": "internal_error"})),
+        StatusCode::INTERNAL_SERVER_ERROR,
     ))
 }
 
