@@ -89,22 +89,6 @@ async fn main() -> Result<(), GatewayError> {
         args.account_plugin.as_deref(),
     ));
 
-    let account_client = if plugin_catalog.has_account() {
-        match plugin_catalog.get_account_client().await {
-            Ok(client) => {
-                tracing::info!("Account plugin wired in — credit gating ON");
-                Some(client)
-            }
-            Err(e) => {
-                tracing::error!("Failed to connect to account plugin: {}", e);
-                return Err(GatewayError::ServiceConnectionError(e.to_string()));
-            }
-        }
-    } else {
-        tracing::warn!("ORBITPORT_ACCOUNT_PLUGIN unset — credit gating OFF");
-        None
-    };
-
     server::start(
         args.http_port,
         service_manager.clone(),
@@ -112,7 +96,6 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
-        account_client,
     )
     .await;
 

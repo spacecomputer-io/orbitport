@@ -56,13 +56,14 @@ pub async fn start(
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
-    account_client: Option<AccountPluginClient<Channel>>,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
 
     let rate_limiter = Arc::new(RateLimiter::new(limit, Duration::from_secs(limit_window))); // 100 requests per minute
 
+    let account_client: Option<AccountPluginClient<Channel>> =
+        plugin_catalog.get_account_client().await.ok();
     let account_client_rpc = account_client.clone();
     let account_client_get = account_client.clone();
     let account_client_post = account_client.clone();

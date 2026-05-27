@@ -139,10 +139,6 @@ impl PluginCatalog {
         }
     }
 
-    pub fn has_account(&self) -> bool {
-        self.urls.contains_key("account")
-    }
-
     pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {
         let url = self
             .urls
