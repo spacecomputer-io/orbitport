@@ -92,9 +92,9 @@ func TestTokenManager_ExpiredToken_Errors(t *testing.T) {
 	require.NoError(t, tm.refresh(context.Background()))
 
 	// Force expiry.
-	tm.mu.Lock()
-	tm.expiresAt = time.Now().Add(-time.Minute)
-	tm.mu.Unlock()
+	cached := tm.cache.Get()
+	cached.expiresAt = time.Now().Add(-time.Minute)
+	tm.cache.Set(cached)
 
 	_, err := tm.token()
 	require.Error(t, err)

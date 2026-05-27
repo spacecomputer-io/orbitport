@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
@@ -16,6 +15,13 @@ import (
 
 // refreshLead is how long before expiry the background goroutine refreshes the token.
 const refreshLead = 5 * time.Minute
+
+// cachedToken bundles the active access token with its expiry so both can be
+// read/written atomically via utils.Locked.
+type cachedToken struct {
+	accessToken string
+	expiresAt   time.Time
+}
 
 // tokenManager mints + caches an Auth0 M2M access token via the
 // client_credentials grant. Initial fetch is blocking + fail-closed. A
@@ -28,11 +34,8 @@ type tokenManager struct {
 	httpClient   *http.Client
 	logger       *utils.Logger
 
-	mu          sync.RWMutex
-	accessToken string
-	expiresAt   time.Time
-
-	stop chan struct{}
+	cache   *utils.Locked[cachedToken]
+	threads utils.ThreadControl
 }
 
 type tokenResponse struct {
@@ -50,8 +53,9 @@ func newTokenManager(cfg *accountConfig) *tokenManager {
 		httpClient: &http.Client{
 			Timeout: time.Duration(cfg.HTTPTimeoutSecs) * time.Second,
 		},
-		logger: utils.GetLogger("orbitport:account:token"),
-		stop:   make(chan struct{}),
+		logger:  utils.GetLogger("orbitport:account:token"),
+		cache:   utils.NewLocked(cachedToken{}),
+		threads: utils.NewThreadControl(),
 	}
 }
 
@@ -61,52 +65,44 @@ func (t *tokenManager) start(ctx context.Context) error {
 	if err := t.refresh(ctx); err != nil {
 		return fmt.Errorf("initial Auth0 M2M token fetch failed: %w", err)
 	}
-	go t.refreshLoop()
+	t.threads.Go(t.refreshLoop)
 	return nil
 }
 
 // close terminates the background refresh goroutine.
 func (t *tokenManager) close() {
-	select {
-	case <-t.stop:
-	default:
-		close(t.stop)
-	}
+	t.threads.Close()
 }
 
 // token returns the cached access token. Returns an error when no token is
 // available — callers should treat this as transport failure.
 func (t *tokenManager) token() (string, error) {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	if t.accessToken == "" {
+	cached := t.cache.Get()
+	if cached.accessToken == "" {
 		return "", fmt.Errorf("account plugin: no Auth0 M2M token available")
 	}
-	if time.Now().After(t.expiresAt) {
+	if time.Now().After(cached.expiresAt) {
 		return "", fmt.Errorf("account plugin: cached Auth0 M2M token expired")
 	}
-	return t.accessToken, nil
+	return cached.accessToken, nil
 }
 
-func (t *tokenManager) refreshLoop() {
+func (t *tokenManager) refreshLoop(ctx context.Context) {
 	for {
-		t.mu.RLock()
-		expiresAt := t.expiresAt
-		t.mu.RUnlock()
-
-		wait := time.Until(expiresAt) - refreshLead
+		cached := t.cache.Get()
+		wait := time.Until(cached.expiresAt) - refreshLead
 		if wait < 30*time.Second {
 			wait = 30 * time.Second
 		}
 
 		select {
-		case <-t.stop:
+		case <-ctx.Done():
 			return
 		case <-time.After(wait):
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), t.httpClient.Timeout)
-		if err := t.refresh(ctx); err != nil {
+		refreshCtx, cancel := context.WithTimeout(ctx, t.httpClient.Timeout)
+		if err := t.refresh(refreshCtx); err != nil {
 			t.logger.Warnf("Auth0 M2M token refresh failed: %v", err)
 		}
 		cancel()
@@ -149,10 +145,10 @@ func (t *tokenManager) refresh(ctx context.Context) error {
 		return fmt.Errorf("auth0 token response missing expires_in")
 	}
 
-	t.mu.Lock()
-	t.accessToken = parsed.AccessToken
-	t.expiresAt = time.Now().Add(time.Duration(parsed.ExpiresIn) * time.Second)
-	t.mu.Unlock()
+	t.cache.Set(cachedToken{
+		accessToken: parsed.AccessToken,
+		expiresAt:   time.Now().Add(time.Duration(parsed.ExpiresIn) * time.Second),
+	})
 
 	t.logger.Debugf("Auth0 M2M token refreshed, expires_in=%ds", parsed.ExpiresIn)
 	return nil
