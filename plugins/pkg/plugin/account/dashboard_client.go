@@ -31,7 +31,7 @@ type dashboardClient struct {
 // tokenProvider is the subset of tokenManager the dashboard client depends on.
 // Lets tests inject a static token without standing up an Auth0 mock.
 type tokenProvider interface {
-	token() (string, error)
+	token(ctx context.Context) (string, error)
 }
 
 type holdRequestBody struct {
@@ -153,7 +153,7 @@ func (d *dashboardClient) newRequest(ctx context.Context, method, path string, b
 		return nil, fmt.Errorf("build dashboard request: %w", err)
 	}
 
-	token, err := d.tokens.token()
+	token, err := d.tokens.token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("attach M2M token: %w", err)
 	}

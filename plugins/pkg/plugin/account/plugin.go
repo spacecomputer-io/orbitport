@@ -58,12 +58,10 @@ func NewPlugin() (*Plugin, error) {
 	}, nil
 }
 
-// Close terminates background goroutines. Safe to call multiple times.
-func (p *Plugin) Close() {
-	if p.tokens != nil {
-		p.tokens.close()
-	}
-}
+// Close releases plugin resources. The token manager refreshes on demand and
+// holds no background goroutines, so there is nothing to tear down today; the
+// method is retained for the plugin host lifecycle. Safe to call multiple times.
+func (p *Plugin) Close() {}
 
 // Hold deducts credits via the dashboard /service/credits/hold endpoint.
 // Returns gRPC codes.FailedPrecondition with HoldResponse.Error="insufficient_credits"

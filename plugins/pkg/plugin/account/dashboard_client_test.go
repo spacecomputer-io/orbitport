@@ -17,7 +17,7 @@ type staticTokens struct {
 	err   error
 }
 
-func (s staticTokens) token() (string, error) { return s.value, s.err }
+func (s staticTokens) token(context.Context) (string, error) { return s.value, s.err }
 
 func newTestClient(t *testing.T, handler http.Handler) (*dashboardClient, *httptest.Server) {
 	t.Helper()
