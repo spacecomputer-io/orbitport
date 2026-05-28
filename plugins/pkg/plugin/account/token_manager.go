@@ -16,6 +16,11 @@ import (
 // refreshLead is how long before expiry the background goroutine refreshes the token.
 const refreshLead = 5 * time.Minute
 
+// maxWait caps a single sleep so the loop re-evaluates expiry against the wall
+// clock at least hourly, recovering from host suspend or clock jumps that would
+// otherwise let a long single-shot timer fire after the token already expired.
+const maxWait = 1 * time.Hour
+
 // cachedToken bundles the active access token with its expiry so both can be
 // read/written atomically via utils.Locked.
 type cachedToken struct {
@@ -91,6 +96,9 @@ func (t *tokenManager) refreshLoop(ctx context.Context) {
 	for {
 		cached := t.cache.Get()
 		wait := time.Until(cached.expiresAt) - refreshLead
+		if wait > maxWait {
+			wait = maxWait
+		}
 		if wait < 30*time.Second {
 			wait = 30 * time.Second
 		}
