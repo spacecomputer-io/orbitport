@@ -73,11 +73,8 @@ func TestGoldenVector_D_DirectBlockSeed_Offset0(t *testing.T) {
 	require.Greater(t, v.Count, 0)
 	require.Len(t, v.OutputsHex, v.Count)
 
-	// Ensure runtime config matches vector expectations.
-	TRNGSize = v.TrngSize
-
 	ms := MasterSeed{Seed: v.TrngBlockHex}
-	got, err := ms.DeriveBulkAtOffset(v.Count, v.OffsetBytes)
+	got, err := ms.DeriveBulkAtOffset(v.Count, v.OffsetBytes, v.TrngSize)
 	require.NoError(t, err)
 
 	require.Equal(t, v.OutputsHex, got, "vector %q mismatch (mode=%q, offset=%d)", v.Name, v.Mode, v.OffsetBytes)
@@ -92,11 +89,8 @@ func TestGoldenVector_E_OffsetBasedStream(t *testing.T) {
 	require.Greater(t, v.Count, 0)
 	require.Len(t, v.OutputsHex, v.Count)
 
-	// Ensure runtime config matches vector expectations.
-	TRNGSize = v.TrngSize
-
 	ms := MasterSeed{Seed: v.TrngBlockHex}
-	got, err := ms.DeriveBulkAtOffset(v.Count, v.OffsetBytes)
+	got, err := ms.DeriveBulkAtOffset(v.Count, v.OffsetBytes, v.TrngSize)
 	require.NoError(t, err)
 
 	require.Equal(t, v.OutputsHex, got, "vector %q mismatch (mode=%q, offset=%d)", v.Name, v.Mode, v.OffsetBytes)

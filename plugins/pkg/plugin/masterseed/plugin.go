@@ -17,29 +17,51 @@ import (
 
 type Plugin struct {
 	proto.MasterSeedPluginServer
-	aptosConn    *grpc.ClientConn
-	aptosClient  proto.RandomnessPluginClient
-	masterSeeds  []MasterSeed
-	mu           sync.RWMutex
-	seedInterval time.Duration
+	aptosConn          *grpc.ClientConn
+	aptosClient        proto.RandomnessPluginClient
+	masterSeeds        []MasterSeed
+	mu                 sync.RWMutex
+	seedInterval       time.Duration
+	trngSize           int
+	maxMasterSeeds     int
+	maxCountPerRequest int
 }
 
 // NewPlugin creates a new masterseed plugin instance.
 func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
-	LoadMasterSeedConfig(cfg)
-	defaultMasterSeeds := cfg.MasterSeedDefaultMasterSeeds
+	defaultMasterSeeds := append([]string(nil), cfg.MasterSeedDefaultMasterSeeds...)
 
 	conn, aptosClient, err := getAptosPluginClient(*cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init aptos client: %w", err)
 	}
 
+	trngSize := cfg.MasterSeedTRNGSize
+	if trngSize <= 0 || trngSize > 1024 {
+		trngSize = 32
+	}
+	maxMasterSeeds := cfg.MasterSeedMaxMasterSeeds
+	if maxMasterSeeds <= 0 {
+		maxMasterSeeds = 100
+	}
+	seedPeriod := cfg.MaserSeedPeriod
+	if seedPeriod <= 0 {
+		seedPeriod = 3600
+	}
+	maxCountPerRequest := cfg.MasterSeedMaxCountPerRequest
+	if maxCountPerRequest <= 0 {
+		maxCountPerRequest = 25000
+	}
+
 	p := &Plugin{
-		aptosConn:    conn,
-		aptosClient:  aptosClient,
-		masterSeeds:  make([]MasterSeed, 0, MaxMasterSeeds),
-		seedInterval: time.Duration(cfg.MaserSeedPeriod) * time.Second,
+		aptosConn:          conn,
+		aptosClient:        aptosClient,
+		masterSeeds:        make([]MasterSeed, 0, maxMasterSeeds),
+		seedInterval:       time.Duration(seedPeriod) * time.Second,
+		trngSize:           trngSize,
+		maxMasterSeeds:     maxMasterSeeds,
+		maxCountPerRequest: maxCountPerRequest,
 	}
 
 	// start background fetch loop
@@ -76,7 +98,7 @@ func (p *Plugin) startSeedFetch(ctx context.Context, defaulMastertSeeds []string
 		p.addMasterSeed(salted)
 	}
 
-	logger.Infof("Master seed plugin initialized with %d default master seeds", len(p.masterSeeds))
+	logger.Infof("Master seed plugin initialized with %d default master seeds", p.masterSeedCount())
 
 	go func() {
 		ticker := time.NewTicker(p.seedInterval)
@@ -124,7 +146,7 @@ func (p *Plugin) addMasterSeed(seed string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.masterSeeds = append(p.masterSeeds, m)
-	if len(p.masterSeeds) > MaxMasterSeeds {
+	if len(p.masterSeeds) > p.maxMasterSeeds {
 		copy(p.masterSeeds[0:], p.masterSeeds[1:])
 		// zero out the last element so old references are dropped
 		p.masterSeeds[len(p.masterSeeds)-1] = MasterSeed{}
@@ -187,17 +209,14 @@ func cryptoRandIndex(n int) (int, error) {
 func (p *Plugin) reserveSeedOffset(count int) (seedHex string, startOffset uint64, err error) {
 	logger := utils.GetLogger("orbitport:masterseed:reserve")
 
-	outLen := TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
+	outLen := p.trngSize
 	if count <= 0 {
 		return "", 0, fmt.Errorf("invalid count=%d", count)
 	}
 
 	// Hard cap to prevent runaway CPU/memory and gRPC response explosions.
-	if count > MaxCountPerRequest {
-		return "", 0, fmt.Errorf("count too large: %d (max %d)", count, MaxCountPerRequest)
+	if count > p.maxCountPerRequest {
+		return "", 0, fmt.Errorf("count too large: %d (max %d)", count, p.maxCountPerRequest)
 	}
 
 	need, ok := mulUint64Checked(uint64(count), uint64(outLen))
@@ -251,8 +270,8 @@ func (p *Plugin) GetSeeds(ctx context.Context, req *proto.GetSeedsRequest) (*pro
 	logger.Debugf("Using master seed: %.4s... offset=%d", seedHex, startOff)
 	logger.Debugf("Deriving %d seeds from stored master seeds", count)
 
-	ms := MasterSeed{Seed: seedHex} // Offset field unused here
-	derived, err := ms.DeriveBulkAtOffset(count, startOff)
+	ms := MasterSeed{Seed: seedHex}
+	derived, err := ms.DeriveBulkAtOffset(count, startOff, p.trngSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to derive seeds: %w", err)
 	}

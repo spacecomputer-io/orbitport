@@ -46,7 +46,7 @@ func BenchmarkDeriveSingle_AtOffset(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(1, offsetBytes)
+		_, err := ms.DeriveBulkAtOffset(1, offsetBytes, 32)
 		if err != nil {
 			b.Fatalf("derivation failed: %v", err)
 		}
@@ -59,17 +59,14 @@ func BenchmarkDeriveSingle_CursorStyle(b *testing.B) {
 	seedHex := generateTestSeed(b)
 	ms := masterseed.MasterSeed{Seed: seedHex}
 
-	outLen := masterseed.TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
+	const outLen = 32
 	step := uint64(outLen) // count=1
 
 	var off uint64
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(1, off)
+		_, err := ms.DeriveBulkAtOffset(1, off, 32)
 		if err != nil {
 			b.Fatalf("derivation failed: %v", err)
 		}
@@ -84,7 +81,7 @@ func BenchmarkDeriveBulk_10(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulk(10)
+		_, err := ms.DeriveBulk(10, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation 10 failed: %v", err)
 		}
@@ -100,7 +97,7 @@ func BenchmarkDeriveBulkAtOffset_10(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(10, offsetBytes)
+		_, err := ms.DeriveBulkAtOffset(10, offsetBytes, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation at offset 10 failed: %v", err)
 		}
@@ -112,17 +109,14 @@ func BenchmarkDeriveBulk_CursorStyle_10(b *testing.B) {
 	seedHex := generateTestSeed(b)
 	ms := masterseed.MasterSeed{Seed: seedHex}
 
-	outLen := masterseed.TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
+	const outLen = 32
 	step := uint64(10 * outLen)
 
 	var off uint64
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(10, off)
+		_, err := ms.DeriveBulkAtOffset(10, off, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation cursor-style 10 failed: %v", err)
 		}
@@ -137,7 +131,7 @@ func BenchmarkDeriveBulk_100(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulk(100)
+		_, err := ms.DeriveBulk(100, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation 100 failed: %v", err)
 		}
@@ -152,7 +146,7 @@ func BenchmarkDeriveBulkAtOffset_100(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(100, offsetBytes)
+		_, err := ms.DeriveBulkAtOffset(100, offsetBytes, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation at offset 100 failed: %v", err)
 		}
@@ -163,17 +157,14 @@ func BenchmarkDeriveBulk_CursorStyle_100(b *testing.B) {
 	seedHex := generateTestSeed(b)
 	ms := masterseed.MasterSeed{Seed: seedHex}
 
-	outLen := masterseed.TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
+	const outLen = 32
 	step := uint64(100 * outLen)
 
 	var off uint64
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(100, off)
+		_, err := ms.DeriveBulkAtOffset(100, off, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation cursor-style 100 failed: %v", err)
 		}
@@ -188,7 +179,7 @@ func BenchmarkDeriveBulk_1000(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulk(1000)
+		_, err := ms.DeriveBulk(1000, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation 1000 failed: %v", err)
 		}
@@ -203,7 +194,7 @@ func BenchmarkDeriveBulkAtOffset_1000(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(1000, offsetBytes)
+		_, err := ms.DeriveBulkAtOffset(1000, offsetBytes, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation at offset 1000 failed: %v", err)
 		}
@@ -214,17 +205,14 @@ func BenchmarkDeriveBulk_CursorStyle_1000(b *testing.B) {
 	seedHex := generateTestSeed(b)
 	ms := masterseed.MasterSeed{Seed: seedHex}
 
-	outLen := masterseed.TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
+	const outLen = 32
 	step := uint64(1000 * outLen)
 
 	var off uint64
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(1000, off)
+		_, err := ms.DeriveBulkAtOffset(1000, off, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation cursor-style 1000 failed: %v", err)
 		}
@@ -242,7 +230,7 @@ func BenchmarkDeriveBulk_100000(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulk(100000)
+		_, err := ms.DeriveBulk(100000, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation 100000 failed: %v", err)
 		}
@@ -259,7 +247,7 @@ func BenchmarkDeriveBulkAtOffset_100000(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(100000, offsetBytes)
+		_, err := ms.DeriveBulkAtOffset(100000, offsetBytes, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation at offset 100000 failed: %v", err)
 		}
@@ -270,17 +258,14 @@ func BenchmarkDeriveBulk_CursorStyle_100000(b *testing.B) {
 	seedHex := generateTestSeed(b)
 	ms := masterseed.MasterSeed{Seed: seedHex}
 
-	outLen := masterseed.TRNGSize
-	if outLen <= 0 || outLen > 1024 {
-		outLen = 32
-	}
+	const outLen = 32
 	step := uint64(100000 * outLen)
 
 	var off uint64
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := ms.DeriveBulkAtOffset(100000, off)
+		_, err := ms.DeriveBulkAtOffset(100000, off, 32)
 		if err != nil {
 			b.Fatalf("bulk derivation cursor-style 100000 failed: %v", err)
 		}
