@@ -9,6 +9,7 @@ import (
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/account"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/aptosorbital"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
@@ -110,6 +111,15 @@ func main() {
 		}
 		proto.RegisterKmsPluginServer(grpcServer, plugin)
 		logger.Info("KMS plugin ready")
+	case "account":
+		plugin, err := account.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterAccountPluginServer(grpcServer, plugin)
+		logger.Info("Account plugin ready")
+
+		defer plugin.Close()
 	default:
 		panic("unknown plugin")
 	}

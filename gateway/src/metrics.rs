@@ -90,6 +90,19 @@ lazy_static! {
         &["method", "reason"]
     )
     .unwrap();
+    static ref GATEWAY_ACCOUNT_HOLD_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_account_hold_total",
+        "Total number of account-plugin Hold outcomes",
+        &["status"]
+    )
+    .unwrap();
+    static ref GATEWAY_ACCOUNT_RELEASE_TOTAL: IntCounterVec =
+        prometheus::register_int_counter_vec!(
+            "op_gateway_account_release_total",
+            "Total number of account-plugin Release outcomes",
+            &["status"]
+        )
+        .unwrap();
 }
 
 pub fn record_request(service: &str, status: &str, duration_seconds: f64) {
@@ -121,6 +134,18 @@ pub fn record_validation(method: &str, reason: &str) {
 pub fn record_trng_source(source: &str, status: &str) {
     GATEWAY_TRNG_SOURCE_TOTAL
         .with_label_values(&[source, status])
+        .inc();
+}
+
+pub fn record_account_hold(status: &str) {
+    GATEWAY_ACCOUNT_HOLD_TOTAL
+        .with_label_values(&[status])
+        .inc();
+}
+
+pub fn record_account_release(status: &str) {
+    GATEWAY_ACCOUNT_RELEASE_TOTAL
+        .with_label_values(&[status])
         .inc();
 }
 

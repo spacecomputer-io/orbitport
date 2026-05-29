@@ -218,6 +218,27 @@ services:
       - ORBITPORT_GRPC_PORT=50000
       # Dev compose intentionally runs the noop auth plugin.
 
+  # The account plugin is intentionally NOT enabled in dev compose because the
+  # dashboard backend isn't part of this stack. To enable locally, run the
+  # dashboard separately (e.g. on the host), uncomment the block below, and
+  # set ORBITPORT_ACCOUNT_PLUGIN on the gateway service.
+  #
+  # plugin-account:
+  #   <<: *plugin-base
+  #   container_name: plugin-account
+  #   build:
+  #     context: ./plugins
+  #   image: op-plugin:latest
+  #   environment:
+  #     - GOLOG_LOG_LEVEL=debug
+  #     - ORBITPORT_PLUGIN=account
+  #     - ORBITPORT_GRPC_PORT=50005
+  #     - ORBITPORT_ACCOUNT_DASHBOARD_URL=http://host.docker.internal:3000
+  #     - ORBITPORT_ACCOUNT_AUTH0_DOMAIN=${ORBITPORT_ACCOUNT_AUTH0_DOMAIN}
+  #     - ORBITPORT_ACCOUNT_AUTH0_AUDIENCE=${ORBITPORT_ACCOUNT_AUTH0_AUDIENCE}
+  #     - ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID}
+  #     - ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET}
+
   ipfs-node:
     image: ipfs/kubo:release
     ports:
