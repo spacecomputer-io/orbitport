@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
+
+// Internal Threshold plugin contract used between the gateway and the
+// Orbitport threshold gRPC plugin.
+package thresholdapi;
+
+service ThresholdPlugin {
+  rpc CoordinateDkg(CoordinateDkgRequest) returns (CoordinateDkgResponse);
+}
+
+message ThresholdNode {
+  string node_id = 1;
+  int32 party_index = 2;
+  string openbao_url = 3;
+  string mount = 4;
+}
+
+message DkgNodeStatus {
+  string node_id = 1;
+  string status = 2;
+  int32 round = 3;
+  int32 next_round = 4;
+  repeated string pending_from = 5;
+}
+
+message CoordinateDkgRequest {
+  string key_name = 1;
+  string group_name = 2;
+  string session_id = 3;
+  int32 threshold = 4;
+  repeated ThresholdNode participants = 5;
+  string client_id = 6;
+}
+
+message CoordinateDkgResponse {
+  string key_name = 1;
+  string group_name = 2;
+  string session_id = 3;
+  repeated DkgNodeStatus nodes = 4;
+}
