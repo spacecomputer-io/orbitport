@@ -13,6 +13,8 @@ use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPlug
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
+use crate::proto::plugins::threshold::threshold_plugin_client::ThresholdPluginClient;
+use crate::services::threshold::ThresholdGroupRegistry;
 
 use thiserror::Error;
 
@@ -117,6 +119,7 @@ pub async fn wait_for(
 
 pub struct PluginCatalog {
     urls: Arc<HashMap<String, String>>,
+    threshold_groups: ThresholdGroupRegistry,
 }
 
 impl PluginCatalog {
@@ -125,6 +128,8 @@ impl PluginCatalog {
         masterseed_url: &str,
         kms_url: &str,
         account_url: Option<&str>,
+        threshold_url: &str,
+        threshold_groups: ThresholdGroupRegistry,
     ) -> Self {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
@@ -133,9 +138,13 @@ impl PluginCatalog {
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
         }
+        if !threshold_url.trim().is_empty() {
+            urls.insert("threshold".to_string(), threshold_url.to_string());
+        }
 
         PluginCatalog {
             urls: Arc::new(urls),
+            threshold_groups,
         }
     }
 
@@ -172,5 +181,16 @@ impl PluginCatalog {
     pub async fn get_account_client(&self) -> Result<AccountPluginClient<Channel>, PluginError> {
         let channel = self.get_client("account").await?;
         Ok(AccountPluginClient::new(channel))
+    }
+
+    pub async fn get_threshold_client(
+        &self,
+    ) -> Result<ThresholdPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("threshold").await?;
+        Ok(ThresholdPluginClient::new(channel))
+    }
+
+    pub fn threshold_groups(&self) -> ThresholdGroupRegistry {
+        self.threshold_groups.clone()
     }
 }

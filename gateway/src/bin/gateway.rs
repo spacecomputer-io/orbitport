@@ -14,6 +14,10 @@ struct Args {
     auth_plugin: String,
     #[clap(long, env = "ORBITPORT_KMS_PLUGIN")]
     kms_plugin: String,
+    #[clap(long, env = "ORBITPORT_THRESHOLD_PLUGIN", default_value = "")]
+    threshold_plugin: String,
+    #[clap(long, env = "ORBITPORT_THRESHOLD_GROUPS", default_value = "")]
+    threshold_groups: String,
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
     masterseed_plugin: String,
     /// Optional account plugin gRPC URL. When set, JWT-authenticated routes
@@ -59,20 +63,28 @@ async fn main() -> Result<(), GatewayError> {
         });
     }
 
-    let mut deps = vec![
+    let mut plugin_urls = vec![
         args.auth_plugin.to_string(),
         args.kms_plugin.to_string(),
         args.masterseed_plugin.to_string(),
     ];
     if let Some(ref url) = args.account_plugin {
-        deps.push(url.to_string());
+        plugin_urls.push(url.to_string());
     }
-    plugins::wait_for(deps, std::time::Duration::from_secs(60), shutdown.clone())
-        .await
-        .map_err(|e| {
-            tracing::error!("Failed while waiting for plugins to be healthy: {}", e);
-            GatewayError::ServiceConnectionError(e.to_string())
-        })?;
+    if !args.threshold_plugin.trim().is_empty() {
+        plugin_urls.push(args.threshold_plugin.to_string());
+    }
+
+    plugins::wait_for(
+        plugin_urls,
+        std::time::Duration::from_secs(60),
+        shutdown.clone(),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!("Failed while waiting for plugins to be healthy: {}", e);
+        GatewayError::ServiceConnectionError(e.to_string())
+    })?;
     let service_manager =
         service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
 
@@ -82,11 +94,16 @@ async fn main() -> Result<(), GatewayError> {
     });
 
     let service_manager = Arc::new(service_manager);
+    let threshold_groups =
+        gateway::services::threshold::ThresholdGroupRegistry::from_json(&args.threshold_groups)
+            .map_err(GatewayError::BadRequest)?;
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
         &args.masterseed_plugin,
         &args.kms_plugin,
         args.account_plugin.as_deref(),
+        &args.threshold_plugin,
+        threshold_groups,
     ));
 
     server::start(

@@ -20,6 +20,9 @@ pub mod proto {
         pub mod masterseed {
             tonic::include_proto!("masterseed");
         }
+        pub mod threshold {
+            tonic::include_proto!("thresholdapi");
+        }
     }
 
     pub mod services {
@@ -28,6 +31,9 @@ pub mod proto {
         }
         pub mod kms {
             tonic::include_proto!("kms");
+        }
+        pub mod threshold {
+            tonic::include_proto!("threshold");
         }
     }
 }

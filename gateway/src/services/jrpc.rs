@@ -6,9 +6,11 @@ use crate::proto::services::kms::{
     CreateKeyRequest, DecryptRequest, EncryptRequest, GenerateDataKeyRequest,
     GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
 };
+use crate::proto::services::threshold::CoordinateDkgRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{KmsRpcCall, KmsService};
+use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
 #[derive(Serialize)]
 pub struct JsonRpcError {
@@ -88,6 +90,8 @@ pub enum RpcCall {
     RotateKey(RotateKeyRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
+    #[serde(rename = "threshold.CoordinateDKG")]
+    CoordinateDKG(CoordinateDkgRequest),
 }
 
 impl RpcCall {
@@ -111,6 +115,7 @@ impl RpcCall {
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
+            RpcCall::CoordinateDKG(req) => ThresholdService::validate_coordinate_dkg(req)?,
         }
         Ok(())
     }
@@ -175,6 +180,15 @@ impl RpcCall {
                 )
                 .await
             }
+            RpcCall::CoordinateDKG(req) => {
+                execute_threshold(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    ThresholdRpcCall::CoordinateDkg(req),
+                )
+                .await
+            }
         }
     }
 }
@@ -199,6 +213,21 @@ async fn execute_kms(
         .await
         .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
     let mut svc = KmsService::new(grpc_client);
+    let results = svc.execute(client_id, req_id, call).await?;
+    serialize_success_response(req_id, results)
+}
+
+async fn execute_threshold(
+    req_id: u64,
+    client_id: &str,
+    plugin_catalog: &PluginCatalog,
+    call: ThresholdRpcCall,
+) -> Result<serde_json::Value, tonic::Status> {
+    let grpc_client = plugin_catalog
+        .get_threshold_client()
+        .await
+        .map_err(|_| tonic::Status::unavailable("Threshold plugin unavailable"))?;
+    let mut svc = ThresholdService::new(grpc_client, plugin_catalog.threshold_groups());
     let results = svc.execute(client_id, req_id, call).await?;
     serialize_success_response(req_id, results)
 }
@@ -247,6 +276,28 @@ mod test {
         match req.call {
             RpcCall::GetCapabilities(_) => {}
             _ => panic!("expected kms.GetCapabilities"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_threshold_coordinate_dkg_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "threshold.CoordinateDKG",
+            "params": {
+                "Alias": "key-1",
+                "GroupName": "team-a"
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::CoordinateDKG(params) => {
+                assert_eq!(params.alias, "key-1");
+                assert_eq!(params.group_name, "team-a");
+            }
+            _ => panic!("expected threshold.CoordinateDKG"),
         }
     }
 }
