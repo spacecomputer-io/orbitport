@@ -182,8 +182,16 @@ async fn account_hold(
         });
     };
 
+    // Auth0 M2M tokens carry `sub` as `<client_id>@clients`; the dashboard
+    // stores the bare client_id. Strip the suffix here (account boundary only)
+    // so the credit lookup matches. Left untouched elsewhere (e.g. KMS keys are
+    // namespaced by the full `client_id` and must not change).
     let request = tonic::Request::new(HoldRequest {
-        client_id: auth.client_id.clone(),
+        client_id: auth
+            .client_id
+            .strip_suffix("@clients")
+            .unwrap_or(&auth.client_id)
+            .to_string(),
         units,
         operation: operation.to_string(),
     });
