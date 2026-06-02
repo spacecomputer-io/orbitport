@@ -7,13 +7,16 @@ OPENBAO_TOKEN="${OPENBAO_TOKEN:-root}"
 OPENBAO_PLUGIN_DIR="${OPENBAO_PLUGIN_DIR:-/openbao/plugins}"
 OPENBAO_ETH_PLUGIN_NAME="${OPENBAO_ETH_PLUGIN_NAME:-ethereum-secrets-plugin}"
 OPENBAO_ETH_MOUNT="${OPENBAO_ETH_MOUNT:-ethereum}"
+OPENBAO_THRESHOLD_PLUGIN_NAME="${OPENBAO_THRESHOLD_PLUGIN_NAME:-openbao-threshold-plugin}"
+OPENBAO_THRESHOLD_MOUNTS="${OPENBAO_THRESHOLD_MOUNTS:-threshold}"
 OPENBAO_TRANSIT_MOUNT="${OPENBAO_TRANSIT_MOUNT:-transit}"
 OPENBAO_KV_MOUNT="${OPENBAO_KV_MOUNT:-orbitport-kv}"
 
 export BAO_ADDR="${OPENBAO_ADDR}"
 export BAO_TOKEN="${OPENBAO_TOKEN}"
 
-plugin_path="${OPENBAO_PLUGIN_DIR}/${OPENBAO_ETH_PLUGIN_NAME}"
+eth_plugin_path="${OPENBAO_PLUGIN_DIR}/${OPENBAO_ETH_PLUGIN_NAME}"
+threshold_plugin_path="${OPENBAO_PLUGIN_DIR}/${OPENBAO_THRESHOLD_PLUGIN_NAME}"
 
 echo "waiting for OpenBao at ${BAO_ADDR}"
 until bao status >/dev/null 2>&1; do
@@ -32,12 +35,22 @@ enable_mount_if_missing() {
 enable_mount_if_missing "${OPENBAO_TRANSIT_MOUNT}" transit
 enable_mount_if_missing "${OPENBAO_KV_MOUNT}" kv-v2
 
-if [ -f "${plugin_path}" ]; then
-    plugin_sha="$(sha256sum "${plugin_path}" | cut -d' ' -f1)"
+if [ -f "${eth_plugin_path}" ]; then
+    plugin_sha="$(sha256sum "${eth_plugin_path}" | cut -d' ' -f1)"
     bao plugin register -sha256="${plugin_sha}" secret "${OPENBAO_ETH_PLUGIN_NAME}"
     enable_mount_if_missing "${OPENBAO_ETH_MOUNT}" "${OPENBAO_ETH_PLUGIN_NAME}"
 else
-    echo "ethereum plugin binary not found at ${plugin_path}; skipping ethereum mount"
+    echo "ethereum plugin binary not found at ${eth_plugin_path}; skipping ethereum mount"
+fi
+
+if [ -f "${threshold_plugin_path}" ]; then
+    plugin_sha="$(sha256sum "${threshold_plugin_path}" | cut -d' ' -f1)"
+    bao plugin register -sha256="${plugin_sha}" secret "${OPENBAO_THRESHOLD_PLUGIN_NAME}"
+    for mount in ${OPENBAO_THRESHOLD_MOUNTS}; do
+        enable_mount_if_missing "${mount}" "${OPENBAO_THRESHOLD_PLUGIN_NAME}"
+    done
+else
+    echo "threshold plugin binary not found at ${threshold_plugin_path}; skipping threshold mounts"
 fi
 
 echo "OpenBao bootstrap complete"

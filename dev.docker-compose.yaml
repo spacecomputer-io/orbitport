@@ -36,11 +36,28 @@ services:
       - -ec
       - apk add --no-cache build-base linux-headers >/dev/null && /bin/sh /orbitport/docker/openbao/build-eth-plugin.sh /src /out
 
+  openbao-threshold-plugin-builder:
+    container_name: openbao-threshold-plugin-builder
+    image: golang:1.26-alpine
+    working_dir: /src
+    volumes:
+      - ${ORBITPORT_OPENBAO_THRESHOLD_PLUGIN_DIR:-../openbao-threshold-plugin}:/src:ro
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+      - openbao-plugins:/out
+      - openbao-threshold-go-pkg:/go/pkg/mod
+      - openbao-threshold-go-build:/root/.cache/go-build
+    command:
+      - /bin/sh
+      - -ec
+      - apk add --no-cache build-base linux-headers git cmake ninja ca-certificates >/dev/null && /bin/sh /orbitport/docker/openbao/build-threshold-plugin.sh /src /out
+
   openbao:
     container_name: openbao
     image: openbao/openbao:latest
     depends_on:
       openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-threshold-plugin-builder:
         condition: service_completed_successfully
     command:
       - server
@@ -61,6 +78,60 @@ services:
       retries: 12
       start_period: 5s
 
+  openbao-1:
+    container_name: openbao-1
+    image: openbao/openbao:latest
+    depends_on:
+      openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-threshold-plugin-builder:
+        condition: service_completed_successfully
+    command:
+      - server
+      - -dev
+      - -dev-root-token-id=root
+      - -dev-listen-address=0.0.0.0:8200
+      - -dev-plugin-dir=/openbao/plugins
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "18201:8200"
+    volumes:
+      - openbao-plugins:/openbao/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=root bao status >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  openbao-2:
+    container_name: openbao-2
+    image: openbao/openbao:latest
+    depends_on:
+      openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-threshold-plugin-builder:
+        condition: service_completed_successfully
+    command:
+      - server
+      - -dev
+      - -dev-root-token-id=root
+      - -dev-listen-address=0.0.0.0:8200
+      - -dev-plugin-dir=/openbao/plugins
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "18202:8200"
+    volumes:
+      - openbao-plugins:/openbao/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=root bao status >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
   openbao-bootstrap:
     container_name: openbao-bootstrap
     image: openbao/openbao:latest
@@ -69,15 +140,47 @@ services:
         condition: service_healthy
       openbao-eth-plugin-builder:
         condition: service_completed_successfully
+      openbao-threshold-plugin-builder:
+        condition: service_completed_successfully
     restart: "no"
     environment:
       - OPENBAO_ADDR=http://openbao:8200
-      - OPENBAO_TOKEN=root
-      - OPENBAO_PLUGIN_DIR=/openbao/plugins
-      - OPENBAO_ETH_PLUGIN_NAME=ethereum-secrets-plugin
-      - OPENBAO_ETH_MOUNT=ethereum
-      - OPENBAO_TRANSIT_MOUNT=transit
-      - OPENBAO_KV_MOUNT=orbitport-kv
+    volumes:
+      - openbao-plugins:/openbao/plugins
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+    command: ["/bin/sh", "/orbitport/docker/openbao/bootstrap.sh"]
+
+  openbao-bootstrap-1:
+    container_name: openbao-bootstrap-1
+    image: openbao/openbao:latest
+    depends_on:
+      openbao-1:
+        condition: service_healthy
+      openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-threshold-plugin-builder:
+        condition: service_completed_successfully
+    restart: "no"
+    environment:
+      - OPENBAO_ADDR=http://openbao-1:8200
+    volumes:
+      - openbao-plugins:/openbao/plugins
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+    command: ["/bin/sh", "/orbitport/docker/openbao/bootstrap.sh"]
+
+  openbao-bootstrap-2:
+    container_name: openbao-bootstrap-2
+    image: openbao/openbao:latest
+    depends_on:
+      openbao-2:
+        condition: service_healthy
+      openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-threshold-plugin-builder:
+        condition: service_completed_successfully
+    restart: "no"
+    environment:
+      - OPENBAO_ADDR=http://openbao-2:8200
     volumes:
       - openbao-plugins:/openbao/plugins
       - ./docker/openbao:/orbitport/docker/openbao:ro
@@ -92,6 +195,38 @@ services:
       - "8200:8200"
     volumes:
       - ./docker/openbao/openbao-proxy.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 2s
+
+  openbao-proxy-1:
+    container_name: openbao-proxy-1
+    image: nginx:1.27-alpine
+    depends_on:
+      - openbao-1
+    ports:
+      - "8201:8200"
+    volumes:
+      - ./docker/openbao/openbao-proxy-1.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 2s
+
+  openbao-proxy-2:
+    container_name: openbao-proxy-2
+    image: nginx:1.27-alpine
+    depends_on:
+      - openbao-2
+    ports:
+      - "8202:8200"
+    volumes:
+      - ./docker/openbao/openbao-proxy-2.conf:/etc/nginx/nginx.conf:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1"]
       interval: 5s
@@ -206,6 +341,33 @@ services:
       openbao-proxy:
         condition: service_healthy
 
+  plugin-threshold:
+    <<: *plugin-base
+    container_name: plugin-threshold
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=threshold
+      - ORBITPORT_GRPC_PORT=50005
+      - ORBITPORT_THRESHOLD_TIMEOUT_SECS=60
+    ports:
+      - 9005:9000
+    depends_on:
+      openbao-bootstrap:
+        condition: service_completed_successfully
+      openbao-bootstrap-1:
+        condition: service_completed_successfully
+      openbao-bootstrap-2:
+        condition: service_completed_successfully
+      openbao-proxy:
+        condition: service_healthy
+      openbao-proxy-1:
+        condition: service_healthy
+      openbao-proxy-2:
+        condition: service_healthy
+
   plugin-auth:
     <<: *plugin-base
     container_name: plugin-auth
@@ -265,6 +427,8 @@ services:
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
+      - ORBITPORT_THRESHOLD_PLUGIN=http://plugin-threshold:50005
+      - 'ORBITPORT_THRESHOLD_GROUPS={"e2e-group":{"threshold":2,"participants":[{"node_id":"node-a","party_index":0,"openbao_url":"http://openbao-proxy:8200","mount":"threshold"},{"node_id":"node-b","party_index":1,"openbao_url":"http://openbao-proxy-1:8200","mount":"threshold"},{"node_id":"node-c","party_index":2,"openbao_url":"http://openbao-proxy-2:8200","mount":"threshold"}]}}'
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
     ports:
@@ -278,6 +442,7 @@ services:
     depends_on:
       - plugin-auth
       - plugin-kms
+      - plugin-threshold
       - plugin-masterseed
 
   plugin-beacon:
@@ -301,3 +466,5 @@ volumes:
   openbao-plugins:
   openbao-eth-go-pkg:
   openbao-eth-go-build:
+  openbao-threshold-go-pkg:
+  openbao-threshold-go-build:
