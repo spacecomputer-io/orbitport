@@ -118,6 +118,47 @@ func TestDashboardClient_Hold_OtherErrors(t *testing.T) {
 	}
 }
 
+func TestDashboardClient_Settle_Success(t *testing.T) {
+	var capturedPath string
+	var capturedMethod string
+
+	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPath = r.URL.Path
+		capturedMethod = r.Method
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"balance":42}`))
+	}))
+	defer srv.Close()
+
+	balance, err := client.Settle(context.Background(), "ledger-abc")
+	require.NoError(t, err)
+	require.Equal(t, int64(42), balance)
+	require.Equal(t, http.MethodPost, capturedMethod)
+	require.Equal(t, "/service/credits/hold/ledger-abc/settle", capturedPath)
+}
+
+func TestDashboardClient_Settle_Accepts201(t *testing.T) {
+	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"balance":7}`))
+	}))
+	defer srv.Close()
+
+	balance, err := client.Settle(context.Background(), "ledger-abc")
+	require.NoError(t, err)
+	require.Equal(t, int64(7), balance)
+}
+
+func TestDashboardClient_Settle_Error(t *testing.T) {
+	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	_, err := client.Settle(context.Background(), "ledger-abc")
+	require.Error(t, err)
+}
+
 func TestDashboardClient_Release_Success(t *testing.T) {
 	var capturedPath string
 

@@ -96,9 +96,33 @@ func (p *Plugin) Hold(ctx context.Context, req *proto.HoldRequest) (*proto.HoldR
 	}, nil
 }
 
+// Settle commits a previous hold so the dashboard sweeper no longer treats it
+// as an orphan to refund. Idempotent on the backend; the balance is unchanged
+// (the hold already deducted). Transport failures map to codes.Unavailable; the
+// gateway logs + ignores settle errors and lets the dashboard sweeper backstop
+// genuinely orphaned holds.
+func (p *Plugin) Settle(ctx context.Context, req *proto.SettleRequest) (*proto.SettleResponse, error) {
+	ledgerID := req.GetLedgerId()
+	if ledgerID == "" {
+		return nil, status.Error(codes.InvalidArgument, "ledger_id is required")
+	}
+
+	balance, err := p.client.Settle(ctx, ledgerID)
+	if err != nil {
+		p.logger.Warnf("settle failed for ledger_id=%s: %v", ledgerID, err)
+		return nil, status.Error(codes.Unavailable, err.Error())
+	}
+
+	p.logger.Debugf("settle ok for ledger_id=%s balance_after=%d", ledgerID, balance)
+	return &proto.SettleResponse{
+		Ok:           true,
+		BalanceAfter: balance,
+	}, nil
+}
+
 // Release refunds a previous hold. Idempotent on the backend. Transport
 // failures map to codes.Unavailable; the gateway logs + ignores release
-// errors and lets the dashboard sweeper (5 min TTL) backstop.
+// errors and lets the dashboard sweeper backstop genuinely orphaned holds.
 func (p *Plugin) Release(ctx context.Context, req *proto.ReleaseRequest) (*proto.ReleaseResponse, error) {
 	ledgerID := req.GetLedgerId()
 	if ledgerID == "" {
