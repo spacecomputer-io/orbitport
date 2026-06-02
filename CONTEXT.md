@@ -49,7 +49,7 @@ beacons.yaml                Public beacon registry
 | [`masterseed`](plugins/pkg/plugin/masterseed/README.md) | Rolling pool of satellite seeds with offset-reserved derivation | Serves cTRNG to the gateway |
 | [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS | No RPC; consumes the others |
 | [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate) backed by OpenBao | Wraps Transit + Ethereum secrets engines |
-| [`account`](plugins/pkg/plugin/account/README.md) | Per-request credit gating against the dashboard backend account service | Holds credits before serving compute; releases on downstream failure |
+| [`account`](plugins/pkg/plugin/account/README.md) | Per-request credit gating against the dashboard backend account service | Holds credits before serving compute; settles on success, releases on failure |
 
 ## Configuration
 
@@ -65,7 +65,7 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_MASTERSEED_PLUGIN` | — | gRPC URL of the masterseed plugin (required) |
 | `ORBITPORT_TRNG_PLUGIN` | — | gRPC URL of the cTRNG plugin (`aptosorbital`) |
 | `ORBITPORT_KMS_PLUGIN` | — | gRPC URL of the KMS plugin |
-| `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving and release on downstream failure. |
+| `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving, settle on success, and release on downstream failure. |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
@@ -148,16 +148,18 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `ORBITPORT_ACCOUNT_DASHBOARD_URL` | — | HTTPS base URL of the dashboard backend (required). Plugin calls `/service/credits/hold` and `/service/credits/hold/:id/release`. |
+| `ORBITPORT_ACCOUNT_DASHBOARD_URL` | — | HTTPS base URL of the dashboard backend (required). Plugin calls `/service/credits/hold`, `/service/credits/hold/:id/settle`, and `/service/credits/hold/:id/release`. |
 | `ORBITPORT_ACCOUNT_AUTH0_DOMAIN` | — | Auth0 tenant domain used for the M2M client credentials grant (required). |
 | `ORBITPORT_ACCOUNT_AUTH0_AUDIENCE` | — | Audience requested when minting the M2M token. Same audience the dashboard's `ServiceAuthGuard` accepts (required). |
 | `ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID` | — | M2M application client_id (required). Must be present in the dashboard's `ALLOWED_SERVICE_CLIENT_IDS`. |
 | `ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET` | — | M2M application client_secret (required). |
 | `ORBITPORT_ACCOUNT_CREDITS_PER_UNIT` | `1` | Credits charged per compute unit. Gateway always sends `units=1` in MVP; future operations may vary. |
-| `ORBITPORT_ACCOUNT_HTTP_TIMEOUT_SECS` | `5` | HTTP timeout per dashboard request. Release uses a hard 2 s timeout regardless. |
+| `ORBITPORT_ACCOUNT_HTTP_TIMEOUT_SECS` | `5` | HTTP timeout per dashboard request. Settle and release use a hard 2 s timeout regardless. |
 | `ORBITPORT_ACCOUNT_ALLOW_INSECURE` | `false` | When `true`, accepts a non-`https://` `ORBITPORT_ACCOUNT_DASHBOARD_URL`. Local dev only — the M2M bearer leaks in plaintext. Plugin refuses to start otherwise. |
 
-The plugin is fail-closed: missing required env refuses startup; non-https dashboard URL refuses startup unless `ORBITPORT_ACCOUNT_ALLOW_INSECURE=true`; dashboard 5xx → gateway 503; insufficient credits → gateway 402. The 2 s release timeout is intentionally tight — the dashboard sweeper (5 min TTL) backstops any drops.
+The plugin is fail-closed: missing required env refuses startup; non-https dashboard URL refuses startup unless `ORBITPORT_ACCOUNT_ALLOW_INSECURE=true`; dashboard 5xx → gateway 503; insufficient credits → gateway 402.
+
+Credit lifecycle: the gateway `Hold`s (deduct + gate) before serving, then reports the terminal outcome — `Settle` on success (commits the hold), `Release` on failure (refunds). Both settle and release are best-effort with a hard 2 s timeout; a dropped call leaves the hold unresolved, and the dashboard sweeper refunds unresolved orphans after its TTL. This errs toward revenue loss, never overcharge.
 
 ## Protobuf workflow
 
