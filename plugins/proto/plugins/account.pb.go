@@ -158,6 +158,110 @@ func (x *HoldResponse) GetError() string {
 	return ""
 }
 
+type SettleRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	LedgerId      string                 `protobuf:"bytes,1,opt,name=ledger_id,json=ledgerId,proto3" json:"ledger_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SettleRequest) Reset() {
+	*x = SettleRequest{}
+	mi := &file_proto_plugins_account_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SettleRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SettleRequest) ProtoMessage() {}
+
+func (x *SettleRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_account_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SettleRequest.ProtoReflect.Descriptor instead.
+func (*SettleRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_account_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SettleRequest) GetLedgerId() string {
+	if x != nil {
+		return x.LedgerId
+	}
+	return ""
+}
+
+type SettleResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	BalanceAfter  int64                  `protobuf:"varint,2,opt,name=balance_after,json=balanceAfter,proto3" json:"balance_after,omitempty"`
+	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SettleResponse) Reset() {
+	*x = SettleResponse{}
+	mi := &file_proto_plugins_account_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SettleResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SettleResponse) ProtoMessage() {}
+
+func (x *SettleResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_account_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SettleResponse.ProtoReflect.Descriptor instead.
+func (*SettleResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_account_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SettleResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *SettleResponse) GetBalanceAfter() int64 {
+	if x != nil {
+		return x.BalanceAfter
+	}
+	return 0
+}
+
+func (x *SettleResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type ReleaseRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	LedgerId      string                 `protobuf:"bytes,1,opt,name=ledger_id,json=ledgerId,proto3" json:"ledger_id,omitempty"`
@@ -167,7 +271,7 @@ type ReleaseRequest struct {
 
 func (x *ReleaseRequest) Reset() {
 	*x = ReleaseRequest{}
-	mi := &file_proto_plugins_account_proto_msgTypes[2]
+	mi := &file_proto_plugins_account_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -179,7 +283,7 @@ func (x *ReleaseRequest) String() string {
 func (*ReleaseRequest) ProtoMessage() {}
 
 func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_account_proto_msgTypes[2]
+	mi := &file_proto_plugins_account_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -192,7 +296,7 @@ func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_account_proto_rawDescGZIP(), []int{2}
+	return file_proto_plugins_account_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ReleaseRequest) GetLedgerId() string {
@@ -213,7 +317,7 @@ type ReleaseResponse struct {
 
 func (x *ReleaseResponse) Reset() {
 	*x = ReleaseResponse{}
-	mi := &file_proto_plugins_account_proto_msgTypes[3]
+	mi := &file_proto_plugins_account_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -225,7 +329,7 @@ func (x *ReleaseResponse) String() string {
 func (*ReleaseResponse) ProtoMessage() {}
 
 func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_account_proto_msgTypes[3]
+	mi := &file_proto_plugins_account_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -238,7 +342,7 @@ func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseResponse.ProtoReflect.Descriptor instead.
 func (*ReleaseResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_account_proto_rawDescGZIP(), []int{3}
+	return file_proto_plugins_account_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ReleaseResponse) GetOk() bool {
@@ -275,15 +379,22 @@ const file_proto_plugins_account_proto_rawDesc = "" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x1b\n" +
 	"\tledger_id\x18\x02 \x01(\tR\bledgerId\x12#\n" +
 	"\rbalance_after\x18\x03 \x01(\x03R\fbalanceAfter\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"-\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\",\n" +
+	"\rSettleRequest\x12\x1b\n" +
+	"\tledger_id\x18\x01 \x01(\tR\bledgerId\"[\n" +
+	"\x0eSettleResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12#\n" +
+	"\rbalance_after\x18\x02 \x01(\x03R\fbalanceAfter\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"-\n" +
 	"\x0eReleaseRequest\x12\x1b\n" +
 	"\tledger_id\x18\x01 \x01(\tR\bledgerId\"\\\n" +
 	"\x0fReleaseResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12#\n" +
 	"\rbalance_after\x18\x02 \x01(\x03R\fbalanceAfter\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error2\x82\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error2\xbd\x01\n" +
 	"\rAccountPlugin\x123\n" +
-	"\x04Hold\x12\x14.account.HoldRequest\x1a\x15.account.HoldResponse\x12<\n" +
+	"\x04Hold\x12\x14.account.HoldRequest\x1a\x15.account.HoldResponse\x129\n" +
+	"\x06Settle\x12\x16.account.SettleRequest\x1a\x17.account.SettleResponse\x12<\n" +
 	"\aRelease\x12\x17.account.ReleaseRequest\x1a\x18.account.ReleaseResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
 
 var (
@@ -298,20 +409,24 @@ func file_proto_plugins_account_proto_rawDescGZIP() []byte {
 	return file_proto_plugins_account_proto_rawDescData
 }
 
-var file_proto_plugins_account_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_plugins_account_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proto_plugins_account_proto_goTypes = []any{
 	(*HoldRequest)(nil),     // 0: account.HoldRequest
 	(*HoldResponse)(nil),    // 1: account.HoldResponse
-	(*ReleaseRequest)(nil),  // 2: account.ReleaseRequest
-	(*ReleaseResponse)(nil), // 3: account.ReleaseResponse
+	(*SettleRequest)(nil),   // 2: account.SettleRequest
+	(*SettleResponse)(nil),  // 3: account.SettleResponse
+	(*ReleaseRequest)(nil),  // 4: account.ReleaseRequest
+	(*ReleaseResponse)(nil), // 5: account.ReleaseResponse
 }
 var file_proto_plugins_account_proto_depIdxs = []int32{
 	0, // 0: account.AccountPlugin.Hold:input_type -> account.HoldRequest
-	2, // 1: account.AccountPlugin.Release:input_type -> account.ReleaseRequest
-	1, // 2: account.AccountPlugin.Hold:output_type -> account.HoldResponse
-	3, // 3: account.AccountPlugin.Release:output_type -> account.ReleaseResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
+	2, // 1: account.AccountPlugin.Settle:input_type -> account.SettleRequest
+	4, // 2: account.AccountPlugin.Release:input_type -> account.ReleaseRequest
+	1, // 3: account.AccountPlugin.Hold:output_type -> account.HoldResponse
+	3, // 4: account.AccountPlugin.Settle:output_type -> account.SettleResponse
+	5, // 5: account.AccountPlugin.Release:output_type -> account.ReleaseResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -328,7 +443,7 @@ func file_proto_plugins_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_plugins_account_proto_rawDesc), len(file_proto_plugins_account_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
