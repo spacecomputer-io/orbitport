@@ -103,6 +103,13 @@ lazy_static! {
             &["status"]
         )
         .unwrap();
+    static ref GATEWAY_ACCOUNT_SETTLE_TOTAL: IntCounterVec =
+        prometheus::register_int_counter_vec!(
+            "op_gateway_account_settle_total",
+            "Total number of account-plugin Settle outcomes",
+            &["status"]
+        )
+        .unwrap();
 }
 
 pub fn record_request(service: &str, status: &str, duration_seconds: f64) {
@@ -145,6 +152,12 @@ pub fn record_account_hold(status: &str) {
 
 pub fn record_account_release(status: &str) {
     GATEWAY_ACCOUNT_RELEASE_TOTAL
+        .with_label_values(&[status])
+        .inc();
+}
+
+pub fn record_account_settle(status: &str) {
+    GATEWAY_ACCOUNT_SETTLE_TOTAL
         .with_label_values(&[status])
         .inc();
 }

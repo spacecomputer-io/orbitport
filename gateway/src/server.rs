@@ -9,8 +9,8 @@ use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
 use crate::filters::{
-    AuthContextWithHold, RateLimiter, account_release, with_account_hold, with_auth,
-    with_rate_limiter,
+    AuthContextWithHold, RateLimiter, account_release, account_settle, with_account_hold,
+    with_auth, with_rate_limiter,
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
@@ -250,6 +250,7 @@ async fn handle_rpc(
     {
         Ok(Ok(result)) => {
             tracing::debug!("RPC executed successfully [id={}]", req_id);
+            account_settle(account_client, &ledger_id).await;
             Ok(warp::reply::json(&result))
         }
         Ok(Err(e)) => {
@@ -423,6 +424,7 @@ async fn handle_service_req(
                     .inc();
                 metrics::record_request(&svc_name, "ok", duration);
                 tracing::debug!("[req={}] Got service result", req_id);
+                account_settle(account_client.clone(), &ledger_id).await;
                 Ok(warp::reply::json(&result))
             }
             Err(e) => {
