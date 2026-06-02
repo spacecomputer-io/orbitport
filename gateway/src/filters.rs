@@ -237,10 +237,7 @@ async fn account_hold(
 /// settle leaves the hold unresolved, so the sweeper refunds it (the customer is
 /// never overcharged — at worst the request goes uncharged). Times out at 2 s
 /// regardless of the per-plugin HTTP timeout.
-pub async fn account_settle(
-    account_client: Option<AccountPluginClient<Channel>>,
-    ledger_id: &str,
-) {
+pub async fn account_settle(account_client: Option<AccountPluginClient<Channel>>, ledger_id: &str) {
     if ledger_id.is_empty() {
         return;
     }
