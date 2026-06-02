@@ -17,7 +17,7 @@ use tonic::transport::{Channel, Server};
 use tonic::{Request, Response, Status};
 
 use gateway::proto::plugins::account::{
-    HoldRequest, HoldResponse, ReleaseRequest, ReleaseResponse,
+    HoldRequest, HoldResponse, ReleaseRequest, ReleaseResponse, SettleRequest, SettleResponse,
     account_plugin_client::AccountPluginClient,
     account_plugin_server::{AccountPlugin, AccountPluginServer},
 };
@@ -61,6 +61,17 @@ impl AccountPlugin for MockAccountPlugin {
         Ok(Response::new(ReleaseResponse {
             ok: true,
             balance_after: 43,
+            error: String::new(),
+        }))
+    }
+
+    async fn settle(
+        &self,
+        _req: Request<SettleRequest>,
+    ) -> Result<Response<SettleResponse>, Status> {
+        Ok(Response::new(SettleResponse {
+            ok: true,
+            balance_after: 42,
             error: String::new(),
         }))
     }

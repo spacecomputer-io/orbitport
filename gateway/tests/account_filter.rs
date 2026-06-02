@@ -25,7 +25,7 @@ use warp::{Filter, Rejection, Reply, http::StatusCode};
 
 use gateway::filters::{AuthContext, AuthContextWithHold, account_release, with_account_hold};
 use gateway::proto::plugins::account::{
-    HoldRequest, HoldResponse, ReleaseRequest, ReleaseResponse,
+    HoldRequest, HoldResponse, ReleaseRequest, ReleaseResponse, SettleRequest, SettleResponse,
     account_plugin_client::AccountPluginClient,
     account_plugin_server::{AccountPlugin, AccountPluginServer},
 };
@@ -66,6 +66,17 @@ impl AccountPlugin for MockAccountPlugin {
         Ok(Response::new(ReleaseResponse {
             ok: true,
             balance_after: 100,
+            error: String::new(),
+        }))
+    }
+
+    async fn settle(
+        &self,
+        _req: Request<SettleRequest>,
+    ) -> Result<Response<SettleResponse>, Status> {
+        Ok(Response::new(SettleResponse {
+            ok: true,
+            balance_after: 99,
             error: String::new(),
         }))
     }
