@@ -112,12 +112,15 @@ impl ThresholdService {
         Self { client, groups }
     }
 
-    pub fn validate_coordinate_dkg(req: &CoordinateDkgRequest) -> Result<(), String> {
-        validate_required("Alias", &req.alias)?;
-        validate_alias(&req.alias)?;
-        validate_required("GroupName", &req.group_name)?;
-        Ok(())
+pub fn validate_coordinate_dkg(req: &CoordinateDkgRequest) -> Result<(), String> {
+    validate_required("Alias", &req.alias)?;
+    validate_alias(&req.alias)?;
+    validate_required("GroupName", &req.group_name)?;
+    if req.group_name != req.group_name.trim() {
+        return Err("group_name must not contain surrounding whitespace".to_string());
     }
+    Ok(())
+}
 
     pub async fn execute(
         &mut self,
