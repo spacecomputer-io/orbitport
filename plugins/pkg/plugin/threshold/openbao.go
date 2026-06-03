@@ -121,7 +121,10 @@ func (c *OpenBaoClient) ReadDKGStatus(ctx context.Context, keyName string) (*DKG
 
 func (c *OpenBaoClient) thresholdPath(parts ...string) string {
 	all := append([]string{"v1", c.mount}, parts...)
-	target, _ := url.JoinPath(c.baseURL, all...)
+	target, err := url.JoinPath(c.baseURL, all...)
+	if err != nil {
+		return strings.TrimRight(c.baseURL, "/") + "/" + strings.Join(all, "/")
+	}
 	return target
 }
 
