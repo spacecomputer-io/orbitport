@@ -187,6 +187,7 @@ impl ThresholdService {
             alias,
             group_name: response.group_name,
             status,
+            public_key: response.public_key,
         })
     }
 }

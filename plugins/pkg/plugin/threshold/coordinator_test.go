@@ -299,6 +299,7 @@ func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, _ *http.Request
 			NodeID:    n.nodeID,
 			Status:    keyStatusCompleted,
 			Round:     4,
+			PublicKey: "AmNvb3JkaW5hdGVkLWdyb3VwLXB1YmxpYy1rZXk=",
 		})
 	default:
 		http.Error(w, "too many proceed calls", http.StatusBadRequest)

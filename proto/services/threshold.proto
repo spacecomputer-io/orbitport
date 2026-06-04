@@ -20,4 +20,5 @@ message CoordinateDkgResponse {
   string alias = 2;
   string group_name = 3;
   string status = 4;
+  string public_key = 5;
 }

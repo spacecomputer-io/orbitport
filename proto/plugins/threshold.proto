@@ -39,4 +39,5 @@ message CoordinateDkgResponse {
   string group_name = 2;
   string session_id = 3;
   repeated DkgNodeStatus nodes = 4;
+  string public_key = 5;
 }

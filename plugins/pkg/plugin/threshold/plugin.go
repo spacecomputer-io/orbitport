@@ -77,6 +77,7 @@ func (p *Plugin) CoordinateDkg(ctx context.Context, req *proto.CoordinateDkgRequ
 		KeyName:   result.KeyName,
 		GroupName: result.GroupName,
 		SessionId: result.SessionID,
+		PublicKey: result.PublicKey,
 		Nodes:     nodes,
 	}, nil
 }

@@ -27,6 +27,7 @@ type DKGResult struct {
 	KeyName   string
 	GroupName string
 	SessionID string
+	PublicKey string
 	Nodes     map[string]DKGStatus
 }
 
@@ -59,6 +60,7 @@ type DKGStatus struct {
 	Broadcast   string            `json:"broadcast,omitempty"`
 	Unicasts    map[string]string `json:"unicasts,omitempty"`
 	PendingFrom []string          `json:"pending_from,omitempty"`
+	PublicKey   string            `json:"public_key,omitempty"`
 }
 
 type ThresholdNodeClient interface {

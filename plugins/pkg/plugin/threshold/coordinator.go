@@ -68,9 +68,18 @@ func (c *Coordinator) CoordinateDKG(ctx context.Context, req DKGRequest) (*DKGRe
 	if err != nil {
 		return nil, err
 	}
+	var publicKey string
 	for nodeID, status := range completed {
 		if status.Status != keyStatusCompleted {
 			return nil, fmt.Errorf("node %q completed round 4 with status %q", nodeID, status.Status)
+		}
+		if status.PublicKey == "" {
+			return nil, fmt.Errorf("node %q completed DKG without a public key", nodeID)
+		}
+		if publicKey == "" {
+			publicKey = status.PublicKey
+		} else if status.PublicKey != publicKey {
+			return nil, fmt.Errorf("node %q derived a different group public key than its peers", nodeID)
 		}
 	}
 
@@ -78,6 +87,7 @@ func (c *Coordinator) CoordinateDKG(ctx context.Context, req DKGRequest) (*DKGRe
 		KeyName:   req.KeyName,
 		GroupName: req.GroupName,
 		SessionID: req.SessionID,
+		PublicKey: publicKey,
 		Nodes:     completed,
 	}, nil
 }
