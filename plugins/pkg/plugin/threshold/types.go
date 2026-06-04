@@ -12,7 +12,7 @@ const (
 type DKGParticipant struct {
 	NodeID     string
 	PartyIndex int
-	Client     ThresholdNodeClient
+	Client     GroupMemberClient
 }
 
 type DKGRequest struct {
@@ -56,14 +56,13 @@ type DKGStatus struct {
 	NodeID      string            `json:"node_id"`
 	Status      string            `json:"status"`
 	Round       int               `json:"round,omitempty"`
-	NextRound   int               `json:"next_round"`
 	Broadcast   string            `json:"broadcast,omitempty"`
 	Unicasts    map[string]string `json:"unicasts,omitempty"`
 	PendingFrom []string          `json:"pending_from,omitempty"`
 	PublicKey   string            `json:"public_key,omitempty"`
 }
 
-type ThresholdNodeClient interface {
+type GroupMemberClient interface {
 	StartDKG(ctx context.Context, req StartDKGRequest) (*DKGStatus, error)
 	DeliverDKG(ctx context.Context, keyName string, req DeliverDKGRequest) (*DKGStatus, error)
 	ProceedDKG(ctx context.Context, keyName string) (*DKGStatus, error)

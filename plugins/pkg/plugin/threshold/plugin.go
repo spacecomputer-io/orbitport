@@ -18,7 +18,7 @@ type Plugin struct {
 
 	timeout     time.Duration
 	coordinator *Coordinator
-	newClient   func(node *proto.ThresholdNode) ThresholdNodeClient
+	newClient   func(member *proto.GroupMember) GroupMemberClient
 }
 
 var logger = utils.GetLogger("orbitport:threshold")
@@ -34,10 +34,10 @@ func newPlugin(cfg *thresholdConfig, coordinator *Coordinator) *Plugin {
 	return &Plugin{
 		timeout:     timeout,
 		coordinator: coordinator,
-		newClient: func(node *proto.ThresholdNode) ThresholdNodeClient {
+		newClient: func(member *proto.GroupMember) GroupMemberClient {
 			return NewOpenBaoClient(OpenBaoClientConfig{
-				BaseURL: node.OpenbaoUrl,
-				Mount:   node.Mount,
+				BaseURL: member.OpenbaoUrl,
+				Mount:   member.Mount,
 				Timeout: timeout,
 			})
 		},
@@ -65,7 +65,6 @@ func (p *Plugin) CoordinateDkg(ctx context.Context, req *proto.CoordinateDkgRequ
 			NodeId:      nodeID,
 			Status:      node.Status,
 			Round:       int32(node.Round),
-			NextRound:   int32(node.NextRound),
 			PendingFrom: node.PendingFrom,
 		})
 	}
@@ -137,7 +136,7 @@ func (p *Plugin) dkgRequestFromProto(req *proto.CoordinateDkgRequest) (DKGReques
 		}
 		seenPartyIndexes[participant.PartyIndex] = struct{}{}
 
-		normalizedNode := &proto.ThresholdNode{
+		normalizedMember := &proto.GroupMember{
 			NodeId:     nodeID,
 			PartyIndex: participant.PartyIndex,
 			OpenbaoUrl: openBaoURL,
@@ -146,7 +145,7 @@ func (p *Plugin) dkgRequestFromProto(req *proto.CoordinateDkgRequest) (DKGReques
 		dkgRequest.Participants = append(dkgRequest.Participants, DKGParticipant{
 			NodeID:     nodeID,
 			PartyIndex: int(participant.PartyIndex),
-			Client:     p.newClient(normalizedNode),
+			Client:     p.newClient(normalizedMember),
 		})
 	}
 

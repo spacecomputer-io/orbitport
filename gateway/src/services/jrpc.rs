@@ -90,7 +90,7 @@ pub enum RpcCall {
     RotateKey(RotateKeyRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
-    #[serde(rename = "threshold.CoordinateDKG")]
+    #[serde(rename = "kms_threshold.CoordinateDKG")]
     CoordinateDKG(CoordinateDkgRequest),
 }
 
@@ -284,7 +284,7 @@ mod test {
         let raw = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 9,
-            "method": "threshold.CoordinateDKG",
+            "method": "kms_threshold.CoordinateDKG",
             "params": {
                 "Alias": "key-1",
                 "GroupName": "team-a"
@@ -297,7 +297,7 @@ mod test {
                 assert_eq!(params.alias, "key-1");
                 assert_eq!(params.group_name, "team-a");
             }
-            _ => panic!("expected threshold.CoordinateDKG"),
+            _ => panic!("expected kms_threshold.CoordinateDKG"),
         }
     }
 }

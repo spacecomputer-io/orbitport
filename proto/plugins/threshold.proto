@@ -10,7 +10,7 @@ service ThresholdPlugin {
   rpc CoordinateDkg(CoordinateDkgRequest) returns (CoordinateDkgResponse);
 }
 
-message ThresholdNode {
+message GroupMember {
   string node_id = 1;
   int32 party_index = 2;
   string openbao_url = 3;
@@ -21,7 +21,6 @@ message DkgNodeStatus {
   string node_id = 1;
   string status = 2;
   int32 round = 3;
-  int32 next_round = 4;
   repeated string pending_from = 5;
 }
 
@@ -30,7 +29,7 @@ message CoordinateDkgRequest {
   string group_name = 2;
   string session_id = 3;
   int32 threshold = 4;
-  repeated ThresholdNode participants = 5;
+  repeated GroupMember participants = 5;
   string client_id = 6;
 }
 

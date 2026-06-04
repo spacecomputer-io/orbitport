@@ -6,7 +6,7 @@ use tonic::transport::Channel;
 
 use crate::proto::plugins::threshold::{
     CoordinateDkgRequest as PluginCoordinateDkgRequest,
-    CoordinateDkgResponse as PluginCoordinateDkgResponse, ThresholdNode as PluginThresholdNode,
+    CoordinateDkgResponse as PluginCoordinateDkgResponse, GroupMember as PluginGroupMember,
     threshold_plugin_client::ThresholdPluginClient,
 };
 use crate::proto::services::threshold::{CoordinateDkgRequest, CoordinateDkgResponse};
@@ -23,11 +23,11 @@ pub struct ThresholdGroupRegistry {
 #[derive(Clone, Debug, Deserialize)]
 pub struct ThresholdGroupConfig {
     threshold: i32,
-    participants: Vec<ThresholdNodeConfig>,
+    participants: Vec<GroupMemberConfig>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct ThresholdNodeConfig {
+pub struct GroupMemberConfig {
     node_id: String,
     party_index: i32,
     openbao_url: String,
@@ -165,7 +165,7 @@ impl ThresholdService {
                 participants: group
                     .participants
                     .into_iter()
-                    .map(|node| PluginThresholdNode {
+                    .map(|node| PluginGroupMember {
                         node_id: node.node_id,
                         party_index: node.party_index,
                         openbao_url: node.openbao_url,

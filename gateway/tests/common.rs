@@ -118,7 +118,7 @@ pub async fn rpc_threshold_coordinate_dkg(
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": req_id,
-        "method": "threshold.CoordinateDKG",
+        "method": "kms_threshold.CoordinateDKG",
         "params": {
             "Alias": format!("e2e-key-{req_id}"),
             "GroupName": THRESHOLD_GROUP

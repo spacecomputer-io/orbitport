@@ -24,7 +24,7 @@ func TestPluginCoordinateDkg(t *testing.T) {
 		GroupName: "team-a",
 		SessionId: "dkg-1",
 		Threshold: 2,
-		Participants: []*proto.ThresholdNode{
+		Participants: []*proto.GroupMember{
 			{NodeId: "node-a", PartyIndex: 0, OpenbaoUrl: nodes["node-a"].server.URL, Mount: "threshold"},
 			{NodeId: "node-b", PartyIndex: 1, OpenbaoUrl: nodes["node-b"].server.URL, Mount: "threshold"},
 			{NodeId: "node-c", PartyIndex: 2, OpenbaoUrl: nodes["node-c"].server.URL, Mount: "threshold"},
@@ -54,7 +54,7 @@ func TestPluginCoordinateDkgRejectsInvalidRequest(t *testing.T) {
 		GroupName: "team-a",
 		SessionId: "dkg-1",
 		Threshold: 2,
-		Participants: []*proto.ThresholdNode{
+		Participants: []*proto.GroupMember{
 			{NodeId: "node-a", PartyIndex: 0, OpenbaoUrl: "http://node-a"},
 		},
 	})
@@ -75,7 +75,7 @@ func TestPluginCoordinateDkgHonorsTimeout(t *testing.T) {
 		GroupName: "team-a",
 		SessionId: "dkg-1",
 		Threshold: 2,
-		Participants: []*proto.ThresholdNode{
+		Participants: []*proto.GroupMember{
 			{NodeId: "node-a", PartyIndex: 0, OpenbaoUrl: "http://127.0.0.1:1"},
 			{NodeId: "node-b", PartyIndex: 1, OpenbaoUrl: "http://127.0.0.1:1"},
 		},

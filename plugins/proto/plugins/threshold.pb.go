@@ -24,7 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ThresholdNode struct {
+type GroupMember struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	PartyIndex    int32                  `protobuf:"varint,2,opt,name=party_index,json=partyIndex,proto3" json:"party_index,omitempty"`
@@ -34,20 +34,20 @@ type ThresholdNode struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ThresholdNode) Reset() {
-	*x = ThresholdNode{}
+func (x *GroupMember) Reset() {
+	*x = GroupMember{}
 	mi := &file_proto_plugins_threshold_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ThresholdNode) String() string {
+func (x *GroupMember) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ThresholdNode) ProtoMessage() {}
+func (*GroupMember) ProtoMessage() {}
 
-func (x *ThresholdNode) ProtoReflect() protoreflect.Message {
+func (x *GroupMember) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_plugins_threshold_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -59,33 +59,33 @@ func (x *ThresholdNode) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ThresholdNode.ProtoReflect.Descriptor instead.
-func (*ThresholdNode) Descriptor() ([]byte, []int) {
+// Deprecated: Use GroupMember.ProtoReflect.Descriptor instead.
+func (*GroupMember) Descriptor() ([]byte, []int) {
 	return file_proto_plugins_threshold_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ThresholdNode) GetNodeId() string {
+func (x *GroupMember) GetNodeId() string {
 	if x != nil {
 		return x.NodeId
 	}
 	return ""
 }
 
-func (x *ThresholdNode) GetPartyIndex() int32 {
+func (x *GroupMember) GetPartyIndex() int32 {
 	if x != nil {
 		return x.PartyIndex
 	}
 	return 0
 }
 
-func (x *ThresholdNode) GetOpenbaoUrl() string {
+func (x *GroupMember) GetOpenbaoUrl() string {
 	if x != nil {
 		return x.OpenbaoUrl
 	}
 	return ""
 }
 
-func (x *ThresholdNode) GetMount() string {
+func (x *GroupMember) GetMount() string {
 	if x != nil {
 		return x.Mount
 	}
@@ -97,7 +97,6 @@ type DkgNodeStatus struct {
 	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
 	Status        string                 `protobuf:"bytes,2,opt,name=status,proto3" json:"status,omitempty"`
 	Round         int32                  `protobuf:"varint,3,opt,name=round,proto3" json:"round,omitempty"`
-	NextRound     int32                  `protobuf:"varint,4,opt,name=next_round,json=nextRound,proto3" json:"next_round,omitempty"`
 	PendingFrom   []string               `protobuf:"bytes,5,rep,name=pending_from,json=pendingFrom,proto3" json:"pending_from,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -154,13 +153,6 @@ func (x *DkgNodeStatus) GetRound() int32 {
 	return 0
 }
 
-func (x *DkgNodeStatus) GetNextRound() int32 {
-	if x != nil {
-		return x.NextRound
-	}
-	return 0
-}
-
 func (x *DkgNodeStatus) GetPendingFrom() []string {
 	if x != nil {
 		return x.PendingFrom
@@ -174,7 +166,7 @@ type CoordinateDkgRequest struct {
 	GroupName     string                 `protobuf:"bytes,2,opt,name=group_name,json=groupName,proto3" json:"group_name,omitempty"`
 	SessionId     string                 `protobuf:"bytes,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Threshold     int32                  `protobuf:"varint,4,opt,name=threshold,proto3" json:"threshold,omitempty"`
-	Participants  []*ThresholdNode       `protobuf:"bytes,5,rep,name=participants,proto3" json:"participants,omitempty"`
+	Participants  []*GroupMember         `protobuf:"bytes,5,rep,name=participants,proto3" json:"participants,omitempty"`
 	ClientId      string                 `protobuf:"bytes,6,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -238,7 +230,7 @@ func (x *CoordinateDkgRequest) GetThreshold() int32 {
 	return 0
 }
 
-func (x *CoordinateDkgRequest) GetParticipants() []*ThresholdNode {
+func (x *CoordinateDkgRequest) GetParticipants() []*GroupMember {
 	if x != nil {
 		return x.Participants
 	}
@@ -332,29 +324,27 @@ var File_proto_plugins_threshold_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_threshold_proto_rawDesc = "" +
 	"\n" +
-	"\x1dproto/plugins/threshold.proto\x12\fthresholdapi\"\x80\x01\n" +
-	"\rThresholdNode\x12\x17\n" +
+	"\x1dproto/plugins/threshold.proto\x12\fthresholdapi\"~\n" +
+	"\vGroupMember\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x1f\n" +
 	"\vparty_index\x18\x02 \x01(\x05R\n" +
 	"partyIndex\x12\x1f\n" +
 	"\vopenbao_url\x18\x03 \x01(\tR\n" +
 	"openbaoUrl\x12\x14\n" +
-	"\x05mount\x18\x04 \x01(\tR\x05mount\"\x98\x01\n" +
+	"\x05mount\x18\x04 \x01(\tR\x05mount\"y\n" +
 	"\rDkgNodeStatus\x12\x17\n" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x14\n" +
-	"\x05round\x18\x03 \x01(\x05R\x05round\x12\x1d\n" +
-	"\n" +
-	"next_round\x18\x04 \x01(\x05R\tnextRound\x12!\n" +
-	"\fpending_from\x18\x05 \x03(\tR\vpendingFrom\"\xeb\x01\n" +
+	"\x05round\x18\x03 \x01(\x05R\x05round\x12!\n" +
+	"\fpending_from\x18\x05 \x03(\tR\vpendingFrom\"\xe9\x01\n" +
 	"\x14CoordinateDkgRequest\x12\x19\n" +
 	"\bkey_name\x18\x01 \x01(\tR\akeyName\x12\x1d\n" +
 	"\n" +
 	"group_name\x18\x02 \x01(\tR\tgroupName\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1c\n" +
-	"\tthreshold\x18\x04 \x01(\x05R\tthreshold\x12?\n" +
-	"\fparticipants\x18\x05 \x03(\v2\x1b.thresholdapi.ThresholdNodeR\fparticipants\x12\x1b\n" +
+	"\tthreshold\x18\x04 \x01(\x05R\tthreshold\x12=\n" +
+	"\fparticipants\x18\x05 \x03(\v2\x19.thresholdapi.GroupMemberR\fparticipants\x12\x1b\n" +
 	"\tclient_id\x18\x06 \x01(\tR\bclientId\"\xc2\x01\n" +
 	"\x15CoordinateDkgResponse\x12\x19\n" +
 	"\bkey_name\x18\x01 \x01(\tR\akeyName\x12\x1d\n" +
@@ -382,13 +372,13 @@ func file_proto_plugins_threshold_proto_rawDescGZIP() []byte {
 
 var file_proto_plugins_threshold_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_plugins_threshold_proto_goTypes = []any{
-	(*ThresholdNode)(nil),         // 0: thresholdapi.ThresholdNode
+	(*GroupMember)(nil),           // 0: thresholdapi.GroupMember
 	(*DkgNodeStatus)(nil),         // 1: thresholdapi.DkgNodeStatus
 	(*CoordinateDkgRequest)(nil),  // 2: thresholdapi.CoordinateDkgRequest
 	(*CoordinateDkgResponse)(nil), // 3: thresholdapi.CoordinateDkgResponse
 }
 var file_proto_plugins_threshold_proto_depIdxs = []int32{
-	0, // 0: thresholdapi.CoordinateDkgRequest.participants:type_name -> thresholdapi.ThresholdNode
+	0, // 0: thresholdapi.CoordinateDkgRequest.participants:type_name -> thresholdapi.GroupMember
 	1, // 1: thresholdapi.CoordinateDkgResponse.nodes:type_name -> thresholdapi.DkgNodeStatus
 	2, // 2: thresholdapi.ThresholdPlugin.CoordinateDkg:input_type -> thresholdapi.CoordinateDkgRequest
 	3, // 3: thresholdapi.ThresholdPlugin.CoordinateDkg:output_type -> thresholdapi.CoordinateDkgResponse

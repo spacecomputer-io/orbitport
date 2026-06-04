@@ -173,7 +173,7 @@ func (n *fakeThresholdNode) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/threshold/keys/key-1/dkg/proceed":
 		n.handleProceed(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/threshold/keys/key-1/dkg/status":
-		writeOpenBaoData(w, n.status(0, 0, "", nil))
+		writeOpenBaoData(w, n.status(0, "", nil))
 	default:
 		http.Error(w, fmt.Sprintf("unexpected request %s %s", r.Method, r.URL.Path), http.StatusNotFound)
 	}
@@ -251,7 +251,7 @@ func (n *fakeThresholdNode) handleStart(w http.ResponseWriter, r *http.Request) 
 	n.commonSeed = req.CommonSeed
 	n.pairwiseSeeds = pairwiseSeeds
 	n.mu.Unlock()
-	writeOpenBaoData(w, n.status(1, 2, "round1:"+n.nodeID, nil))
+	writeOpenBaoData(w, n.status(1, "round1:"+n.nodeID, nil))
 }
 
 func (n *fakeThresholdNode) handleDeliver(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +265,7 @@ func (n *fakeThresholdNode) handleDeliver(w http.ResponseWriter, r *http.Request
 	n.mu.Lock()
 	n.deliveries = append(n.deliveries, req)
 	n.mu.Unlock()
-	writeOpenBaoData(w, n.status(0, 0, "", nil))
+	writeOpenBaoData(w, n.status(0, "", nil))
 }
 
 func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, _ *http.Request) {
@@ -280,13 +280,13 @@ func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, _ *http.Request
 			http.Error(w, "round 1 deliveries missing", http.StatusBadRequest)
 			return
 		}
-		writeOpenBaoData(w, n.status(2, 3, "round2:"+n.nodeID, n.round2Unicasts()))
+		writeOpenBaoData(w, n.status(2, "round2:"+n.nodeID, n.round2Unicasts()))
 	case 2:
 		if !n.hasDeliveriesForRound(2) {
 			http.Error(w, "round 2 deliveries missing", http.StatusBadRequest)
 			return
 		}
-		writeOpenBaoData(w, n.status(3, 4, "round3:"+n.nodeID, nil))
+		writeOpenBaoData(w, n.status(3, "round3:"+n.nodeID, nil))
 	case 3:
 		if !n.hasDeliveriesForRound(3) {
 			http.Error(w, "round 3 deliveries missing", http.StatusBadRequest)
@@ -306,7 +306,7 @@ func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, _ *http.Request
 	}
 }
 
-func (n *fakeThresholdNode) status(round, nextRound int, broadcast string, unicasts map[string]string) DKGStatus {
+func (n *fakeThresholdNode) status(round int, broadcast string, unicasts map[string]string) DKGStatus {
 	return DKGStatus{
 		Name:      "key-1",
 		Group:     "team-a",
@@ -314,7 +314,6 @@ func (n *fakeThresholdNode) status(round, nextRound int, broadcast string, unica
 		NodeID:    n.nodeID,
 		Status:    fmt.Sprintf("waiting_round_%d", round),
 		Round:     round,
-		NextRound: nextRound,
 		Broadcast: broadcast,
 		Unicasts:  unicasts,
 	}
