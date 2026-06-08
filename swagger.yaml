@@ -14,11 +14,11 @@ paths:
           name: src
           schema:
             type: string
-            enum: [aptosorbital, derived]
-            default: aptosorbital
+            enum: [crypto2, derived]
+            default: crypto2
           description: |
             The gateway supports multiple sources of randomness:
-            1. **aptosorbital**: Space-based randomness provided by `cEDGE` or `Crypto2` satellites.
+            1. **crypto2**: Space-based randomness provided by `cEDGE` or `Crypto2` satellites.
             2. **derived**: Randomness derived from a cosmic TRNG (master seed) that is fetched continuously. The seed is used to generate more random numbers when satellites are not responsive, by using it as a seed for a BIP32 master key and deriving keys from it.
         - in: query
           name: bulk
@@ -41,9 +41,9 @@ paths:
                 properties:
                   src:
                     type: string
-                    description: The source of the random data, either `aptosorbital` or `derived`.
+                    description: The source of the random data, either `crypto2` or `derived`.
                     enum:
-                      - aptosorbital
+                      - crypto2
                       - derived
                   service:
                     type: string
@@ -65,7 +65,7 @@ paths:
                         description: The public key used for the signature.
               example:
                 service: "trng"
-                src: "aptosorbital"
+                src: "crypto2"
                 data: "a1b2c3d4e5f67890abcdef1234567890a1b2c3d4e5f67890abcdef1234567890"
         '500':
           description: Internal Server Error

@@ -17,8 +17,8 @@ import (
 
 type Plugin struct {
 	proto.MasterSeedPluginServer
-	aptosConn          *grpc.ClientConn
-	aptosClient        proto.RandomnessPluginClient
+	crypto2Conn        *grpc.ClientConn
+	crypto2Client      proto.RandomnessPluginClient
 	masterSeeds        []MasterSeed
 	mu                 sync.RWMutex
 	seedInterval       time.Duration
@@ -32,9 +32,9 @@ func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
 	defaultMasterSeeds := append([]string(nil), cfg.MasterSeedDefaultMasterSeeds...)
 
-	conn, aptosClient, err := getAptosPluginClient(*cfg)
+	conn, crypto2Client, err := getCrypto2PluginClient(*cfg)
 	if err != nil {
-		return nil, fmt.Errorf("failed to init aptos client: %w", err)
+		return nil, fmt.Errorf("failed to init crypto2 client: %w", err)
 	}
 
 	trngSize := cfg.MasterSeedTRNGSize
@@ -55,8 +55,8 @@ func NewPlugin() (*Plugin, error) {
 	}
 
 	p := &Plugin{
-		aptosConn:          conn,
-		aptosClient:        aptosClient,
+		crypto2Conn:        conn,
+		crypto2Client:      crypto2Client,
 		masterSeeds:        make([]MasterSeed, 0, maxMasterSeeds),
 		seedInterval:       time.Duration(seedPeriod) * time.Second,
 		trngSize:           trngSize,
@@ -73,9 +73,9 @@ func (p *Plugin) Close() error {
 	logger := utils.GetLogger("orbitport:masterseed")
 	logger.Info("Stopping masterseed plugin...")
 
-	if p.aptosConn != nil {
-		if err := p.aptosConn.Close(); err != nil {
-			logger.Errorf("error closing aptos client connection: %v", err)
+	if p.crypto2Conn != nil {
+		if err := p.crypto2Conn.Close(); err != nil {
+			logger.Errorf("error closing crypto2 client connection: %v", err)
 			return err
 		}
 	}
@@ -110,12 +110,12 @@ func (p *Plugin) startSeedFetch(ctx context.Context, defaulMastertSeeds []string
 				logger.Info("Stopping master seed fetcher")
 				return
 			case <-ticker.C:
-				resp, err := p.aptosClient.GetTrng(ctx, &proto.TrngRequest{
+				resp, err := p.crypto2Client.GetTrng(ctx, &proto.TrngRequest{
 					IgnoreSig: true,
 					Chunks:    1,
 				})
 				if err != nil || len(resp.GetValues()) == 0 {
-					logger.Warnf("Failed to fetch master seed from aptos: %v", err)
+					logger.Warnf("Failed to fetch master seed from crypto2: %v", err)
 					continue
 				}
 

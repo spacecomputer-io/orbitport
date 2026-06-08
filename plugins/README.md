@@ -4,7 +4,7 @@ Plugins are grpc services that runs in their own processes and encapsulate the l
 
 ## Plugins
 
-- [x] [Aptos Orbital](./pkg/plugin/aptosorbital)
+- [x] [Crypto2](./pkg/plugin/crypto2)
 - [x] [Auth](./pkg/plugin/auth)
 - [x] [IPFS](./pkg/plugin/ipfs)
 - [x] [Beacon](./pkg/plugin/beacon)
@@ -19,7 +19,7 @@ Available commands are listed in the `Makefile`:
 make help
 ```
 
-To run an plugin, you need to create/fill the corresponding `.env` file (e.g. `.aptosorbital.env` or `.auth.env`), and then
+To run an plugin, you need to create/fill the corresponding `.env` file (e.g. `.crypto2.env` or `.auth.env`), and then
 use the `ENV_FILE` arg to specify the file to use:
 
 ```sh
@@ -40,7 +40,7 @@ and
 [`docker/openbao/bootstrap.sh`](../docker/openbao/bootstrap.sh)
 to build the Ethereum plugin, register it with OpenBao, and enable the required local mounts.
 
-for happy-path (testing aptos connectivity):
+for happy-path (testing crypto2 connectivity):
 ```sh
 make ENV_FILE=.dev.env.ci E2E_PROFILE=happy devenv-up
 make e2e-all
@@ -48,7 +48,7 @@ make go-e2e
 make devenv-down
 ```
 
-for offline (testing lack of aptos connectivity - fallback):
+for offline (testing lack of crypto2 connectivity - fallback):
 ```sh
 make ENV_FILE=.dev.env.ci E2E_PROFILE=offline devenv-up
 make go-e2e-offline

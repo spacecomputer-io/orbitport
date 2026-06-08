@@ -1,4 +1,4 @@
-package aptosorbital
+package crypto2
 
 import (
 	"fmt"
@@ -6,11 +6,11 @@ import (
 )
 
 const (
-	API_URL  = "https://api.aptosorbital.com"
-	AUTH_URL = "https://auth.aptosorbital.com/oauth2/token"
+	DefaultAPIURL  = "https://api.aptosorbital.com"
+	DefaultAuthURL = "https://auth.aptosorbital.com/oauth2/token"
 )
 
-// ClientOptions contains the configuration options for the Aptos Orbital client.
+// ClientOptions contains the configuration options for the Crypto2 client.
 type ClientOptions struct {
 	apiURL       string
 	authURL      string
@@ -32,10 +32,10 @@ func (o *ClientOptions) apply(opts ...ClientOption) error {
 // defaults sets the default values for the ClientOptions.
 func (o *ClientOptions) defaults() error {
 	if len(o.apiURL) == 0 {
-		o.apiURL = API_URL
+		o.apiURL = DefaultAPIURL
 	}
 	if len(o.authURL) == 0 {
-		o.authURL = AUTH_URL
+		o.authURL = DefaultAuthURL
 	}
 	if len(o.clientID) == 0 {
 		return fmt.Errorf("client ID is required")

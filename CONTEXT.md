@@ -4,11 +4,11 @@ Deep-dive context for contributors and AI tooling. The user-facing entrypoint is
 
 ## Architecture
 
-The project is split across two languages. A **Rust gateway** terminates HTTP and JSON-RPC at the edge, handles JWT authentication and per-token rate limiting, and fans out to a set of **Go plugins** over gRPC. Plugins are stateless sidecars that either wrap an upstream provider (e.g. Aptos Orbital, IPFS) or run a background service (e.g. the randomness beacon).
+The project is split across two languages. A **Rust gateway** terminates HTTP and JSON-RPC at the edge, handles JWT authentication and per-token rate limiting, and fans out to a set of **Go plugins** over gRPC. Plugins are stateless sidecars that either wrap an upstream provider (e.g. the Crypto2 satellite API, IPFS) or run a background service (e.g. the randomness beacon).
 
 The gateway is a [Warp](https://github.com/seanmonstar/warp) + [Tonic](https://github.com/hyperium/tonic) server. At startup it performs a gRPC health-check wait on the `auth` and `masterseed` plugins (60 s deadline) before it accepts traffic, so a half-started stack never serves requests. Once live it listens on two ports: HTTP on `8080` and Prometheus metrics on `9100`.
 
-All plugins share a single `op-plugin` binary that dispatches to the right implementation based on the `ORBITPORT_PLUGIN` env var — which is how one Docker image ends up running six different services in the compose stack. Plugin-to-plugin discovery is env-var driven (`ORBITPORT_APTOS_PLUGIN`, `ORBITPORT_IPFS_PLUGIN`, etc.), and every plugin exports its own Prometheus metrics on port `9000`.
+All plugins share a single `op-plugin` binary that dispatches to the right implementation based on the `ORBITPORT_PLUGIN` env var — which is how one Docker image ends up running six different services in the compose stack. Plugin-to-plugin discovery is env-var driven (`ORBITPORT_CRYPTO2_PLUGIN`, `ORBITPORT_IPFS_PLUGIN`, etc.), and every plugin exports its own Prometheus metrics on port `9000`. Legacy selector/env aliases are still accepted in code for compatibility.
 
 Protobuf definitions live at the top-level [`proto/`](proto/) directory, split into `proto/services/` (external contracts the gateway exposes to clients, e.g. `ctrng.proto`) and `proto/plugins/` (internal gRPC contracts between gateway and plugins). Rust bindings are generated at build time via `tonic-build`; Go bindings are checked in under `plugins/proto/plugins/`.
 
@@ -23,7 +23,7 @@ gateway/                    Rust HTTP + JSON-RPC server (Warp + Tonic)
 
 plugins/                    Go gRPC plugin services
   cmd/plugin/               Plugin dispatcher binary (selects via ORBITPORT_PLUGIN)
-  cmd/mocker/               Mock Aptos Orbital API for dev/e2e
+  cmd/mocker/               Mock Crypto2 API for dev/e2e
   pkg/plugin/               Plugin implementations (see below)
   pkg/core/health/          gRPC health-check dependency waiter
   proto/plugins/            Generated Go code for internal plugin protos
@@ -33,7 +33,7 @@ proto/                      Protobuf source of truth
   services/                 External gateway services (ctrng.proto)
   plugins/                  Internal plugin RPCs (ao, auth, ipfs, masterseed)
 
-docker-compose.yaml         Stack against real upstreams (Aptos Orbital + Auth0)
+docker-compose.yaml         Stack against real upstreams (Crypto2 + Auth0)
 dev.docker-compose.yaml     Dev stack (mocker + authnoop, no external credentials)
 beacons.yaml                Public beacon registry
 ```
@@ -42,7 +42,7 @@ beacons.yaml                Public beacon registry
 
 | Plugin | Role | Notes |
 | --- | --- | --- |
-| [`aptosorbital`](plugins/pkg/plugin/aptosorbital/README.md) | Fetches true random seeds from the Aptos Orbital satellite API | Wraps `api.aptosorbital.com` |
+| [`crypto2`](plugins/pkg/plugin/crypto2/README.md) | Fetches true random seeds from the Crypto2 satellite API | Wraps the current upstream randomness endpoint |
 | [`auth`](plugins/pkg/plugin/auth/README.md) | Fail-closed Auth0 JWT validation | Refuses to start without `AUTH0_DOMAIN`/`AUTH0_AUDIENCE` |
 | [`authnoop`](plugins/pkg/plugin/authnoop/README.md) | Dev-only noop auth — accepts every token | Used in `dev.docker-compose.yaml` |
 | [`ipfs`](plugins/pkg/plugin/ipfs/README.md) | Kubo wrapper with LRU cache, size ceilings, and IPNS publishing | Backs the beacon |
@@ -63,7 +63,6 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_METRICS_PORT` | `9100` | Prometheus metrics port |
 | `ORBITPORT_AUTH_PLUGIN` | — | gRPC URL of the auth plugin (required) |
 | `ORBITPORT_MASTERSEED_PLUGIN` | — | gRPC URL of the masterseed plugin (required) |
-| `ORBITPORT_TRNG_PLUGIN` | — | gRPC URL of the cTRNG plugin (`aptosorbital`) |
 | `ORBITPORT_KMS_PLUGIN` | — | gRPC URL of the KMS plugin |
 | `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving and release on downstream failure. |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
@@ -76,7 +75,7 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `ORBITPORT_PLUGIN` | `aptosorbital` | Which plugin this binary runs |
+| `ORBITPORT_PLUGIN` | `crypto2` | Which plugin this binary runs |
 | `ORBITPORT_GRPC_PORT` | `50001` | gRPC listen port |
 | `ORBITPORT_METRICS_PORT` | `9000` | Prometheus metrics port |
 
@@ -89,26 +88,31 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 
 `authnoop` takes no configuration.
 
-### Plugin: `aptosorbital`
+### Plugin: `crypto2`
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `ORBITPORT_APTOS_ORBITAL_CLIENT_ID` | — | OAuth client ID (required) |
-| `ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET` | — | OAuth client secret (required) |
-| `ORBITPORT_APTOS_ORBITAL_API_URL` | `https://api.aptosorbital.com` | Aptos Orbital API base URL |
-| `ORBITPORT_APTOS_ORBITAL_AUTH_URL` | `https://auth.aptosorbital.com/oauth2/token` | OAuth token endpoint |
-| `ORBITPORT_APTOS_ORBITAL_RATE_LIMIT` | `0.1` | Outbound rate limit (req/s) |
+| `ORBITPORT_CRYPTO2_CLIENT_ID` | — | OAuth client ID for the Crypto2 satellite API (required) |
+| `ORBITPORT_CRYPTO2_CLIENT_SECRET` | — | OAuth client secret for the Crypto2 satellite API (required) |
+| `ORBITPORT_CRYPTO2_API_URL` | upstream default | Crypto2 API base URL |
+| `ORBITPORT_CRYPTO2_AUTH_URL` | upstream default | OAuth token endpoint |
+| `ORBITPORT_CRYPTO2_RATE_LIMIT` | `0.5` | Outbound rate limit (req/s) |
+| `ORBITPORT_CRYPTO2_TIMEOUT` | `20` | HTTP timeout in seconds |
+
+Legacy env aliases are still accepted in code.
 
 ### Plugin: `masterseed`
 
 | Env var | Default | Purpose |
 | --- | --- | --- |
-| `ORBITPORT_APTOS_PLUGIN` | — | gRPC address of the `aptosorbital` plugin (required) |
+| `ORBITPORT_CRYPTO2_PLUGIN` | `plugin-crypto2:50001` | gRPC address of the `crypto2` plugin |
 | `ORBITPORT_DEFAULT_MASTER_SEEDS` | — | Comma-separated hex seeds for bootstrap |
 | `ORBITPORT_MASTERSEED_TRNG_SIZE` | `32` | Derived output size in bytes |
 | `ORBITPORT_MASTERSEED_MAX_SEEDS` | `100` | Max master seeds kept in the pool |
 | `ORBITPORT_MASTERSEED_PERIOD` | `3600` | Refresh interval in seconds |
-| `ORBITPORT_MASTER_SEED_MAX_COUNT_PER_REQUEST` | `1000` | Max derived seeds per `GetSeeds` call |
+| `ORBITPORT_MASTER_SEED_MAX_COUNT_PER_REQUEST` | `25000` | Max derived seeds per `GetSeeds` call |
+
+Legacy plugin-address aliases are still accepted in code.
 
 ### Plugin: `ipfs`
 
@@ -125,7 +129,7 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | Env var | Default | Purpose |
 | --- | --- | --- |
 | `ORBITPORT_IPFS_PLUGIN` | `plugin-ipfs:50002` | gRPC address of the IPFS plugin |
-| `ORBITPORT_CTRNG_PLUGIN` | `plugin-aptos-orbital:50001` | gRPC address of the cTRNG plugin |
+| `ORBITPORT_CTRNG_PLUGIN` | `plugin-crypto2:50001` | gRPC address of the cTRNG plugin |
 | `ORBITPORT_MASTERSEED_PLUGIN` | `plugin-masterseed:50003` | gRPC address of the masterseed plugin |
 | `ORBITPORT_BEACON_REGISTRY` | `orbitport-registry` | IPNS key alias used for publishing |
 | `ORBITPORT_DEFAULT_BEACON_NAME` | `randomness-beacon1.0` | Default beacon identifier |
@@ -175,17 +179,17 @@ Proto sources live at top-level [`proto/`](proto/). After editing:
 | Lint (clippy + golangci-lint) | `make lint` | |
 | Format check | `make fmt` | |
 | Gateway happy-path e2e | `make e2e` | Stands up dev compose, hits real endpoints |
-| Gateway offline e2e | `make E2E_PROFILE=offline e2e` | Aptos Orbital unreachable; exercises masterseed/beacon fallback |
+| Gateway offline e2e | `make E2E_PROFILE=offline e2e` | Crypto2 unreachable; exercises masterseed/beacon fallback |
 | All gateway e2e suites | `make e2e-all` | |
 | Go beacon e2e | `make go-e2e` / `make go-e2e-offline` | |
 
-E2E profiles: `happy` (all upstreams available) and `offline` (Aptos Orbital unreachable, exercising the masterseed and beacon fallback paths).
+E2E profiles: `happy` (all upstreams available) and `offline` (Crypto2 unreachable, exercising the masterseed and beacon fallback paths).
 
 ## Docker
 
 - `op-gateway:<tag>` — Rust gateway.
 - `op-plugin:<tag>` — multi-purpose Go plugin binary (dispatched by `ORBITPORT_PLUGIN`).
-- `op-mocker:<tag>` — Aptos Orbital API mock used by `dev.docker-compose.yaml`.
+- `op-mocker:<tag>` — Crypto2 API mock used by `dev.docker-compose.yaml`.
 
 All images run as unprivileged users. Build locally with `make docker-build`. Images are published to `ghcr.io/spacecomputer-io/orbitport/` on semver tags via `.github/workflows/build_push.yml`.
 

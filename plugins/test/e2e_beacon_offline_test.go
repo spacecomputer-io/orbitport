@@ -8,7 +8,7 @@ import (
 )
 
 // TestBeaconProducesBlocksOffline ensures that with the "offline" profile
-// (Aptos Orbital unavailable), the beacon still produces blocks by
+// (Crypto2 unavailable), the beacon still produces blocks by
 // falling back to the MasterSeed plugin.
 func TestBeaconProducesBlocksOffline(t *testing.T) {
 	requireE2EProfile(t, "offline")

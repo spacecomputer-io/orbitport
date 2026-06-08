@@ -113,54 +113,54 @@ services:
     ports:
       - 50002:50002 # expose the port for integration tests
 
-  aptos-orbital-api:
+  crypto2-api:
     <<: *mocker-base
-    container_name: aptos-orbital-api
+    container_name: crypto2-api
     build:
       context: ./plugins
       args:
         - BUILD_TARGET=mocker
     image: op-mocker:latest
     environment:
-      - OPMOCK_SERVICE=aptosorbital_api
+      - OPMOCK_SERVICE=crypto2_api
       - OPMOCK_PORT=8001
       - OPMOCK_PROFILE=${OPMOCK_PROFILE}
     depends_on:
-      - aptos-orbital-auth
+      - crypto2-auth
 
-  aptos-orbital-auth:
+  crypto2-auth:
     <<: *mocker-base
-    container_name: aptos-orbital-auth
+    container_name: crypto2-auth
     build:
       context: ./plugins
       args:
         - BUILD_TARGET=mocker
     image: op-mocker:latest
     environment:
-      - OPMOCK_SERVICE=aptosorbital_auth
+      - OPMOCK_SERVICE=crypto2_auth
       - OPMOCK_PORT=8002
     ports:
       - "8002:8002"
 
-  plugin-aptos-orbital:
+  plugin-crypto2:
     <<: *plugin-base
-    container_name: plugin-aptos-orbital
+    container_name: plugin-crypto2
     build:
       context: ./plugins
     image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=aptosorbital
+      - ORBITPORT_PLUGIN=crypto2
       - ORBITPORT_GRPC_PORT=50001
       # Mock credentials for the local dev mocker only. These are not real secrets.
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=dev-client-id
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=dev-client-secret
-      - ORBITPORT_APTOS_ORBITAL_API_URL=http://aptos-orbital-api:8001
-      - ORBITPORT_APTOS_ORBITAL_AUTH_URL=http://aptos-orbital-auth:8002
+      - ORBITPORT_CRYPTO2_CLIENT_ID=dev-client-id
+      - ORBITPORT_CRYPTO2_CLIENT_SECRET=dev-client-secret
+      - ORBITPORT_CRYPTO2_API_URL=http://crypto2-api:8001
+      - ORBITPORT_CRYPTO2_AUTH_URL=http://crypto2-auth:8002
     depends_on:
       - plugin-auth
-      - aptos-orbital-api
-      - aptos-orbital-auth
+      - crypto2-api
+      - crypto2-auth
 
   plugin-masterseed:
     <<: *plugin-base
@@ -172,7 +172,7 @@ services:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=masterseed
       - ORBITPORT_GRPC_PORT=50003
-      - ORBITPORT_APTOS_PLUGIN=plugin-aptos-orbital:50001
+      - ORBITPORT_CRYPTO2_PLUGIN=plugin-crypto2:50001
       # Configurable defaults for seed management
       - ORBITPORT_DEFAULT_MASTER_SEEDS=${ORBITPORT_DEFAULT_MASTER_SEEDS}
       - ORBITPORT_MASTERSEED_TRNG_SIZE=32
@@ -182,7 +182,7 @@ services:
     ports:
       - 9003:9000
     depends_on:
-      - plugin-aptos-orbital
+      - plugin-crypto2
 
   plugin-kms:
     <<: *plugin-base
@@ -265,7 +265,7 @@ services:
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
-      - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
+      - ORBITPORT_TRNG_PLUGIN=http://plugin-crypto2:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
     ports:
       - 8080:8080
@@ -290,7 +290,7 @@ services:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=beacon
       - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
-      - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
+      - ORBITPORT_CTRNG_PLUGIN=plugin-crypto2:50001
       - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
       - ORBITPORT_BEACON_UPDATE_INTERVAL=10
       - ORBITPORT_DEFAULT_BEACON_NAME=randomness-beacon-dev1.0

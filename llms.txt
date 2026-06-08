@@ -1,6 +1,6 @@
 # Orbitport
 
-> Unified gateway to space-based orbital services by SpaceComputer. Rust HTTP/JSON-RPC gateway that fans out to a set of Go gRPC plugin sidecars. Currently exposes cTRNG (cosmic true random numbers) backed by the Aptos Orbital satellites, plus a randomness beacon published to IPFS/IPNS.
+> Unified gateway to space-based orbital services by SpaceComputer. Rust HTTP/JSON-RPC gateway that fans out to a set of Go gRPC plugin sidecars. Currently exposes cTRNG (cosmic true random numbers) backed by the Crypto2 satellite API, plus a randomness beacon published to IPFS/IPNS.
 
 ## Entrypoints
 
@@ -18,7 +18,7 @@
   - [gateway/build.rs](gateway/build.rs): `tonic-build` configuration; reads protos from top-level `proto/`.
 - [plugins/](plugins/): Go gRPC plugin services.
   - [plugins/cmd/plugin/](plugins/cmd/plugin/): Plugin dispatcher binary; selects implementation via `ORBITPORT_PLUGIN`.
-  - [plugins/cmd/mocker/](plugins/cmd/mocker/): Aptos Orbital API mock used in dev/e2e.
+  - [plugins/cmd/mocker/](plugins/cmd/mocker/): Crypto2 API mock used in dev/e2e.
   - [plugins/pkg/plugin/](plugins/pkg/plugin/): Plugin implementations (one subdir per plugin).
   - [plugins/pkg/core/health/](plugins/pkg/core/health/): gRPC dependency health-check waiter.
   - [plugins/proto/plugins/](plugins/proto/plugins/): Generated Go bindings for internal plugin protos.
@@ -29,7 +29,7 @@
 
 ## Plugins
 
-- [plugins/pkg/plugin/aptosorbital/README.md](plugins/pkg/plugin/aptosorbital/README.md): Wraps `api.aptosorbital.com` for satellite-derived TRNG.
+- [plugins/pkg/plugin/crypto2/README.md](plugins/pkg/plugin/crypto2/README.md): Wraps the Crypto2 upstream API for satellite-derived TRNG.
 - [plugins/pkg/plugin/auth/README.md](plugins/pkg/plugin/auth/README.md): Fail-closed Auth0 JWT validation.
 - [plugins/pkg/plugin/authnoop/README.md](plugins/pkg/plugin/authnoop/README.md): Dev-only noop auth that accepts every token.
 - [plugins/pkg/plugin/ipfs/README.md](plugins/pkg/plugin/ipfs/README.md): Kubo wrapper with LRU cache and IPNS publishing.
@@ -39,8 +39,8 @@
 
 ## Compose stacks
 
-- [docker-compose.yaml](docker-compose.yaml): Stack against real Aptos Orbital and Auth0; requires credentials in `.env`.
-- [dev.docker-compose.yaml](dev.docker-compose.yaml): Dev stack with `authnoop` and the Aptos Orbital mocker; no external credentials needed.
+- [docker-compose.yaml](docker-compose.yaml): Stack against the real Crypto2 API and Auth0; requires credentials in `.env`.
+- [dev.docker-compose.yaml](dev.docker-compose.yaml): Dev stack with `authnoop` and the Crypto2 mocker; no external credentials needed.
 - [beacons.yaml](beacons.yaml): Public beacon registry consumed by the beacon plugin.
 
 ## Other

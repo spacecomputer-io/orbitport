@@ -9,7 +9,7 @@
 
 ## What is Orbitport?
 
-Orbitport is a unified gateway to space-based orbital services operated by SpaceComputer. It gives web2 and web3 applications a single, secure entry point to services served from multiple providers and satellites — today that means `cTRNG` (cosmic True Random Number Generation) backed by the Aptos Orbital satellites, with more services on the roadmap. This repository ships a local Docker setup (see [Running locally](#running-locally)).
+Orbitport is a unified gateway to space-based orbital services operated by SpaceComputer. It gives web2 and web3 applications a single, secure entry point to services served from multiple providers and satellites. Today that means `cTRNG` (cosmic True Random Number Generation) backed by the `Crypto2` satellite API, with more services on the roadmap. This repository ships a local Docker setup (see [Running locally](#running-locally)).
 
 ## Services
 
@@ -26,14 +26,14 @@ Orbitport is a unified gateway to space-based orbital services operated by Space
     JSON-RPC      │  (Rust)  │ ──▶ plugin-masterseed  (MasterSeedPlugin)
                   └──────────┘          │
                                         ▼
-                                   plugin-aptos-orbital (RandomnessPlugin)
+                                   plugin-crypto2 (RandomnessPlugin)
                                         │
                                         ▼
-                                   api.aptosorbital.com (satellites)
+                               upstream Crypto2 API
 
                   ┌──────────────┐
                   │ plugin-beacon│ ──▶ plugin-ipfs ──▶ IPFS / IPNS
-                  │ (background) │ ──▶ plugin-aptos-orbital
+                  │ (background) │ ──▶ plugin-crypto2
                   └──────────────┘ ──▶ plugin-masterseed
 ```
 
@@ -41,7 +41,7 @@ For a deeper walk-through (gRPC wiring, plugin internals, env-var reference, pro
 
 ## Running locally
 
-The fast path uses the dev compose stack, which swaps in the `authnoop` plugin and the Aptos Orbital mocker so no external credentials are required.
+The fast path uses the dev compose stack, which swaps in the `authnoop` plugin and the `crypto2` mocker so no external credentials are required.
 
 ```bash
 git clone https://github.com/spacecomputer-io/orbitport.git
@@ -87,7 +87,7 @@ All env vars are prefixed `ORBITPORT_`. The full list, including defaults, is th
 make test                       # unit tests (Rust + Go)
 make lint                       # clippy + golangci-lint
 make e2e                        # happy-path e2e against dev compose
-make E2E_PROFILE=offline e2e    # fallback path (Aptos unreachable)
+make E2E_PROFILE=offline e2e    # fallback path (crypto2 unreachable)
 ```
 
 See [`CONTEXT.md`](CONTEXT.md#testing) for the full e2e matrix.

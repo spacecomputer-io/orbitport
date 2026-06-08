@@ -7,7 +7,7 @@ satellite-derived random numbers under a stable IPNS name.
 
 Unlike the other plugins, `beacon` exposes no RPC of its own — it is a
 background service. At startup it waits (via `health.WaitForDependencies`) for
-the IPFS, cTRNG (aptosorbital), and masterseed plugins to become reachable,
+the IPFS, cTRNG (`crypto2`), and masterseed plugins to become reachable,
 then starts two cooperating loops:
 
 - **Scheduler** — ticks on `ORBITPORT_BEACON_UPDATE_INTERVAL` (default 60s)
