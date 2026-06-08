@@ -111,7 +111,7 @@ pub async fn rpc_threshold_coordinate_dkg(
     base_url: &str,
     access_token: &str,
     req_id: u64,
-) -> Result<gateway::proto::services::threshold::CoordinateDkgResponse, E2EError> {
+) -> Result<gateway::proto::services::threshold::DkgResponse, E2EError> {
     let nodes = threshold_test_nodes();
     prepare_threshold_nodes(&nodes).await?;
 

@@ -23,10 +23,7 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.SchemeCapability",
 ];
 
-const THRESHOLD_PASCAL_CASE_TYPES: &[&str] = &[
-    "threshold.CoordinateDkgRequest",
-    "threshold.CoordinateDkgResponse",
-];
+const THRESHOLD_PASCAL_CASE_TYPES: &[&str] = &["threshold.DkgRequest", "threshold.DkgResponse"];
 
 fn apply_service_attributes(config: tonic_prost_build::Builder) -> tonic_prost_build::Builder {
     KMS_PASCAL_CASE_TYPES

@@ -160,7 +160,7 @@ func (x *DkgNodeStatus) GetPendingFrom() []string {
 	return nil
 }
 
-type CoordinateDkgRequest struct {
+type DkgRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	KeyName       string                 `protobuf:"bytes,1,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
 	GroupName     string                 `protobuf:"bytes,2,opt,name=group_name,json=groupName,proto3" json:"group_name,omitempty"`
@@ -172,20 +172,20 @@ type CoordinateDkgRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CoordinateDkgRequest) Reset() {
-	*x = CoordinateDkgRequest{}
+func (x *DkgRequest) Reset() {
+	*x = DkgRequest{}
 	mi := &file_proto_plugins_threshold_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CoordinateDkgRequest) String() string {
+func (x *DkgRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CoordinateDkgRequest) ProtoMessage() {}
+func (*DkgRequest) ProtoMessage() {}
 
-func (x *CoordinateDkgRequest) ProtoReflect() protoreflect.Message {
+func (x *DkgRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_plugins_threshold_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -197,54 +197,54 @@ func (x *CoordinateDkgRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CoordinateDkgRequest.ProtoReflect.Descriptor instead.
-func (*CoordinateDkgRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use DkgRequest.ProtoReflect.Descriptor instead.
+func (*DkgRequest) Descriptor() ([]byte, []int) {
 	return file_proto_plugins_threshold_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *CoordinateDkgRequest) GetKeyName() string {
+func (x *DkgRequest) GetKeyName() string {
 	if x != nil {
 		return x.KeyName
 	}
 	return ""
 }
 
-func (x *CoordinateDkgRequest) GetGroupName() string {
+func (x *DkgRequest) GetGroupName() string {
 	if x != nil {
 		return x.GroupName
 	}
 	return ""
 }
 
-func (x *CoordinateDkgRequest) GetSessionId() string {
+func (x *DkgRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-func (x *CoordinateDkgRequest) GetThreshold() int32 {
+func (x *DkgRequest) GetThreshold() int32 {
 	if x != nil {
 		return x.Threshold
 	}
 	return 0
 }
 
-func (x *CoordinateDkgRequest) GetParticipants() []*GroupMember {
+func (x *DkgRequest) GetParticipants() []*GroupMember {
 	if x != nil {
 		return x.Participants
 	}
 	return nil
 }
 
-func (x *CoordinateDkgRequest) GetClientId() string {
+func (x *DkgRequest) GetClientId() string {
 	if x != nil {
 		return x.ClientId
 	}
 	return ""
 }
 
-type CoordinateDkgResponse struct {
+type DkgResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	KeyName       string                 `protobuf:"bytes,1,opt,name=key_name,json=keyName,proto3" json:"key_name,omitempty"`
 	GroupName     string                 `protobuf:"bytes,2,opt,name=group_name,json=groupName,proto3" json:"group_name,omitempty"`
@@ -255,20 +255,20 @@ type CoordinateDkgResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *CoordinateDkgResponse) Reset() {
-	*x = CoordinateDkgResponse{}
+func (x *DkgResponse) Reset() {
+	*x = DkgResponse{}
 	mi := &file_proto_plugins_threshold_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *CoordinateDkgResponse) String() string {
+func (x *DkgResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CoordinateDkgResponse) ProtoMessage() {}
+func (*DkgResponse) ProtoMessage() {}
 
-func (x *CoordinateDkgResponse) ProtoReflect() protoreflect.Message {
+func (x *DkgResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_plugins_threshold_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -280,40 +280,40 @@ func (x *CoordinateDkgResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CoordinateDkgResponse.ProtoReflect.Descriptor instead.
-func (*CoordinateDkgResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use DkgResponse.ProtoReflect.Descriptor instead.
+func (*DkgResponse) Descriptor() ([]byte, []int) {
 	return file_proto_plugins_threshold_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *CoordinateDkgResponse) GetKeyName() string {
+func (x *DkgResponse) GetKeyName() string {
 	if x != nil {
 		return x.KeyName
 	}
 	return ""
 }
 
-func (x *CoordinateDkgResponse) GetGroupName() string {
+func (x *DkgResponse) GetGroupName() string {
 	if x != nil {
 		return x.GroupName
 	}
 	return ""
 }
 
-func (x *CoordinateDkgResponse) GetSessionId() string {
+func (x *DkgResponse) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
 	}
 	return ""
 }
 
-func (x *CoordinateDkgResponse) GetNodes() []*DkgNodeStatus {
+func (x *DkgResponse) GetNodes() []*DkgNodeStatus {
 	if x != nil {
 		return x.Nodes
 	}
 	return nil
 }
 
-func (x *CoordinateDkgResponse) GetPublicKey() string {
+func (x *DkgResponse) GetPublicKey() string {
 	if x != nil {
 		return x.PublicKey
 	}
@@ -336,8 +336,9 @@ const file_proto_plugins_threshold_proto_rawDesc = "" +
 	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x14\n" +
 	"\x05round\x18\x03 \x01(\x05R\x05round\x12!\n" +
-	"\fpending_from\x18\x05 \x03(\tR\vpendingFrom\"\xe9\x01\n" +
-	"\x14CoordinateDkgRequest\x12\x19\n" +
+	"\fpending_from\x18\x05 \x03(\tR\vpendingFrom\"\xdf\x01\n" +
+	"\n" +
+	"DkgRequest\x12\x19\n" +
 	"\bkey_name\x18\x01 \x01(\tR\akeyName\x12\x1d\n" +
 	"\n" +
 	"group_name\x18\x02 \x01(\tR\tgroupName\x12\x1d\n" +
@@ -345,8 +346,8 @@ const file_proto_plugins_threshold_proto_rawDesc = "" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x12\x1c\n" +
 	"\tthreshold\x18\x04 \x01(\x05R\tthreshold\x12=\n" +
 	"\fparticipants\x18\x05 \x03(\v2\x19.thresholdapi.GroupMemberR\fparticipants\x12\x1b\n" +
-	"\tclient_id\x18\x06 \x01(\tR\bclientId\"\xc2\x01\n" +
-	"\x15CoordinateDkgResponse\x12\x19\n" +
+	"\tclient_id\x18\x06 \x01(\tR\bclientId\"\xb8\x01\n" +
+	"\vDkgResponse\x12\x19\n" +
 	"\bkey_name\x18\x01 \x01(\tR\akeyName\x12\x1d\n" +
 	"\n" +
 	"group_name\x18\x02 \x01(\tR\tgroupName\x12\x1d\n" +
@@ -354,9 +355,9 @@ const file_proto_plugins_threshold_proto_rawDesc = "" +
 	"session_id\x18\x03 \x01(\tR\tsessionId\x121\n" +
 	"\x05nodes\x18\x04 \x03(\v2\x1b.thresholdapi.DkgNodeStatusR\x05nodes\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x05 \x01(\tR\tpublicKey2k\n" +
-	"\x0fThresholdPlugin\x12X\n" +
-	"\rCoordinateDkg\x12\".thresholdapi.CoordinateDkgRequest\x1a#.thresholdapi.CoordinateDkgResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
+	"public_key\x18\x05 \x01(\tR\tpublicKey2W\n" +
+	"\x0fThresholdPlugin\x12D\n" +
+	"\rCoordinateDkg\x12\x18.thresholdapi.DkgRequest\x1a\x19.thresholdapi.DkgResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
 
 var (
 	file_proto_plugins_threshold_proto_rawDescOnce sync.Once
@@ -372,16 +373,16 @@ func file_proto_plugins_threshold_proto_rawDescGZIP() []byte {
 
 var file_proto_plugins_threshold_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_plugins_threshold_proto_goTypes = []any{
-	(*GroupMember)(nil),           // 0: thresholdapi.GroupMember
-	(*DkgNodeStatus)(nil),         // 1: thresholdapi.DkgNodeStatus
-	(*CoordinateDkgRequest)(nil),  // 2: thresholdapi.CoordinateDkgRequest
-	(*CoordinateDkgResponse)(nil), // 3: thresholdapi.CoordinateDkgResponse
+	(*GroupMember)(nil),   // 0: thresholdapi.GroupMember
+	(*DkgNodeStatus)(nil), // 1: thresholdapi.DkgNodeStatus
+	(*DkgRequest)(nil),    // 2: thresholdapi.DkgRequest
+	(*DkgResponse)(nil),   // 3: thresholdapi.DkgResponse
 }
 var file_proto_plugins_threshold_proto_depIdxs = []int32{
-	0, // 0: thresholdapi.CoordinateDkgRequest.participants:type_name -> thresholdapi.GroupMember
-	1, // 1: thresholdapi.CoordinateDkgResponse.nodes:type_name -> thresholdapi.DkgNodeStatus
-	2, // 2: thresholdapi.ThresholdPlugin.CoordinateDkg:input_type -> thresholdapi.CoordinateDkgRequest
-	3, // 3: thresholdapi.ThresholdPlugin.CoordinateDkg:output_type -> thresholdapi.CoordinateDkgResponse
+	0, // 0: thresholdapi.DkgRequest.participants:type_name -> thresholdapi.GroupMember
+	1, // 1: thresholdapi.DkgResponse.nodes:type_name -> thresholdapi.DkgNodeStatus
+	2, // 2: thresholdapi.ThresholdPlugin.CoordinateDkg:input_type -> thresholdapi.DkgRequest
+	3, // 3: thresholdapi.ThresholdPlugin.CoordinateDkg:output_type -> thresholdapi.DkgResponse
 	3, // [3:4] is the sub-list for method output_type
 	2, // [2:3] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

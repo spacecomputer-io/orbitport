@@ -5,11 +5,10 @@ use serde::{Deserialize, Serialize};
 use tonic::transport::Channel;
 
 use crate::proto::plugins::threshold::{
-    CoordinateDkgRequest as PluginCoordinateDkgRequest,
-    CoordinateDkgResponse as PluginCoordinateDkgResponse, GroupMember as PluginGroupMember,
-    threshold_plugin_client::ThresholdPluginClient,
+    DkgRequest as PluginDkgRequest, DkgResponse as PluginDkgResponse,
+    GroupMember as PluginGroupMember, threshold_plugin_client::ThresholdPluginClient,
 };
-use crate::proto::services::threshold::{CoordinateDkgRequest, CoordinateDkgResponse};
+use crate::proto::services::threshold::{DkgRequest, DkgResponse};
 
 const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "threshold:";
@@ -59,7 +58,7 @@ impl ThresholdGroupRegistry {
 
 #[derive(Debug)]
 pub enum ThresholdRpcCall {
-    CoordinateDkg(CoordinateDkgRequest),
+    CoordinateDkg(DkgRequest),
 }
 
 impl ThresholdRpcCall {
@@ -84,7 +83,7 @@ impl ThresholdRpcCall {
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum ThresholdRpcResult {
-    CoordinateDkg(CoordinateDkgResponse),
+    CoordinateDkg(DkgResponse),
 }
 
 impl ThresholdRpcResult {
@@ -112,7 +111,7 @@ impl ThresholdService {
         Self { client, groups }
     }
 
-    pub fn validate_coordinate_dkg(req: &CoordinateDkgRequest) -> Result<(), String> {
+    pub fn validate_coordinate_dkg(req: &DkgRequest) -> Result<(), String> {
         validate_required("Alias", &req.alias)?;
         validate_alias(&req.alias)?;
         validate_required("GroupName", &req.group_name)?;
@@ -143,8 +142,8 @@ impl ThresholdService {
     pub async fn coordinate_dkg(
         &mut self,
         client_id: &str,
-        req: CoordinateDkgRequest,
-    ) -> Result<CoordinateDkgResponse, tonic::Status> {
+        req: DkgRequest,
+    ) -> Result<DkgResponse, tonic::Status> {
         let alias = req.alias.trim().to_string();
         let group_name = req.group_name;
         let group = self.groups.get(&group_name).ok_or_else(|| {
@@ -155,9 +154,9 @@ impl ThresholdService {
         })?;
 
         let session_id = new_session_id();
-        let response: PluginCoordinateDkgResponse = self
+        let response: PluginDkgResponse = self
             .client
-            .coordinate_dkg(tonic::Request::new(PluginCoordinateDkgRequest {
+            .coordinate_dkg(tonic::Request::new(PluginDkgRequest {
                 key_name: alias.clone(),
                 group_name: group_name.clone(),
                 session_id,
@@ -182,7 +181,7 @@ impl ThresholdService {
             .into_inner();
 
         let status = aggregate_dkg_status(&response)?;
-        Ok(CoordinateDkgResponse {
+        Ok(DkgResponse {
             key_id: threshold_key_id(&alias),
             alias,
             group_name: response.group_name,
@@ -270,7 +269,7 @@ fn threshold_key_id(alias: &str) -> String {
     format!("{KEY_ID_PREFIX}{alias}")
 }
 
-fn aggregate_dkg_status(response: &PluginCoordinateDkgResponse) -> Result<String, tonic::Status> {
+fn aggregate_dkg_status(response: &PluginDkgResponse) -> Result<String, tonic::Status> {
     if response.nodes.is_empty() {
         return Err(tonic::Status::internal(
             "Threshold plugin returned no DKG node statuses",
@@ -293,8 +292,8 @@ fn aggregate_dkg_status(response: &PluginCoordinateDkgResponse) -> Result<String
 mod test {
     use super::*;
 
-    fn valid_request() -> CoordinateDkgRequest {
-        CoordinateDkgRequest {
+    fn valid_request() -> DkgRequest {
+        DkgRequest {
             alias: "key-1".to_string(),
             group_name: "team-a".to_string(),
         }

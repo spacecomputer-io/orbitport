@@ -6,7 +6,7 @@ use crate::proto::services::kms::{
     CreateKeyRequest, DecryptRequest, EncryptRequest, GenerateDataKeyRequest,
     GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
 };
-use crate::proto::services::threshold::CoordinateDkgRequest;
+use crate::proto::services::threshold::DkgRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{KmsRpcCall, KmsService};
@@ -91,7 +91,7 @@ pub enum RpcCall {
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
     #[serde(rename = "kms_threshold.CoordinateDKG")]
-    CoordinateDKG(CoordinateDkgRequest),
+    CoordinateDKG(DkgRequest),
 }
 
 impl RpcCall {

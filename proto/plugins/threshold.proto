@@ -7,7 +7,7 @@ option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 package thresholdapi;
 
 service ThresholdPlugin {
-  rpc CoordinateDkg(CoordinateDkgRequest) returns (CoordinateDkgResponse);
+  rpc CoordinateDkg(DkgRequest) returns (DkgResponse);
 }
 
 message GroupMember {
@@ -24,7 +24,7 @@ message DkgNodeStatus {
   repeated string pending_from = 5;
 }
 
-message CoordinateDkgRequest {
+message DkgRequest {
   string key_name = 1;
   string group_name = 2;
   string session_id = 3;
@@ -33,7 +33,7 @@ message CoordinateDkgRequest {
   string client_id = 6;
 }
 
-message CoordinateDkgResponse {
+message DkgResponse {
   string key_name = 1;
   string group_name = 2;
   string session_id = 3;

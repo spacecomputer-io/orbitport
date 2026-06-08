@@ -29,7 +29,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ThresholdPluginClient interface {
-	CoordinateDkg(ctx context.Context, in *CoordinateDkgRequest, opts ...grpc.CallOption) (*CoordinateDkgResponse, error)
+	CoordinateDkg(ctx context.Context, in *DkgRequest, opts ...grpc.CallOption) (*DkgResponse, error)
 }
 
 type thresholdPluginClient struct {
@@ -40,9 +40,9 @@ func NewThresholdPluginClient(cc grpc.ClientConnInterface) ThresholdPluginClient
 	return &thresholdPluginClient{cc}
 }
 
-func (c *thresholdPluginClient) CoordinateDkg(ctx context.Context, in *CoordinateDkgRequest, opts ...grpc.CallOption) (*CoordinateDkgResponse, error) {
+func (c *thresholdPluginClient) CoordinateDkg(ctx context.Context, in *DkgRequest, opts ...grpc.CallOption) (*DkgResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(CoordinateDkgResponse)
+	out := new(DkgResponse)
 	err := c.cc.Invoke(ctx, ThresholdPlugin_CoordinateDkg_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (c *thresholdPluginClient) CoordinateDkg(ctx context.Context, in *Coordinat
 // All implementations must embed UnimplementedThresholdPluginServer
 // for forward compatibility.
 type ThresholdPluginServer interface {
-	CoordinateDkg(context.Context, *CoordinateDkgRequest) (*CoordinateDkgResponse, error)
+	CoordinateDkg(context.Context, *DkgRequest) (*DkgResponse, error)
 	mustEmbedUnimplementedThresholdPluginServer()
 }
 
@@ -65,7 +65,7 @@ type ThresholdPluginServer interface {
 // pointer dereference when methods are called.
 type UnimplementedThresholdPluginServer struct{}
 
-func (UnimplementedThresholdPluginServer) CoordinateDkg(context.Context, *CoordinateDkgRequest) (*CoordinateDkgResponse, error) {
+func (UnimplementedThresholdPluginServer) CoordinateDkg(context.Context, *DkgRequest) (*DkgResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CoordinateDkg not implemented")
 }
 func (UnimplementedThresholdPluginServer) mustEmbedUnimplementedThresholdPluginServer() {}
@@ -90,7 +90,7 @@ func RegisterThresholdPluginServer(s grpc.ServiceRegistrar, srv ThresholdPluginS
 }
 
 func _ThresholdPlugin_CoordinateDkg_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CoordinateDkgRequest)
+	in := new(DkgRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func _ThresholdPlugin_CoordinateDkg_Handler(srv interface{}, ctx context.Context
 		FullMethod: ThresholdPlugin_CoordinateDkg_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ThresholdPluginServer).CoordinateDkg(ctx, req.(*CoordinateDkgRequest))
+		return srv.(ThresholdPluginServer).CoordinateDkg(ctx, req.(*DkgRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }

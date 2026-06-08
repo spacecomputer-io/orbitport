@@ -44,7 +44,7 @@ func newPlugin(cfg *thresholdConfig, coordinator *Coordinator) *Plugin {
 	}
 }
 
-func (p *Plugin) CoordinateDkg(ctx context.Context, req *proto.CoordinateDkgRequest) (*proto.CoordinateDkgResponse, error) {
+func (p *Plugin) CoordinateDkg(ctx context.Context, req *proto.DkgRequest) (*proto.DkgResponse, error) {
 	dkgRequest, err := p.dkgRequestFromProto(req)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -72,7 +72,7 @@ func (p *Plugin) CoordinateDkg(ctx context.Context, req *proto.CoordinateDkgRequ
 		return nodes[i].NodeId < nodes[j].NodeId
 	})
 
-	return &proto.CoordinateDkgResponse{
+	return &proto.DkgResponse{
 		KeyName:   result.KeyName,
 		GroupName: result.GroupName,
 		SessionId: result.SessionID,
@@ -81,7 +81,7 @@ func (p *Plugin) CoordinateDkg(ctx context.Context, req *proto.CoordinateDkgRequ
 	}, nil
 }
 
-func (p *Plugin) dkgRequestFromProto(req *proto.CoordinateDkgRequest) (DKGRequest, error) {
+func (p *Plugin) dkgRequestFromProto(req *proto.DkgRequest) (DKGRequest, error) {
 	if req == nil {
 		return DKGRequest{}, fmt.Errorf("request is required")
 	}
