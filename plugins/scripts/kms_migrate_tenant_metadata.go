@@ -81,7 +81,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(
+	if _, err := fmt.Fprintf(
 		os.Stdout,
 		"done legacy_namespaces=%d records_scanned=%d records_planned=%d records_copied=%d records_skipped=%d\n",
 		report.LegacyNamespaces,
@@ -89,7 +89,10 @@ func main() {
 		report.RecordsPlanned,
 		report.RecordsCopied,
 		report.RecordsSkipped,
-	)
+	); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "kms-migrate-tenant-metadata: write summary: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func parseConfig(args []string) (migrationConfig, migrationOptions, error) {
@@ -190,8 +193,7 @@ func runMigration(ctx context.Context, cfg migrationConfig, opts migrationOption
 
 			targetNamespace := tenantNamespace(recordClientID(record))
 			existing, err := client.getMetadataForNamespace(ctx, targetNamespace, keyID)
-			switch {
-			case err == nil:
+			if err == nil {
 				if !recordsEqual(existing, record, keyID) {
 					return report, fmt.Errorf("target metadata already exists with different contents for namespace %s key_id %s", targetNamespace, keyID)
 				}
@@ -200,10 +202,9 @@ func runMigration(ctx context.Context, cfg migrationConfig, opts migrationOption
 					return nil, err
 				}
 				continue
-			default:
-				if !isMetadataNotFound(err) {
-					return report, fmt.Errorf("read target metadata for namespace %s key_id %s: %w", targetNamespace, keyID, err)
-				}
+			}
+			if !isMetadataNotFound(err) {
+				return report, fmt.Errorf("read target metadata for namespace %s key_id %s: %w", targetNamespace, keyID, err)
 			}
 
 			report.RecordsPlanned++
