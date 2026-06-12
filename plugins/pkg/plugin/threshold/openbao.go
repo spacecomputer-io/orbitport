@@ -1,15 +1,15 @@
 package threshold
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/internal/openbao"
 )
 
 type OpenBaoClientConfig struct {
@@ -20,23 +20,12 @@ type OpenBaoClientConfig struct {
 }
 
 type OpenBaoClient struct {
-	baseURL    string
-	mount      string
-	httpClient *http.Client
+	*openbao.Client
+	baseURL string
+	mount   string
 }
 
-type OpenBaoStatusError struct {
-	StatusCode int
-	Status     string
-	Body       string
-}
-
-func (e *OpenBaoStatusError) Error() string {
-	if e.Body == "" {
-		return fmt.Sprintf("openbao returned %s", e.Status)
-	}
-	return fmt.Sprintf("openbao returned %s: %s", e.Status, e.Body)
-}
+type OpenBaoStatusError = openbao.StatusError
 
 func NewOpenBaoClient(cfg OpenBaoClientConfig) *OpenBaoClient {
 	mount := strings.Trim(cfg.Mount, "/")
@@ -54,9 +43,9 @@ func NewOpenBaoClient(cfg OpenBaoClientConfig) *OpenBaoClient {
 	}
 
 	return &OpenBaoClient{
-		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
-		mount:      mount,
-		httpClient: client,
+		Client:  openbao.NewClient(client, logger),
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		mount:   mount,
 	}
 }
 
@@ -83,7 +72,7 @@ func (c *OpenBaoClient) StartDKG(ctx context.Context, req StartDKGRequest) (*DKG
 	}
 
 	var resp openBaoDataResponse[DKGStatus]
-	if err := c.post(ctx, c.thresholdPath("keys", req.KeyName, "dkg", "start"), body, &resp); err != nil {
+	if err := c.Post(ctx, c.thresholdPath("keys", req.KeyName, "dkg", "start"), body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
@@ -91,7 +80,7 @@ func (c *OpenBaoClient) StartDKG(ctx context.Context, req StartDKGRequest) (*DKG
 
 func (c *OpenBaoClient) DeliverDKG(ctx context.Context, keyName string, req DeliverDKGRequest) (*DKGStatus, error) {
 	var resp openBaoDataResponse[DKGStatus]
-	err := c.post(ctx, c.thresholdPath("keys", keyName, "dkg", "deliver"), map[string]any{
+	err := c.Post(ctx, c.thresholdPath("keys", keyName, "dkg", "deliver"), map[string]any{
 		"round":     req.Round,
 		"from":      req.From,
 		"broadcast": req.Broadcast,
@@ -105,7 +94,7 @@ func (c *OpenBaoClient) DeliverDKG(ctx context.Context, keyName string, req Deli
 
 func (c *OpenBaoClient) ProceedDKG(ctx context.Context, keyName string) (*DKGStatus, error) {
 	var resp openBaoDataResponse[DKGStatus]
-	if err := c.post(ctx, c.thresholdPath("keys", keyName, "dkg", "proceed"), map[string]any{}, &resp); err != nil {
+	if err := c.Post(ctx, c.thresholdPath("keys", keyName, "dkg", "proceed"), map[string]any{}, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
@@ -113,7 +102,7 @@ func (c *OpenBaoClient) ProceedDKG(ctx context.Context, keyName string) (*DKGSta
 
 func (c *OpenBaoClient) ReadDKGStatus(ctx context.Context, keyName string) (*DKGStatus, error) {
 	var resp openBaoDataResponse[DKGStatus]
-	if err := c.get(ctx, c.thresholdPath("keys", keyName, "dkg", "status"), &resp); err != nil {
+	if err := c.Get(ctx, c.thresholdPath("keys", keyName, "dkg", "status"), &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
@@ -126,57 +115,6 @@ func (c *OpenBaoClient) thresholdPath(parts ...string) string {
 		return strings.TrimRight(c.baseURL, "/") + "/" + strings.Join(all, "/")
 	}
 	return target
-}
-
-func (c *OpenBaoClient) post(ctx context.Context, target string, payload any, into any) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal openbao payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("create openbao request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return c.do(req, into)
-}
-
-func (c *OpenBaoClient) get(ctx context.Context, target string, into any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return fmt.Errorf("create openbao request: %w", err)
-	}
-	return c.do(req, into)
-}
-
-func (c *OpenBaoClient) do(req *http.Request, into any) error {
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("openbao request failed: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("read openbao response: %w", err)
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return &OpenBaoStatusError{
-			StatusCode: resp.StatusCode,
-			Status:     resp.Status,
-			Body:       strings.TrimSpace(string(body)),
-		}
-	}
-	if into == nil {
-		return nil
-	}
-	if err := json.Unmarshal(body, into); err != nil {
-		return fmt.Errorf("decode openbao response: %w", err)
-	}
-	return nil
 }
 
 type openBaoDataResponse[T any] struct {

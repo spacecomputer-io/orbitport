@@ -115,7 +115,9 @@ impl RpcCall {
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
-            RpcCall::CoordinateDKG(req) => ThresholdService::validate_coordinate_dkg(req)?,
+            RpcCall::CoordinateDKG(req) => {
+                ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
+            }
         }
         Ok(())
     }

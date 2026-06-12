@@ -96,7 +96,7 @@ async fn main() -> Result<(), GatewayError> {
     let service_manager = Arc::new(service_manager);
     let threshold_groups =
         gateway::services::threshold::ThresholdGroupRegistry::from_json(&args.threshold_groups)
-            .map_err(GatewayError::BadRequest)?;
+            .map_err(|e| GatewayError::BadRequest(e.to_string()))?;
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
         &args.masterseed_plugin,

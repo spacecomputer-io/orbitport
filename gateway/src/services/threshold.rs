@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tonic::transport::Channel;
 
 use crate::proto::plugins::threshold::{
@@ -13,6 +14,33 @@ use crate::proto::services::threshold::{DkgRequest, DkgResponse};
 const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "threshold:";
 const DKG_COMPLETED_STATUS: &str = "dkg_completed";
+
+/// Validation and configuration errors for the threshold service.
+#[derive(Error, Debug)]
+pub enum ThresholdError {
+    #[error("Invalid threshold groups config: {0}")]
+    InvalidGroupsConfig(#[from] serde_json::Error),
+    #[error("{0} is required")]
+    MissingField(&'static str),
+    #[error("{0} must not contain surrounding whitespace")]
+    SurroundingWhitespace(&'static str),
+    #[error("alias must be at most {0} characters")]
+    AliasTooLong(usize),
+    #[error("alias must not use the reserved threshold:<alias> format")]
+    AliasReservedPrefix,
+    #[error("alias contains unsupported characters")]
+    AliasUnsupportedCharacters,
+    #[error("Threshold group {0} requires at least two participants")]
+    NotEnoughParticipants(String),
+    #[error("Threshold group {0} threshold must be between 2 and participant count")]
+    ThresholdOutOfRange(String),
+    #[error("Threshold group {group} has duplicate participant node_id {node_id}")]
+    DuplicateNodeId { group: String, node_id: String },
+    #[error("Participant {node_id} party_index {party_index} out of range")]
+    PartyIndexOutOfRange { node_id: String, party_index: i32 },
+    #[error("Threshold group {group} has duplicate participant party_index {party_index}")]
+    DuplicatePartyIndex { group: String, party_index: i32 },
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct ThresholdGroupRegistry {
@@ -35,13 +63,12 @@ pub struct GroupMemberConfig {
 }
 
 impl ThresholdGroupRegistry {
-    pub fn from_json(raw: &str) -> Result<Self, String> {
+    pub fn from_json(raw: &str) -> Result<Self, ThresholdError> {
         if raw.trim().is_empty() {
             return Ok(Self::default());
         }
 
-        let groups: HashMap<String, ThresholdGroupConfig> = serde_json::from_str(raw)
-            .map_err(|e| format!("Invalid threshold groups config: {e}"))?;
+        let groups: HashMap<String, ThresholdGroupConfig> = serde_json::from_str(raw)?;
         for (name, group) in &groups {
             validate_group_config(name, group)?;
         }
@@ -62,7 +89,7 @@ pub enum ThresholdRpcCall {
 }
 
 impl ThresholdRpcCall {
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), ThresholdError> {
         match self {
             Self::CoordinateDkg(req) => ThresholdService::validate_coordinate_dkg(req),
         }
@@ -111,12 +138,12 @@ impl ThresholdService {
         Self { client, groups }
     }
 
-    pub fn validate_coordinate_dkg(req: &DkgRequest) -> Result<(), String> {
+    pub fn validate_coordinate_dkg(req: &DkgRequest) -> Result<(), ThresholdError> {
         validate_required("Alias", &req.alias)?;
         validate_alias(&req.alias)?;
         validate_required("GroupName", &req.group_name)?;
         if req.group_name != req.group_name.trim() {
-            return Err("group_name must not contain surrounding whitespace".to_string());
+            return Err(ThresholdError::SurroundingWhitespace("group_name"));
         }
         Ok(())
     }
@@ -191,19 +218,15 @@ impl ThresholdService {
     }
 }
 
-fn validate_group_config(name: &str, group: &ThresholdGroupConfig) -> Result<(), String> {
+fn validate_group_config(name: &str, group: &ThresholdGroupConfig) -> Result<(), ThresholdError> {
     validate_required("GroupName", name)?;
 
     let participant_count = group.participants.len();
     if participant_count < 2 {
-        return Err(format!(
-            "Threshold group {name} requires at least two participants"
-        ));
+        return Err(ThresholdError::NotEnoughParticipants(name.to_string()));
     }
     if group.threshold < 2 || group.threshold as usize > participant_count {
-        return Err(format!(
-            "Threshold group {name} threshold must be between 2 and participant count"
-        ));
+        return Err(ThresholdError::ThresholdOutOfRange(name.to_string()));
     }
 
     let mut node_ids = HashSet::with_capacity(participant_count);
@@ -212,50 +235,50 @@ fn validate_group_config(name: &str, group: &ThresholdGroupConfig) -> Result<(),
         validate_required("NodeId", &participant.node_id)?;
         validate_required("OpenBaoUrl", &participant.openbao_url)?;
         if !node_ids.insert(participant.node_id.as_str()) {
-            return Err(format!(
-                "Threshold group {name} has duplicate participant node_id {}",
-                participant.node_id
-            ));
+            return Err(ThresholdError::DuplicateNodeId {
+                group: name.to_string(),
+                node_id: participant.node_id.clone(),
+            });
         }
         if participant.party_index < 0 || participant.party_index as usize >= participant_count {
-            return Err(format!(
-                "Participant {} party_index {} out of range",
-                participant.node_id, participant.party_index
-            ));
+            return Err(ThresholdError::PartyIndexOutOfRange {
+                node_id: participant.node_id.clone(),
+                party_index: participant.party_index,
+            });
         }
         if !party_indexes.insert(participant.party_index) {
-            return Err(format!(
-                "Threshold group {name} has duplicate participant party_index {}",
-                participant.party_index
-            ));
+            return Err(ThresholdError::DuplicatePartyIndex {
+                group: name.to_string(),
+                party_index: participant.party_index,
+            });
         }
     }
 
     Ok(())
 }
 
-fn validate_required(field_name: &str, value: &str) -> Result<(), String> {
+fn validate_required(field_name: &'static str, value: &str) -> Result<(), ThresholdError> {
     if value.trim().is_empty() {
-        return Err(format!("{field_name} is required"));
+        return Err(ThresholdError::MissingField(field_name));
     }
     Ok(())
 }
 
-fn validate_alias(value: &str) -> Result<(), String> {
+fn validate_alias(value: &str) -> Result<(), ThresholdError> {
     if value != value.trim() {
-        return Err("alias must not contain surrounding whitespace".to_string());
+        return Err(ThresholdError::SurroundingWhitespace("alias"));
     }
     if value.len() > MAX_ALIAS_LEN {
-        return Err(format!("alias must be at most {MAX_ALIAS_LEN} characters"));
+        return Err(ThresholdError::AliasTooLong(MAX_ALIAS_LEN));
     }
     if value.starts_with(KEY_ID_PREFIX) {
-        return Err("alias must not use the reserved threshold:<alias> format".to_string());
+        return Err(ThresholdError::AliasReservedPrefix);
     }
     if !value
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.' | '_'))
     {
-        return Err("alias contains unsupported characters".to_string());
+        return Err(ThresholdError::AliasUnsupportedCharacters);
     }
     Ok(())
 }
@@ -320,7 +343,10 @@ mod test {
             }"#,
         )
         .unwrap_err();
-        assert!(err.contains("duplicate participant party_index"));
+        assert!(
+            err.to_string()
+                .contains("duplicate participant party_index")
+        );
     }
 
     #[test]
@@ -329,7 +355,10 @@ mod test {
         req.alias = "invalid/key".to_string();
 
         let err = ThresholdService::validate_coordinate_dkg(&req).unwrap_err();
-        assert!(err.contains("alias contains unsupported characters"));
+        assert!(
+            err.to_string()
+                .contains("alias contains unsupported characters")
+        );
     }
 
     #[test]
@@ -338,6 +367,9 @@ mod test {
         req.alias = "threshold:key-1".to_string();
 
         let err = ThresholdService::validate_coordinate_dkg(&req).unwrap_err();
-        assert!(err.contains("reserved threshold:<alias> format"));
+        assert!(
+            err.to_string()
+                .contains("reserved threshold:<alias> format")
+        );
     }
 }

@@ -422,13 +422,14 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    env_file:
+      - dev.threshold-groups.env
     environment:
       - RUST_LOG=warn,gateway=debug
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
       - ORBITPORT_THRESHOLD_PLUGIN=http://plugin-threshold:50005
-      - 'ORBITPORT_THRESHOLD_GROUPS={"e2e-group":{"threshold":2,"participants":[{"node_id":"node-a","party_index":0,"openbao_url":"http://openbao-proxy:8200","mount":"threshold"},{"node_id":"node-b","party_index":1,"openbao_url":"http://openbao-proxy-1:8200","mount":"threshold"},{"node_id":"node-c","party_index":2,"openbao_url":"http://openbao-proxy-2:8200","mount":"threshold"}]}}'
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
     ports:

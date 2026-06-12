@@ -109,12 +109,12 @@ func prepareFakeThresholdNodes(t *testing.T, nodes map[string]*fakeThresholdNode
 		if node == nil {
 			t.Fatalf("missing fake node %q", participant.NodeID)
 		}
-		if err := node.client.post(context.Background(), node.client.thresholdPath("config", "node"), map[string]any{
+		if err := node.client.Post(context.Background(), node.client.thresholdPath("config", "node"), map[string]any{
 			"node_id": participant.NodeID,
 		}, nil); err != nil {
 			t.Fatalf("write node config for %q: %v", participant.NodeID, err)
 		}
-		if err := node.client.post(context.Background(), node.client.thresholdPath("groups", group.Name), map[string]any{
+		if err := node.client.Post(context.Background(), node.client.thresholdPath("groups", group.Name), map[string]any{
 			"threshold":    group.Threshold,
 			"participants": string(participants),
 		}, nil); err != nil {
