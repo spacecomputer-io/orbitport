@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/internal/openbao"
+	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"google.golang.org/grpc/codes"
