@@ -250,7 +250,9 @@ async fn handle_rpc(
     {
         Ok(Ok(result)) => {
             tracing::debug!("RPC executed successfully [id={}]", req_id);
-            account_settle(account_client, &ledger_id).await;
+            tokio::spawn(async move {
+                account_settle(account_client, &ledger_id).await;
+            });
             Ok(warp::reply::json(&result))
         }
         Ok(Err(e)) => {
@@ -424,7 +426,11 @@ async fn handle_service_req(
                     .inc();
                 metrics::record_request(&svc_name, "ok", duration);
                 tracing::debug!("[req={}] Got service result", req_id);
-                account_settle(account_client.clone(), &ledger_id).await;
+                let account_client = account_client.clone();
+                let ledger_id = ledger_id.clone();
+                tokio::spawn(async move {
+                    account_settle(account_client, &ledger_id).await;
+                });
                 Ok(warp::reply::json(&result))
             }
             Err(e) => {

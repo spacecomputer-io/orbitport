@@ -26,6 +26,7 @@ use gateway::proto::plugins::account::{
 struct MockAccountPlugin {
     hold_calls: Arc<AtomicU32>,
     release_calls: Arc<AtomicU32>,
+    settle_calls: Arc<AtomicU32>,
     behavior: HoldBehavior,
 }
 
@@ -69,6 +70,7 @@ impl AccountPlugin for MockAccountPlugin {
         &self,
         _req: Request<SettleRequest>,
     ) -> Result<Response<SettleResponse>, Status> {
+        self.settle_calls.fetch_add(1, Ordering::SeqCst);
         Ok(Response::new(SettleResponse {
             ok: true,
             balance_after: 42,
@@ -77,12 +79,16 @@ impl AccountPlugin for MockAccountPlugin {
     }
 }
 
-async fn start_mock_plugin(behavior: HoldBehavior) -> (SocketAddr, Arc<AtomicU32>, Arc<AtomicU32>) {
+async fn start_mock_plugin(
+    behavior: HoldBehavior,
+) -> (SocketAddr, Arc<AtomicU32>, Arc<AtomicU32>, Arc<AtomicU32>) {
     let hold_calls = Arc::new(AtomicU32::new(0));
     let release_calls = Arc::new(AtomicU32::new(0));
+    let settle_calls = Arc::new(AtomicU32::new(0));
     let plugin = MockAccountPlugin {
         hold_calls: hold_calls.clone(),
         release_calls: release_calls.clone(),
+        settle_calls: settle_calls.clone(),
         behavior,
     };
 
@@ -99,7 +105,7 @@ async fn start_mock_plugin(behavior: HoldBehavior) -> (SocketAddr, Arc<AtomicU32
 
     // Best-effort: give the server a moment to start accepting.
     tokio::time::sleep(Duration::from_millis(50)).await;
-    (addr, hold_calls, release_calls)
+    (addr, hold_calls, release_calls, settle_calls)
 }
 
 async fn connect(addr: SocketAddr) -> AccountPluginClient<Channel> {
@@ -109,7 +115,7 @@ async fn connect(addr: SocketAddr) -> AccountPluginClient<Channel> {
 
 #[tokio::test]
 async fn hold_success_returns_ledger_id() {
-    let (addr, hold_calls, _) = start_mock_plugin(HoldBehavior::Ok).await;
+    let (addr, hold_calls, _, _) = start_mock_plugin(HoldBehavior::Ok).await;
     let mut client = connect(addr).await;
 
     let resp = client
@@ -129,7 +135,7 @@ async fn hold_success_returns_ledger_id() {
 
 #[tokio::test]
 async fn hold_insufficient_credits_maps_to_failed_precondition() {
-    let (addr, _, _) = start_mock_plugin(HoldBehavior::Insufficient).await;
+    let (addr, _, _, _) = start_mock_plugin(HoldBehavior::Insufficient).await;
     let mut client = connect(addr).await;
 
     let err = client
@@ -147,7 +153,7 @@ async fn hold_insufficient_credits_maps_to_failed_precondition() {
 
 #[tokio::test]
 async fn hold_unavailable_propagates() {
-    let (addr, _, _) = start_mock_plugin(HoldBehavior::Unavailable).await;
+    let (addr, _, _, _) = start_mock_plugin(HoldBehavior::Unavailable).await;
     let mut client = connect(addr).await;
 
     let err = client
@@ -164,7 +170,7 @@ async fn hold_unavailable_propagates() {
 
 #[tokio::test]
 async fn release_increments_counter() {
-    let (addr, _, release_calls) = start_mock_plugin(HoldBehavior::Ok).await;
+    let (addr, _, release_calls, _) = start_mock_plugin(HoldBehavior::Ok).await;
 
     // Use the gateway's account_release helper end-to-end.
     let client = connect(addr).await;
@@ -196,6 +202,44 @@ async fn release_2s_timeout_is_respected() {
     assert!(
         elapsed < Duration::from_secs(3),
         "release should respect ~2s timeout, took {:?}",
+        elapsed
+    );
+}
+
+#[tokio::test]
+async fn settle_increments_counter() {
+    let (addr, _, _, settle_calls) = start_mock_plugin(HoldBehavior::Ok).await;
+
+    // Use the gateway's account_settle helper end-to-end.
+    let client = connect(addr).await;
+    gateway::filters::account_settle(Some(client), "ledger-1").await;
+
+    assert_eq!(settle_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn settle_noop_when_no_client() {
+    // Smoke test: should not panic when account plugin is not configured.
+    gateway::filters::account_settle(None, "ledger-1").await;
+    // And empty ledger_id is also a no-op.
+    gateway::filters::account_settle(None, "").await;
+}
+
+#[tokio::test]
+async fn settle_2s_timeout_is_respected() {
+    // Use a never-binding address to force a connect/RPC timeout path.
+    // We construct a channel against 127.0.0.1:1 (likely closed) — the
+    // settle helper should swallow the error and return within 2s.
+    let bad_endpoint = "http://127.0.0.1:1";
+    let channel = tonic::transport::Channel::from_static(bad_endpoint).connect_lazy();
+    let client = AccountPluginClient::new(channel);
+
+    let start = std::time::Instant::now();
+    gateway::filters::account_settle(Some(client), "ledger-1").await;
+    let elapsed = start.elapsed();
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "settle should respect ~2s timeout, took {:?}",
         elapsed
     );
 }
