@@ -9,8 +9,15 @@ package account;
 // dispatches the request to its downstream plugins.
 service AccountPlugin {
   // Hold deducts credits atomically against the Account owning client_id.
-  // The dashboard returns a ledger_id the gateway uses to release on failure.
+  // The dashboard returns a ledger_id the gateway uses to settle on success
+  // or release on failure.
   rpc Hold(HoldRequest) returns (HoldResponse);
+
+  // Settle commits a previous hold: it marks the ledger row resolved so the
+  // dashboard sweeper no longer treats it as an orphan to refund. Balance is
+  // unchanged (the hold already deducted). Idempotent — duplicate calls are
+  // no-ops. The gateway calls this once the downstream request succeeds.
+  rpc Settle(SettleRequest) returns (SettleResponse);
 
   // Release refunds a previous hold. Idempotent — duplicate calls are no-ops.
   rpc Release(ReleaseRequest) returns (ReleaseResponse);
@@ -36,6 +43,16 @@ message HoldResponse {
   // non-nil gRPC status (FailedPrecondition / Unavailable) instead of a
   // response with ok=false, so callers should branch on the gRPC error code.
   string error = 4;
+}
+
+message SettleRequest {
+  string ledger_id = 1;
+}
+
+message SettleResponse {
+  bool ok = 1;
+  int64 balance_after = 2;
+  string error = 3;
 }
 
 message ReleaseRequest {

@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	AccountPlugin_Hold_FullMethodName    = "/account.AccountPlugin/Hold"
+	AccountPlugin_Settle_FullMethodName  = "/account.AccountPlugin/Settle"
 	AccountPlugin_Release_FullMethodName = "/account.AccountPlugin/Release"
 )
 
@@ -32,8 +33,14 @@ const (
 // dispatches the request to its downstream plugins.
 type AccountPluginClient interface {
 	// Hold deducts credits atomically against the Account owning client_id.
-	// The dashboard returns a ledger_id the gateway uses to release on failure.
+	// The dashboard returns a ledger_id the gateway uses to settle on success
+	// or release on failure.
 	Hold(ctx context.Context, in *HoldRequest, opts ...grpc.CallOption) (*HoldResponse, error)
+	// Settle commits a previous hold: it marks the ledger row resolved so the
+	// dashboard sweeper no longer treats it as an orphan to refund. Balance is
+	// unchanged (the hold already deducted). Idempotent — duplicate calls are
+	// no-ops. The gateway calls this once the downstream request succeeds.
+	Settle(ctx context.Context, in *SettleRequest, opts ...grpc.CallOption) (*SettleResponse, error)
 	// Release refunds a previous hold. Idempotent — duplicate calls are no-ops.
 	Release(ctx context.Context, in *ReleaseRequest, opts ...grpc.CallOption) (*ReleaseResponse, error)
 }
@@ -50,6 +57,16 @@ func (c *accountPluginClient) Hold(ctx context.Context, in *HoldRequest, opts ..
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HoldResponse)
 	err := c.cc.Invoke(ctx, AccountPlugin_Hold_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *accountPluginClient) Settle(ctx context.Context, in *SettleRequest, opts ...grpc.CallOption) (*SettleResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SettleResponse)
+	err := c.cc.Invoke(ctx, AccountPlugin_Settle_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -75,8 +92,14 @@ func (c *accountPluginClient) Release(ctx context.Context, in *ReleaseRequest, o
 // dispatches the request to its downstream plugins.
 type AccountPluginServer interface {
 	// Hold deducts credits atomically against the Account owning client_id.
-	// The dashboard returns a ledger_id the gateway uses to release on failure.
+	// The dashboard returns a ledger_id the gateway uses to settle on success
+	// or release on failure.
 	Hold(context.Context, *HoldRequest) (*HoldResponse, error)
+	// Settle commits a previous hold: it marks the ledger row resolved so the
+	// dashboard sweeper no longer treats it as an orphan to refund. Balance is
+	// unchanged (the hold already deducted). Idempotent — duplicate calls are
+	// no-ops. The gateway calls this once the downstream request succeeds.
+	Settle(context.Context, *SettleRequest) (*SettleResponse, error)
 	// Release refunds a previous hold. Idempotent — duplicate calls are no-ops.
 	Release(context.Context, *ReleaseRequest) (*ReleaseResponse, error)
 	mustEmbedUnimplementedAccountPluginServer()
@@ -91,6 +114,9 @@ type UnimplementedAccountPluginServer struct{}
 
 func (UnimplementedAccountPluginServer) Hold(context.Context, *HoldRequest) (*HoldResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Hold not implemented")
+}
+func (UnimplementedAccountPluginServer) Settle(context.Context, *SettleRequest) (*SettleResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Settle not implemented")
 }
 func (UnimplementedAccountPluginServer) Release(context.Context, *ReleaseRequest) (*ReleaseResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Release not implemented")
@@ -134,6 +160,24 @@ func _AccountPlugin_Hold_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AccountPlugin_Settle_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SettleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AccountPluginServer).Settle(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AccountPlugin_Settle_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AccountPluginServer).Settle(ctx, req.(*SettleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AccountPlugin_Release_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReleaseRequest)
 	if err := dec(in); err != nil {
@@ -162,6 +206,10 @@ var AccountPlugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Hold",
 			Handler:    _AccountPlugin_Hold_Handler,
+		},
+		{
+			MethodName: "Settle",
+			Handler:    _AccountPlugin_Settle_Handler,
 		},
 		{
 			MethodName: "Release",

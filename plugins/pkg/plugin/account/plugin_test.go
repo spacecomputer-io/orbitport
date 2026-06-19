@@ -129,6 +129,43 @@ func TestPlugin_Release_MissingLedger(t *testing.T) {
 	require.Equal(t, codes.InvalidArgument, st.Code())
 }
 
+func TestPlugin_Settle_Success(t *testing.T) {
+	plugin, srv := newTestPlugin(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/service/credits/hold/lg/settle", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"balance":88}`))
+	})
+	defer srv.Close()
+
+	resp, err := plugin.Settle(context.Background(), &proto.SettleRequest{LedgerId: "lg"})
+	require.NoError(t, err)
+	require.True(t, resp.Ok)
+	require.Equal(t, int64(88), resp.BalanceAfter)
+}
+
+func TestPlugin_Settle_FailureMapsToUnavailable(t *testing.T) {
+	plugin, srv := newTestPlugin(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	defer srv.Close()
+
+	_, err := plugin.Settle(context.Background(), &proto.SettleRequest{LedgerId: "lg"})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	require.Equal(t, codes.Unavailable, st.Code())
+}
+
+func TestPlugin_Settle_MissingLedger(t *testing.T) {
+	plugin, _ := newTestPlugin(t, func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("should not reach dashboard")
+	})
+
+	_, err := plugin.Settle(context.Background(), &proto.SettleRequest{LedgerId: ""})
+	require.Error(t, err)
+	st, _ := status.FromError(err)
+	require.Equal(t, codes.InvalidArgument, st.Code())
+}
+
 func TestConfig_ValidateMissingRequired(t *testing.T) {
 	cfg := &accountConfig{CreditsPerUnit: 1, HTTPTimeoutSecs: 5}
 	require.Error(t, cfg.validate())

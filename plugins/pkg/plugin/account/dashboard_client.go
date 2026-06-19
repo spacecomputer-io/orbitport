@@ -45,6 +45,10 @@ type holdResponseBody struct {
 	Balance  int64  `json:"balance"`
 }
 
+type settleResponseBody struct {
+	Balance int64 `json:"balance"`
+}
+
 type releaseResponseBody struct {
 	Balance int64 `json:"balance"`
 }
@@ -106,6 +110,37 @@ func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint3
 	default:
 		return "", 0, fmt.Errorf("dashboard hold returned %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
 	}
+}
+
+// Settle posts to /service/credits/hold/:ledgerId/settle. It commits a hold so
+// the dashboard sweeper no longer treats it as an orphan to refund; the balance
+// is unchanged (the hold already deducted). 4xx/5xx responses are returned as
+// errors so callers can distinguish "tried" from "ok". The endpoint is
+// idempotent on the backend.
+func (d *dashboardClient) Settle(ctx context.Context, ledgerID string) (int64, error) {
+	path := "/service/credits/hold/" + ledgerID + "/settle"
+	req, err := d.newRequest(ctx, http.MethodPost, path, nil)
+	if err != nil {
+		return 0, err
+	}
+
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("dashboard settle transport error: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	rawBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return 0, fmt.Errorf("dashboard settle returned %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+	}
+
+	var parsed settleResponseBody
+	if err := json.Unmarshal(rawBody, &parsed); err != nil {
+		return 0, fmt.Errorf("decode settle response: %w", err)
+	}
+	return parsed.Balance, nil
 }
 
 // Release posts to /service/credits/hold/:ledgerId/release. 4xx responses are

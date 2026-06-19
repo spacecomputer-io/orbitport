@@ -182,8 +182,16 @@ async fn account_hold(
         });
     };
 
+    // Auth0 M2M tokens carry `sub` as `<client_id>@clients`; the dashboard
+    // stores the bare client_id. Strip the suffix here (account boundary only)
+    // so the credit lookup matches. Left untouched elsewhere (e.g. KMS keys are
+    // namespaced by the full `client_id` and must not change).
     let request = tonic::Request::new(HoldRequest {
-        client_id: auth.client_id.clone(),
+        client_id: auth
+            .client_id
+            .strip_suffix("@clients")
+            .unwrap_or(&auth.client_id)
+            .to_string(),
         units,
         operation: operation.to_string(),
     });
@@ -224,8 +232,60 @@ async fn account_hold(
     }
 }
 
+/// Best-effort settle. Commits the hold on a successful request so the dashboard
+/// sweeper does not refund it as an orphan. Logs + ignores failure; a dropped
+/// settle leaves the hold unresolved, so the sweeper refunds it (the customer is
+/// never overcharged — at worst the request goes uncharged). Times out at 2 s
+/// regardless of the per-plugin HTTP timeout.
+pub async fn account_settle(account_client: Option<AccountPluginClient<Channel>>, ledger_id: &str) {
+    if ledger_id.is_empty() {
+        return;
+    }
+    let Some(mut client) = account_client else {
+        return;
+    };
+
+    let req = tonic::Request::new(crate::proto::plugins::account::SettleRequest {
+        ledger_id: ledger_id.to_string(),
+    });
+
+    let settle = tokio::time::timeout(Duration::from_secs(2), client.settle(req)).await;
+    match settle {
+        Ok(Ok(resp)) => {
+            let body = resp.into_inner();
+            if body.ok {
+                metrics::record_account_settle("ok");
+                tracing::debug!("Account settle succeeded for ledger_id={}", ledger_id);
+            } else {
+                metrics::record_account_settle("plugin_error");
+                tracing::warn!(
+                    "Account settle returned ok=false for ledger_id={}: {}. Sweeper will refund the orphan.",
+                    ledger_id,
+                    body.error
+                );
+            }
+        }
+        Ok(Err(e)) => {
+            metrics::record_account_settle("plugin_error");
+            tracing::warn!(
+                "Account settle failed for ledger_id={}: {}. Sweeper will refund the orphan.",
+                ledger_id,
+                e
+            );
+        }
+        Err(_) => {
+            metrics::record_account_settle("timeout");
+            tracing::warn!(
+                "Account settle timed out for ledger_id={}. Sweeper will refund the orphan.",
+                ledger_id
+            );
+        }
+    }
+}
+
 /// Best-effort release. Logs + ignores failure. The dashboard sweeper backstops
-/// at 5 min. Times out at 2 s regardless of the per-plugin HTTP timeout.
+/// orphaned holds at the sweeper TTL. Times out at 2 s regardless of the
+/// per-plugin HTTP timeout.
 pub async fn account_release(
     account_client: Option<AccountPluginClient<Channel>>,
     ledger_id: &str,

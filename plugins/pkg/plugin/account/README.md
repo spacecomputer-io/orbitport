@@ -5,15 +5,25 @@ Per-request credit gating against the dashboard backend account service.
 ## Overview
 
 Implements the `AccountPlugin` gRPC service (`proto/plugins/account.proto`)
-with two RPCs:
+with three RPCs that form a hold / settle / release lifecycle:
 
 - `Hold(client_id, units, operation)` — deducts `units * ORBITPORT_ACCOUNT_CREDITS_PER_UNIT`
-  credits against the account that owns `client_id` and returns a ledger ID
-  the gateway uses to release on downstream failure.
-- `Release(ledger_id)` — refunds a previous hold. Idempotent on the backend.
+  credits against the account that owns `client_id` and returns a ledger ID the
+  gateway uses to settle on success or release on failure.
+- `Settle(ledger_id)` — commits a previous hold so the dashboard sweeper no
+  longer treats it as an orphan to refund. Balance is unchanged (the hold
+  already deducted). The gateway calls this on a **successful** request.
+  Idempotent on the backend.
+- `Release(ledger_id)` — refunds a previous hold. The gateway calls this on a
+  **failed** request. Idempotent on the backend.
 
-Both RPCs translate into HTTP calls against the dashboard backend's
-`POST /service/credits/hold` and `POST /service/credits/hold/:ledgerId/release`
+Only the gateway knows whether a request succeeded, so it must report every
+terminal outcome — settle on success, release on failure. A hold that gets
+neither (gateway crashed mid-flight) is an orphan the dashboard sweeper refunds.
+
+The RPCs translate into HTTP calls against the dashboard backend's
+`POST /service/credits/hold`, `POST /service/credits/hold/:ledgerId/settle`, and
+`POST /service/credits/hold/:ledgerId/release`
 endpoints, authenticated via an Auth0 M2M `client_credentials` token cached in
 memory and refreshed in the background ~5 min before expiry.
 
@@ -30,8 +40,12 @@ memory and refreshed in the background ~5 min before expiry.
   gateway maps this to HTTP 402.
 - **Dashboard 5xx or unreachable**: `Hold` returns gRPC `Unavailable`. The
   gateway maps this to HTTP 503 (fail-closed).
+- **`Settle` failure**: returned as `Unavailable`. The gateway logs and ignores.
+  The hold stays unresolved, so the dashboard sweeper refunds it as an orphan —
+  the request goes uncharged (revenue loss), never overcharged.
 - **`Release` failure**: returned as `Unavailable`. The gateway logs and
-  ignores; the dashboard sweeper releases stale holds after 5 min.
+  ignores; the hold stays unresolved and the dashboard sweeper refunds it as an
+  orphan after the sweeper TTL. Same end state as a successful release.
 
 ## Dev tip
 
