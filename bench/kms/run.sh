@@ -5,7 +5,6 @@
 set -euo pipefail
 
 KMS_ADDR="${KMS_ADDR:-plugin-kms:50004}"
-CALL="${CALL:-kmsapi.KmsPlugin}"
 PROTO="${PROTO:-proto/plugins/kms.proto}"
 IMPORT="${IMPORT:-proto}"
 DATA="${DATA:-bench/kms/data}"
@@ -13,6 +12,7 @@ RESULTS="${RESULTS:-bench/kms/results}"
 CONCURRENCY="${CONCURRENCY:-1 2 5 10 20 50 100 200}"
 DURATION="${DURATION:-10s}" # each cell runs for this long (ghz -z); bounds total wall-clock
 TENANTS="${TENANTS:-50}"
+SETTLE="${SETTLE:-10}" # drain pause between ops; a saturated OpenBao (heavy keygen) else poisons the next op's cells. ponytail: fixed pause, raise if a heavy op still bleeds into the next
 
 mkdir -p "$RESULTS"
 
@@ -52,8 +52,10 @@ ops=(
   "CreateKey        createkey-ed25519    tmpl:ed25519    ed25519"
   "CreateKey        createkey-ecdsa_p256 tmpl:ecdsa_p256 ecdsa_p256"
   "CreateKey        createkey-ecdsa_p384 tmpl:ecdsa_p384 ecdsa_p384"
-  "CreateKey        createkey-rsa_4096   tmpl:rsa_4096   rsa_4096"
   "CreateKey        createkey-secp256k1  tmpl:secp256k1  secp256k1"
+  # RSA-4096 keygen (~2s each) saturates OpenBao the hardest — run it LAST so its
+  # backlog can't poison a following op's cells.
+  "CreateKey        createkey-rsa_4096   tmpl:rsa_4096   rsa_4096"
 )
 
 for entry in "${ops[@]}"; do
@@ -65,7 +67,7 @@ for entry in "${ops[@]}"; do
   for c in $CONCURRENCY; do
     out="$RESULTS/${slug}-c${c}.json"
     base=(ghz --insecure --proto "$PROTO" --import-paths "$IMPORT"
-          --call "${CALL}.${method}" -c "$c" -z "$DURATION" -O json -o "$out")
+          --call "kmsapi.KmsPlugin.${method}" -c "$c" -z "$DURATION" -O json -o "$out")
     if [[ "$src" == file:* ]]; then
       "${base[@]}" --data-file "$DATA/${src#file:}.json" "$KMS_ADDR"
     else
@@ -73,4 +75,5 @@ for entry in "${ops[@]}"; do
     fi
     echo "done: $method $slug c=$c -> $out"
   done
+  sleep "$SETTLE" # let OpenBao drain before the next op measures
 done

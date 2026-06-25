@@ -12,9 +12,14 @@ path — which is what we bill on.
 
 - `plugins/cmd/kmsbench-bootstrap` — provisions tenants + keys and emits ghz data files.
 - `run.sh` — runs [ghz](https://ghz.sh) for every (operation, algorithm) × concurrency.
-- `summarize.sh` — turns the ghz JSON into a markdown table marking each op's max-RPS row.
-- `Dockerfile` / `entrypoint.sh` — packages all of the above; runs bootstrap → sweep → table.
+- `summarize.sh` — turns the ghz JSON into a markdown table marking each op's max-RPS row, plus a
+  **Compute per operation** section (`VM-time/op = 1/max-RPS`).
+- `Dockerfile` / `entrypoint.sh` — packages all of the above; runs bootstrap → sweep → table, and logs the
+  bench client's own CPU/mem (load-generator, *not* the OpenBao VM) at startup.
 - `k8s/job.yaml` — runs the container in-cluster against the dev KMS.
+
+The `results-*.md` outputs are **gitignored** — they carry infra topology (VM names, project, IPs) that
+doesn't belong in this public repo. Treat them as local artifacts; share out-of-band.
 
 ## What it covers
 
@@ -85,6 +90,20 @@ KMS is ClusterIP-only, so the bench runs as an in-cluster Job. You drive it with
    kubectl -n orbitport delete job kmsbench   # or let ttlSecondsAfterFinished clean up
    ```
 
+The Job streams progress lines then the markdown table; trim everything before the table when saving.
+`summarize.sh` appends a **Compute per operation** section (`VM-time/op = 1/max-RPS`) — see "From numbers
+to price" below for turning that into dollars. The bench container can't see the hardware, so add a
+**machine-context** note to the results yourself from the laptop:
+
+```bash
+n=$(kubectl -n orbitport get pod -l component=kms -o jsonpath='{.items[0].spec.nodeName}')
+kubectl get node "$n" -o jsonpath='{.metadata.labels.node\.kubernetes\.io/instance-type}{"\n"}'  # KMS pod node type
+```
+
+Record that node type and the OpenBao VM's machine type (from your infra / `gcloud compute instances
+describe`; needs `compute.instances.list` on the VM's project). If you can't read it, note it TBD and lean
+on the **OpenBao compute (inferred)** section — the sweep itself bounds the VM's effective cores.
+
 Compare `results-local.md` vs `results-gcp.md` — GCP adds the WireGuard hop to
 the OpenBao VM, so expect higher latency / lower RPS. secp256k1 *is* covered here
 (the ethereum mount exists on the cluster).
@@ -92,8 +111,8 @@ the OpenBao VM, so expect higher latency / lower RPS. secp256k1 *is* covered her
 ## Tuning
 
 All env vars (defaults in parens): `KMS_ADDR`, `TENANTS` (50), `DURATION` (`10s`
-per cell, ghz `-z`), `CONCURRENCY` (`1 2 5 10 20 50 100 200`), `CALL`
-(`kmsapi.KmsPlugin`).
+per cell, ghz `-z`), `CONCURRENCY` (`1 2 5 10 20 50 100 200`), `SETTLE` (`10`s
+drain between ops).
 
 Each (op × concurrency) cell runs for `DURATION`, so total wall-clock is
 predictable: `ops × concurrency-levels × DURATION`. This also keeps slow ops
@@ -122,10 +141,14 @@ that's a real property of concurrent rotation, not a harness bug. Raise
 
 Three axes, all read off the per-op tables:
 
-- **Per-operation cost** = `monthly_$ / (max_RPS × 2.6e6)` where `monthly_$` is
-  the KMS + OpenBao share of the GCP bill and `2.6e6` ≈ seconds/month. Do this
-  per operation/algorithm — RSA-4096 sign is far more expensive per op than
-  ed25519, and the table shows it.
+- **Per-operation cost** — `summarize.sh` emits a **Compute per operation** table
+  where `VM-time/op (ms) = 1000 / max_RPS`: the whole-VM time one op occupies at
+  saturation. Turn it into money yourself: `$/op = VM-time/op(s) × (OpenBao-VM
+  $/hour ÷ 3600)`. This is exact and VM-size-agnostic (max_RPS already bakes in the
+  cores used), so it needs only the VM's hourly price from your bill — no machine
+  type required. It assumes the VM is dedicated to KMS; if shared, scale down. The
+  `rel. compute` column is the price-free relationship: RSA-4096 *key creation* is
+  the extreme — ~300× a signature.
 - **Sustained-RPS tiers** = the max RPS per operation is the ceiling a tier can
   promise; read the p99 column at that row to set the SLO.
 - **Per-key / storage** = the CreateKey/RotateKey rows give provisioning
