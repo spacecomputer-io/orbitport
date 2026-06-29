@@ -13,6 +13,7 @@ service ThresholdService {
 message DkgRequest {
   string alias = 1;
   string group_name = 2;
+  string session_id = 3;
 }
 
 message DkgResponse {

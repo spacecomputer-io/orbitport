@@ -65,6 +65,6 @@ type DKGStatus struct {
 type GroupMemberClient interface {
 	StartDKG(ctx context.Context, req StartDKGRequest) (*DKGStatus, error)
 	DeliverDKG(ctx context.Context, keyName string, req DeliverDKGRequest) (*DKGStatus, error)
-	ProceedDKG(ctx context.Context, keyName string) (*DKGStatus, error)
+	ProceedDKG(ctx context.Context, keyName string, round int) (*DKGStatus, error)
 	ReadDKGStatus(ctx context.Context, keyName string) (*DKGStatus, error)
 }

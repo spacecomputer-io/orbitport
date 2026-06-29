@@ -25,8 +25,21 @@ var logger = utils.GetLogger("orbitport:threshold")
 
 func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
-	logger.Infof("creating Threshold plugin with timeout_secs=%d", cfg.TimeoutSecs)
-	return newPlugin(cfg, NewCoordinator()), nil
+	sessionSecret := strings.TrimSpace(cfg.SessionSecret)
+	if sessionSecret == "" {
+		return nil, fmt.Errorf("ORBITPORT_THRESHOLD_SESSION_SECRET is required")
+	}
+	retryBackoff := time.Duration(cfg.RetryBackoffMillis) * time.Millisecond
+	logger.Infof(
+		"creating Threshold plugin with timeout_secs=%d retry_attempts=%d retry_backoff_ms=%d",
+		cfg.TimeoutSecs,
+		cfg.RetryAttempts,
+		cfg.RetryBackoffMillis,
+	)
+	return newPlugin(cfg, NewCoordinator(
+		WithSessionSecret([]byte(sessionSecret)),
+		WithRetryPolicy(cfg.RetryAttempts, retryBackoff),
+	)), nil
 }
 
 func newPlugin(cfg *thresholdConfig, coordinator *Coordinator) *Plugin {

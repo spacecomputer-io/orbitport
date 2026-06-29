@@ -92,9 +92,11 @@ func (c *OpenBaoClient) DeliverDKG(ctx context.Context, keyName string, req Deli
 	return &resp.Data, nil
 }
 
-func (c *OpenBaoClient) ProceedDKG(ctx context.Context, keyName string) (*DKGStatus, error) {
+func (c *OpenBaoClient) ProceedDKG(ctx context.Context, keyName string, round int) (*DKGStatus, error) {
 	var resp openBaoDataResponse[DKGStatus]
-	if err := c.Post(ctx, c.thresholdPath("keys", keyName, "dkg", "proceed"), map[string]any{}, &resp); err != nil {
+	if err := c.Post(ctx, c.thresholdPath("keys", keyName, "dkg", "proceed"), map[string]any{
+		"round": round,
+	}, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil

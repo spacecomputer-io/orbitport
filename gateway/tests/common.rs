@@ -121,7 +121,8 @@ pub async fn rpc_threshold_coordinate_dkg(
         "method": "kms_threshold.CoordinateDKG",
         "params": {
             "Alias": format!("e2e-key-{req_id}"),
-            "GroupName": THRESHOLD_GROUP
+            "GroupName": THRESHOLD_GROUP,
+            "SessionId": format!("dkg-session-{req_id}")
         },
     });
 

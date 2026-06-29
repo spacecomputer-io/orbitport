@@ -145,6 +145,10 @@ impl ThresholdService {
         if req.group_name != req.group_name.trim() {
             return Err(ThresholdError::SurroundingWhitespace("group_name"));
         }
+        validate_required("SessionId", &req.session_id)?;
+        if req.session_id != req.session_id.trim() {
+            return Err(ThresholdError::SurroundingWhitespace("session_id"));
+        }
         Ok(())
     }
 
@@ -173,6 +177,7 @@ impl ThresholdService {
     ) -> Result<DkgResponse, tonic::Status> {
         let alias = req.alias.trim().to_string();
         let group_name = req.group_name;
+        let session_id = req.session_id.trim().to_string();
         let group = self.groups.get(&group_name).ok_or_else(|| {
             tonic::Status::invalid_argument(format!(
                 "Threshold group {} is not configured",
@@ -180,7 +185,6 @@ impl ThresholdService {
             ))
         })?;
 
-        let session_id = new_session_id();
         let response: PluginDkgResponse = self
             .client
             .coordinate_dkg(tonic::Request::new(PluginDkgRequest {
@@ -283,11 +287,6 @@ fn validate_alias(value: &str) -> Result<(), ThresholdError> {
     Ok(())
 }
 
-fn new_session_id() -> String {
-    let bytes: [u8; 16] = rand::random();
-    format!("dkg-{}", hex::encode(bytes))
-}
-
 fn threshold_key_id(alias: &str) -> String {
     format!("{KEY_ID_PREFIX}{alias}")
 }
@@ -319,6 +318,7 @@ mod test {
         DkgRequest {
             alias: "key-1".to_string(),
             group_name: "team-a".to_string(),
+            session_id: "dkg-1".to_string(),
         }
     }
 
@@ -371,5 +371,14 @@ mod test {
             err.to_string()
                 .contains("reserved threshold:<alias> format")
         );
+    }
+
+    #[test]
+    fn validate_coordinate_dkg_rejects_missing_session_id() {
+        let mut req = valid_request();
+        req.session_id.clear();
+
+        let err = ThresholdService::validate_coordinate_dkg(&req).unwrap_err();
+        assert!(err.to_string().contains("SessionId is required"));
     }
 }

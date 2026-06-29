@@ -18,7 +18,10 @@ func TestPluginCoordinateDkg(t *testing.T) {
 	}
 	prepareFakeThresholdNodes(t, nodes, newTestGroupConfig())
 
-	plugin := newPlugin(&thresholdConfig{TimeoutSecs: 10}, NewCoordinator(WithRandomSource(&countingReader{})))
+	plugin := newPlugin(
+		&thresholdConfig{TimeoutSecs: 10, SessionSecret: "test-threshold-session-secret"},
+		NewCoordinator(WithSessionSecret([]byte("test-threshold-session-secret"))),
+	)
 	resp, err := plugin.CoordinateDkg(context.Background(), &proto.DkgRequest{
 		KeyName:   "key-1",
 		GroupName: "team-a",
@@ -47,7 +50,10 @@ func TestPluginCoordinateDkg(t *testing.T) {
 }
 
 func TestPluginCoordinateDkgRejectsInvalidRequest(t *testing.T) {
-	plugin := newPlugin(&thresholdConfig{TimeoutSecs: 10}, NewCoordinator())
+	plugin := newPlugin(
+		&thresholdConfig{TimeoutSecs: 10, SessionSecret: "test-threshold-session-secret"},
+		NewCoordinator(WithSessionSecret([]byte("test-threshold-session-secret"))),
+	)
 
 	_, err := plugin.CoordinateDkg(context.Background(), &proto.DkgRequest{
 		KeyName:   "key-1",
@@ -67,7 +73,10 @@ func TestPluginCoordinateDkgRejectsInvalidRequest(t *testing.T) {
 }
 
 func TestPluginCoordinateDkgHonorsTimeout(t *testing.T) {
-	plugin := newPlugin(&thresholdConfig{TimeoutSecs: 1}, NewCoordinator())
+	plugin := newPlugin(
+		&thresholdConfig{TimeoutSecs: 1, SessionSecret: "test-threshold-session-secret"},
+		NewCoordinator(WithSessionSecret([]byte("test-threshold-session-secret"))),
+	)
 	plugin.timeout = time.Nanosecond
 
 	_, err := plugin.CoordinateDkg(context.Background(), &proto.DkgRequest{

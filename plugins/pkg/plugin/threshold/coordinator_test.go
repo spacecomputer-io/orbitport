@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -25,7 +26,7 @@ func TestCoordinatorCoordinatesOpenBaoDKGTwoOfThree(t *testing.T) {
 		{NodeID: "node-b", PartyIndex: 1, Client: nodes["node-b"].client},
 		{NodeID: "node-c", PartyIndex: 2, Client: nodes["node-c"].client},
 	}
-	coordinator := NewCoordinator(WithRandomSource(&countingReader{}))
+	coordinator := NewCoordinator(WithSessionSecret([]byte("test-threshold-session-secret")))
 	result, err := coordinator.CoordinateDKG(context.Background(), DKGRequest{
 		KeyName:      "key-1",
 		GroupName:    "team-a",
@@ -71,6 +72,86 @@ func TestCoordinatorCoordinatesOpenBaoDKGTwoOfThree(t *testing.T) {
 	assertPairwiseSeed(t, nodes, "node-a", "node-c")
 	assertPairwiseSeed(t, nodes, "node-b", "node-c")
 	assertRound2Unicasts(t, nodes)
+}
+
+func TestCoordinatorBootstrapIsDeterministicForSameSession(t *testing.T) {
+	participants := []DKGParticipant{
+		{NodeID: "node-a", PartyIndex: 0},
+		{NodeID: "node-b", PartyIndex: 1},
+		{NodeID: "node-c", PartyIndex: 2},
+	}
+	req := DKGRequest{
+		KeyName:      "key-1",
+		GroupName:    "team-a",
+		SessionID:    "dkg-1",
+		Threshold:    2,
+		Participants: participants,
+	}
+	coordinator := NewCoordinator(WithSessionSecret([]byte("test-threshold-session-secret")))
+
+	first, err := coordinator.newDKGBootstrap(req)
+	if err != nil {
+		t.Fatalf("newDKGBootstrap() first error = %v", err)
+	}
+	second, err := coordinator.newDKGBootstrap(req)
+	if err != nil {
+		t.Fatalf("newDKGBootstrap() second error = %v", err)
+	}
+	if first.commonSeed != second.commonSeed {
+		t.Fatalf("common seed changed for same session")
+	}
+	for _, participant := range participants {
+		if !reflect.DeepEqual(first.pairwiseSeedsByNode[participant.NodeID], second.pairwiseSeedsByNode[participant.NodeID]) {
+			t.Fatalf("pairwise seeds changed for %s", participant.NodeID)
+		}
+	}
+
+	req.SessionID = "dkg-2"
+	third, err := coordinator.newDKGBootstrap(req)
+	if err != nil {
+		t.Fatalf("newDKGBootstrap() third error = %v", err)
+	}
+	if first.commonSeed == third.commonSeed {
+		t.Fatalf("common seed should differ across sessions")
+	}
+}
+
+func TestCoordinatorRetriesTransientOpenBaoDKGCalls(t *testing.T) {
+	nodeIDs := []string{"node-a", "node-b", "node-c"}
+	nodes := make(map[string]*fakeThresholdNode, len(nodeIDs))
+	for _, nodeID := range nodeIDs {
+		nodes[nodeID] = newFakeThresholdNode(t, nodeID, nodeIDs)
+	}
+
+	prepareFakeThresholdNodes(t, nodes, newTestGroupConfig())
+	nodes["node-a"].failNext("start", 1)
+	nodes["node-b"].failNext("deliver", 1)
+	nodes["node-c"].failNext("proceed", 1)
+
+	participants := []DKGParticipant{
+		{NodeID: "node-a", PartyIndex: 0, Client: nodes["node-a"].client},
+		{NodeID: "node-b", PartyIndex: 1, Client: nodes["node-b"].client},
+		{NodeID: "node-c", PartyIndex: 2, Client: nodes["node-c"].client},
+	}
+	coordinator := NewCoordinator(
+		WithSessionSecret([]byte("test-threshold-session-secret")),
+		WithRetryPolicy(2, 0),
+	)
+	result, err := coordinator.CoordinateDKG(context.Background(), DKGRequest{
+		KeyName:      "key-1",
+		GroupName:    "team-a",
+		SessionID:    "dkg-1",
+		Threshold:    2,
+		Participants: participants,
+	})
+	if err != nil {
+		t.Fatalf("CoordinateDKG() error = %v", err)
+	}
+	for nodeID, status := range result.Nodes {
+		if status.Status != keyStatusCompleted {
+			t.Fatalf("node %s status = %q, want %q", nodeID, status.Status, keyStatusCompleted)
+		}
+	}
 }
 
 type testGroupParticipant struct {
@@ -136,6 +217,7 @@ type fakeThresholdNode struct {
 	pairwiseSeeds     map[string]string
 	proceedCalls      int
 	deliveries        []DeliverDKGRequest
+	failures          map[string]int
 }
 
 func newFakeThresholdNode(t *testing.T, nodeID string, allNodeIDs []string) *fakeThresholdNode {
@@ -144,6 +226,7 @@ func newFakeThresholdNode(t *testing.T, nodeID string, allNodeIDs []string) *fak
 	node := &fakeThresholdNode{
 		nodeID:        nodeID,
 		pairwiseSeeds: make(map[string]string),
+		failures:      make(map[string]int),
 	}
 	for _, peer := range allNodeIDs {
 		if peer != nodeID {
@@ -225,6 +308,10 @@ func (n *fakeThresholdNode) handleWriteGroup(w http.ResponseWriter, r *http.Requ
 }
 
 func (n *fakeThresholdNode) handleStart(w http.ResponseWriter, r *http.Request) {
+	if n.consumeFailure(w, "start") {
+		return
+	}
+
 	var req struct {
 		Group         string `json:"group"`
 		SessionID     string `json:"session_id"`
@@ -255,6 +342,10 @@ func (n *fakeThresholdNode) handleStart(w http.ResponseWriter, r *http.Request) 
 }
 
 func (n *fakeThresholdNode) handleDeliver(w http.ResponseWriter, r *http.Request) {
+	if n.consumeFailure(w, "deliver") {
+		return
+	}
+
 	var req DeliverDKGRequest
 	mustDecodeJSON(r, &req)
 	if req.Broadcast == "" {
@@ -268,11 +359,26 @@ func (n *fakeThresholdNode) handleDeliver(w http.ResponseWriter, r *http.Request
 	writeOpenBaoData(w, n.status(0, "", nil))
 }
 
-func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, _ *http.Request) {
+func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, r *http.Request) {
+	if n.consumeFailure(w, "proceed") {
+		return
+	}
+
+	var req struct {
+		Round int `json:"round"`
+	}
+	mustDecodeJSON(r, &req)
+
 	n.mu.Lock()
 	n.proceedCalls++
 	call := n.proceedCalls
 	n.mu.Unlock()
+
+	expectedRound := call + 1
+	if req.Round != expectedRound {
+		http.Error(w, fmt.Sprintf("proceed round = %d, want %d", req.Round, expectedRound), http.StatusBadRequest)
+		return
+	}
 
 	switch call {
 	case 1:
@@ -304,6 +410,28 @@ func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, _ *http.Request
 	default:
 		http.Error(w, "too many proceed calls", http.StatusBadRequest)
 	}
+}
+
+func (n *fakeThresholdNode) failNext(operation string, count int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	n.failures[operation] += count
+}
+
+func (n *fakeThresholdNode) consumeFailure(w http.ResponseWriter, operation string) bool {
+	n.mu.Lock()
+	remaining := n.failures[operation]
+	if remaining > 0 {
+		n.failures[operation] = remaining - 1
+	}
+	n.mu.Unlock()
+
+	if remaining == 0 {
+		return false
+	}
+	http.Error(w, "transient "+operation+" failure", http.StatusInternalServerError)
+	return true
 }
 
 func (n *fakeThresholdNode) status(round int, broadcast string, unicasts map[string]string) DKGStatus {
@@ -402,16 +530,4 @@ func assertRound2Unicasts(t *testing.T, nodes map[string]*fakeThresholdNode) {
 			}
 		}
 	}
-}
-
-type countingReader struct {
-	next byte
-}
-
-func (r *countingReader) Read(p []byte) (int, error) {
-	for i := range p {
-		r.next++
-		p[i] = r.next
-	}
-	return len(p), nil
 }

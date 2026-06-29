@@ -289,7 +289,8 @@ mod test {
             "method": "kms_threshold.CoordinateDKG",
             "params": {
                 "Alias": "key-1",
-                "GroupName": "team-a"
+                "GroupName": "team-a",
+                "SessionId": "dkg-1"
             }
         });
 
@@ -298,6 +299,7 @@ mod test {
             RpcCall::CoordinateDKG(params) => {
                 assert_eq!(params.alias, "key-1");
                 assert_eq!(params.group_name, "team-a");
+                assert_eq!(params.session_id, "dkg-1");
             }
             _ => panic!("expected kms_threshold.CoordinateDKG"),
         }
