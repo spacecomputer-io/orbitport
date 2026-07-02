@@ -27,35 +27,44 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      base_image: ${{ steps.extract.outputs.base_image }}
+      final_image: ${{ steps.extract.outputs.final_image }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract FROM image from Dockerfile
+      - name: Extract FROM images from Dockerfile
         id: extract
         run: |
           DOCKERFILE=gateway/DockerfileHardened
 
-          # Export any ARG defaults declared before the first FROM (e.g.
+          # Export any ARG defaults declared anywhere in the file (e.g.
           # `ARG RUST_VERSION=1.82`), so we can resolve ${RUST_VERSION}-style
-          # references used inside the FROM line itself. Without this, the
-          # raw string "dhi.io/rust:${RUST_VERSION}-debian13-dev" gets passed
-          # through unresolved, and bash later expands the unset var to
-          # empty, producing a broken tag like "rust:-debian13-dev".
+          # references used inside FROM lines. Without this, a raw string
+          # like "dhi.io/rust:${RUST_VERSION}-debian13-dev" passes through
+          # unresolved, and bash later expands the unset var to empty.
           while IFS= read -r line; do
             var_assignment=$(echo "$line" | sed -E 's/^ARG[[:space:]]+//')
             if [[ "$var_assignment" == *"="* ]]; then
               export "${var_assignment?}"
             fi
-          done < <(awk '/^FROM/{exit} /^ARG/{print}' "$DOCKERFILE")
+          done < <(grep '^ARG' "$DOCKERFILE")
 
-          RAW_FROM=$(grep -m1 '^FROM' "$DOCKERFILE" | awk '{print $2}')
-          BASE_IMAGE=$(envsubst <<< "$RAW_FROM")
+          # This Dockerfile is multi-stage: an early FROM (e.g. rust:...-dev)
+          # is used only to compile the binary and is discarded, while the
+          # LAST FROM is the actual runtime base that ships. CVEs in the
+          # build stage don't reach production, so we scan the two stages
+          # separately and only gate the pipeline on the final stage.
+          BUILD_RAW=$(grep -m1 '^FROM' "$DOCKERFILE" | awk '{print $2}')
+          FINAL_RAW=$(grep '^FROM' "$DOCKERFILE" | tail -1 | awk '{print $2}')
 
-          echo "Resolved base image: $BASE_IMAGE"
-          echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
+          BUILD_IMAGE=$(envsubst <<< "$BUILD_RAW")
+          FINAL_IMAGE=$(envsubst <<< "$FINAL_RAW")
+
+          echo "Build-stage base (informational scan only): $BUILD_IMAGE"
+          echo "Final-stage base (blocking scan):            $FINAL_IMAGE"
+          echo "build_image=$BUILD_IMAGE" >> $GITHUB_OUTPUT
+          echo "final_image=$FINAL_IMAGE" >> $GITHUB_OUTPUT
 
       # dhi.io is a SEPARATE registry host from docker.io — same Docker ID
       # credentials work, but each host needs its own explicit login.
@@ -84,25 +93,44 @@ jobs:
       - name: Install Docker Scout CLI
         run: curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
 
-      - name: Verify DHI base image attestation (signed by Docker)
+      - name: Verify build-stage base attestation (signed by Docker)
         run: |
-          # --skip-tlog: DHI attestations aren't always written to the public
-          # Rekor log (to avoid leaking org namespace info); the signature is
-          # still checked against Docker's published key regardless.
           docker scout attest get \
             --predicate-type https://cyclonedx.org/bom/v1.6 \
             --verify --skip-tlog \
-            ${{ steps.extract.outputs.base_image }}
+            ${{ steps.extract.outputs.build_image }}
 
-      - name: Docker Scout CVE scan (fail on critical/high)
+      - name: Verify final-stage base attestation (signed by Docker)
+        run: |
+          docker scout attest get \
+            --predicate-type https://cyclonedx.org/bom/v1.6 \
+            --verify --skip-tlog \
+            ${{ steps.extract.outputs.final_image }}
+
+      - name: Docker Scout CVE scan — build stage (informational, non-blocking)
         uses: docker/scout-action@v1
         with:
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
           dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
           command: cves
-          image: ${{ steps.extract.outputs.base_image }}
+          image: ${{ steps.extract.outputs.build_image }}
+          exit-code: false
+          only-severities: critical,high
+          # Writes the CVE report as a GitHub Job Summary instead of failing
+          # the job — this is the build-stage (dev) image, discarded after
+          # compile, so it's reported for visibility only.
+          summary: true
+
+      - name: Docker Scout CVE scan — final stage (blocking, fails on critical/high)
+        uses: docker/scout-action@v1
+        with:
+          dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
+          dockerhub-password: ${{ secrets.DOCKER_PASSWORD }}
+          command: cves
+          image: ${{ steps.extract.outputs.final_image }}
           exit-code: true
           only-severities: critical,high
+          summary: true
 
   # ── 1. Build Gateway ──────────────────────────────────────────────────────────
   build-gateway:
