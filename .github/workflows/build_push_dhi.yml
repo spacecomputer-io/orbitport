@@ -1,10 +1,13 @@
 name: Build Sign and Push Docker Hardened Images
 
 on:
-  # Manual trigger only — this is the real push/sign/provenance pipeline now.
-  # Run this deliberately from the Actions tab when you want to publish a
-  # new signed image, rather than on every push, so we don't spam Docker Hub
-  # with a new tag on every commit to this branch.
+  push:
+    branches:
+      - feat/dhi-v2
+  # workflow_dispatch also kept for later — once this workflow file exists on
+  # main, manual "Run workflow" becomes available too. Until then, GitHub
+  # doesn't show workflow_dispatch as a runnable option for a branch that
+  # only has the workflow file on itself, not on the default branch.
   workflow_dispatch:
 
 # Image names as workflow-level constants.
