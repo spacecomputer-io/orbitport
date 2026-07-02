@@ -57,9 +57,6 @@ jobs:
           echo "Resolved base image: $BASE_IMAGE"
           echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
-
       # dhi.io is a SEPARATE registry host from docker.io — same Docker ID
       # credentials work, but each host needs its own explicit login.
       # Without the dhi.io login below, cosign verify and Scout get 401s
@@ -77,18 +74,24 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Verify Docker Hardened Image signature
+      # DHI signatures don't live at dhi.io/<image>:<tag> the way a normal
+      # cosign-signed image does — they're published under
+      # registry.scout.docker.com/<org>/dhi-<image>@sha256:<digest>, which
+      # Docker Scout resolves automatically. Docker's own docs recommend
+      # `docker scout attest get --verify` over hand-rolled cosign commands
+      # for exactly this reason — it understands DHI's attestation layout
+      # and resolves the platform/digest itself.
+      - name: Install Docker Scout CLI
+        run: curl -fsSL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh -s --
+
+      - name: Verify DHI base image attestation (signed by Docker)
         run: |
-          # DHI images are NOT signed via keyless/Fulcio GitHub Actions
-          # identities — that only applies to images *you* sign yourself.
-          # Docker signs DHI images with its own dedicated key, and DHI
-          # attestations aren't always written to the public Rekor log
-          # (to avoid leaking private org namespace info), so we verify
-          # against Docker's published public key and skip the tlog check.
-          curl -sSL https://registry.scout.docker.com/keyring/dhi/latest.pub -o dhi.pub
-          cosign verify \
-            --key dhi.pub \
-            --insecure-ignore-tlog \
+          # --skip-tlog: DHI attestations aren't always written to the public
+          # Rekor log (to avoid leaking org namespace info); the signature is
+          # still checked against Docker's published key regardless.
+          docker scout attest get \
+            --predicate-type https://cyclonedx.org/bom/v1.6 \
+            --verify --skip-tlog \
             ${{ steps.extract.outputs.base_image }}
 
       - name: Docker Scout CVE scan (fail on critical/high)
