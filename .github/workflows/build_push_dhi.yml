@@ -1,12 +1,11 @@
 name: Build Sign and Push Docker Hardened Images
 
 on:
-  push:
-    branches:
-      # TEMP: testing branch for the new pre/post-build Scout scan steps.
-      # Switch back to feat/docker-hardened-images (or main) once scans pass
-      # and pushing is re-enabled below.
-      - feat/dhi-v2
+  # Manual trigger only — this is the real push/sign/provenance pipeline now.
+  # Run this deliberately from the Actions tab when you want to publish a
+  # new signed image, rather than on every push, so we don't spam Docker Hub
+  # with a new tag on every commit to this branch.
+  workflow_dispatch:
 
 # Image names as workflow-level constants.
 # These are referenced as literals in the SLSA generator's with: block
@@ -153,41 +152,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # TEMP: registry login not needed while push is disabled below.
-      # Re-enable once we're ready to push signed images again.
-      # - name: Login to Docker Hub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKER_USERNAME }}
-      #     password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Get SOURCE_DATE_EPOCH
         id: source_date
         run: echo "epoch=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
 
-      - name: Build Gateway (local only, no push)
+      - name: Build and Push Gateway
         id: build
         uses: docker/build-push-action@v6
         with:
           context: ./gateway
           file: ./gateway/DockerfileHardened
           platforms: linux/amd64
-          # TEMP: push disabled until scan steps are validated on this branch.
-          # Flip back to push: true (and restore tags/attests below) once green.
-          push: false
-          load: true
+          push: true
           tags: ${{ env.GATEWAY_IMAGE }}:op-gateway-${{ github.sha }}
           build-args: |
             SOURCE_DATE_EPOCH=${{ steps.source_date.outputs.epoch }}
           # Disable buildx-native provenance so the SLSA generator is the sole
           # authoritative provenance source (avoids conflicting attestations).
           provenance: false
-          # attests: type=sbom   # TEMP: SBOM attestation requires push; re-enable with push.
+          attests: type=sbom
 
-      # TEMP: exit-code set to false while validating on this branch, so we
-      # can see the full report without every CVE finding killing the run.
-      # Flip back to exit-code: true once the gateway image's CVE posture
-      # has been reviewed and this becomes the real blocking gate.
+      # Still non-blocking for now — the plugin scan surfaced CVEs we're
+      # deferring, and we haven't confirmed the gateway image is fully clean
+      # either. Flip to exit-code: true once those are triaged and this
+      # becomes the real gate for what ships.
       - name: Docker Scout CVE scan on built image (report only, non-blocking)
         uses: docker/scout-action@v1
         with:
@@ -200,63 +194,56 @@ jobs:
           summary: true
 
   # ── 2. SLSA L3 Provenance for Gateway ────────────────────────────────────────
-  # TEMP: disabled while push is off — the SLSA generator needs to pull the
-  # pushed digest from the registry, which doesn't exist yet on this branch.
-  # Re-enable this job once build-gateway pushes again.
-  # provenance-gateway:
-  #   name: SLSA L3 Provenance — Gateway
-  #   needs: build-gateway
-  #   permissions:
-  #     actions: read
-  #     id-token: write
-  #     packages: write
-  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
-  #   with:
-  #     image: docker.io/spacecomp/orbitport
-  #     digest: ${{ needs.build-gateway.outputs.digest }}
-  #     private-repository: true
-  #   secrets:
-  #     registry-username: ${{ secrets.DOCKER_USERNAME }}
-  #     registry-password: ${{ secrets.DOCKER_PASSWORD }}
+  provenance-gateway:
+    name: SLSA L3 Provenance — Gateway
+    needs: build-gateway
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: docker.io/spacecomp/orbitport
+      digest: ${{ needs.build-gateway.outputs.digest }}
+      private-repository: true
+    secrets:
+      registry-username: ${{ secrets.DOCKER_USERNAME }}
+      registry-password: ${{ secrets.DOCKER_PASSWORD }}
 
   # ── 3. Cosign Sign Gateway ────────────────────────────────────────────────────
-  # TEMP: disabled for the same reason as provenance-gateway above — signing
-  # needs a pushed digest. Re-enable alongside provenance-gateway.
-  # sign-gateway:
-  #   name: Cosign Sign Gateway
-  #   needs: [build-gateway, provenance-gateway]
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #     id-token: write
-  #
-  #   steps:
-  #     - name: Install cosign
-  #       uses: sigstore/cosign-installer@v3
-  #
-  #     - name: Login to Docker Hub
-  #       uses: docker/login-action@v3
-  #       with:
-  #         username: ${{ secrets.DOCKER_USERNAME }}
-  #         password: ${{ secrets.DOCKER_PASSWORD }}
-  #
-  #     - name: Sign Gateway digest (keyless)
-  #       run: |
-  #         cosign sign --yes \
-  #           docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
-  #     - name: Verify Gateway signature
-  #       run: |
-  #         cosign verify \
-  #           --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
-  #           --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-  #           docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
+  sign-gateway:
+    name: Cosign Sign Gateway
+    needs: [build-gateway, provenance-gateway]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Sign Gateway digest (keyless)
+        run: |
+          cosign sign --yes \
+            docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
+      - name: Verify Gateway signature
+        run: |
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
 
   # ── 4. Build Plugin ───────────────────────────────────────────────────────────
   build-plugin:
     name: Build and Scan Plugin
-    # TEMP: was needs: sign-gateway. Points at build-gateway directly while
-    # the sign job is disabled. Restore needs: sign-gateway once re-enabled.
-    needs: build-gateway
+    needs: sign-gateway
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -274,32 +261,29 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # TEMP: registry login not needed while push is disabled below.
-      # - name: Login to Docker Hub
-      #   uses: docker/login-action@v3
-      #   with:
-      #     username: ${{ secrets.DOCKER_USERNAME }}
-      #     password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Get SOURCE_DATE_EPOCH
         id: source_date
         run: echo "epoch=$(git log -1 --pretty=%ct)" >> $GITHUB_OUTPUT
 
-      - name: Build Plugin (local only, no push)
+      - name: Build and Push Plugin
         id: build
         uses: docker/build-push-action@v6
         with:
           context: ./plugins
           file: ./plugins/DockerfileHardened
           platforms: linux/amd64
-          # TEMP: push disabled until scan steps are validated on this branch.
-          push: false
-          load: true
+          push: true
           tags: ${{ env.PLUGIN_IMAGE }}:op-plugin-${{ github.sha }}
           build-args: |
             SOURCE_DATE_EPOCH=${{ steps.source_date.outputs.epoch }}
           provenance: false
-          # attests: type=sbom   # TEMP: SBOM attestation requires push; re-enable with push.
+          attests: type=sbom
 
       # TEMP: exit-code set to false while validating on this branch, so we
       # can see the full report without every CVE finding killing the run.
@@ -317,50 +301,48 @@ jobs:
           summary: true
 
   # ── 5. SLSA L3 Provenance for Plugin ─────────────────────────────────────────
-  # TEMP: disabled, see provenance-gateway note above.
-  # provenance-plugin:
-  #   name: SLSA L3 Provenance — Plugin
-  #   needs: build-plugin
-  #   permissions:
-  #     actions: read
-  #     id-token: write
-  #     packages: write
-  #   uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
-  #   with:
-  #     image: docker.io/spacecomp/orbitport
-  #     digest: ${{ needs.build-plugin.outputs.digest }}
-  #     private-repository: true
-  #   secrets:
-  #     registry-username: ${{ secrets.DOCKER_USERNAME }}
-  #     registry-password: ${{ secrets.DOCKER_PASSWORD }}
+  provenance-plugin:
+    name: SLSA L3 Provenance — Plugin
+    needs: build-plugin
+    permissions:
+      actions: read
+      id-token: write
+      packages: write
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_container_slsa3.yml@v2.1.0
+    with:
+      image: docker.io/spacecomp/orbitport
+      digest: ${{ needs.build-plugin.outputs.digest }}
+      private-repository: true
+    secrets:
+      registry-username: ${{ secrets.DOCKER_USERNAME }}
+      registry-password: ${{ secrets.DOCKER_PASSWORD }}
 
   # ── 6. Cosign Sign Plugin ─────────────────────────────────────────────────────
-  # TEMP: disabled, see sign-gateway note above.
-  # sign-plugin:
-  #   name: Cosign Sign Plugin
-  #   needs: [build-plugin, provenance-plugin]
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #     id-token: write
-  #
-  #   steps:
-  #     - name: Install cosign
-  #       uses: sigstore/cosign-installer@v3
-  #
-  #     - name: Login to Docker Hub
-  #       uses: docker/login-action@v3
-  #       with:
-  #         username: ${{ secrets.DOCKER_USERNAME }}
-  #         password: ${{ secrets.DOCKER_PASSWORD }}
-  #
-  #     - name: Sign Plugin digest (keyless)
-  #       run: |
-  #         cosign sign --yes \
-  #           docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
-  #     - name: Verify Plugin signature
-  #       run: |
-  #         cosign verify \
-  #           --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
-  #           --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-  #           docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
+  sign-plugin:
+    name: Cosign Sign Plugin
+    needs: [build-plugin, provenance-plugin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Sign Plugin digest (keyless)
+        run: |
+          cosign sign --yes \
+            docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
+      - name: Verify Plugin signature
+        run: |
+          cosign verify \
+            --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
+            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
