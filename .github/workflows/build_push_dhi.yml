@@ -79,9 +79,16 @@ jobs:
 
       - name: Verify Docker Hardened Image signature
         run: |
+          # DHI images are NOT signed via keyless/Fulcio GitHub Actions
+          # identities — that only applies to images *you* sign yourself.
+          # Docker signs DHI images with its own dedicated key, and DHI
+          # attestations aren't always written to the public Rekor log
+          # (to avoid leaking private org namespace info), so we verify
+          # against Docker's published public key and skip the tlog check.
+          curl -sSL https://registry.scout.docker.com/keyring/dhi/latest.pub -o dhi.pub
           cosign verify \
-            --certificate-identity-regexp="https://github.com/docker/dhi-.*" \
-            --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
+            --key dhi.pub \
+            --insecure-ignore-tlog \
             ${{ steps.extract.outputs.base_image }}
 
       - name: Docker Scout CVE scan (fail on critical/high)
