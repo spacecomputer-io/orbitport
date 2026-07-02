@@ -36,7 +36,25 @@ jobs:
       - name: Extract FROM image from Dockerfile
         id: extract
         run: |
-          BASE_IMAGE=$(grep -m1 '^FROM' gateway/DockerfileHardened | awk '{print $2}')
+          DOCKERFILE=gateway/DockerfileHardened
+
+          # Export any ARG defaults declared before the first FROM (e.g.
+          # `ARG RUST_VERSION=1.82`), so we can resolve ${RUST_VERSION}-style
+          # references used inside the FROM line itself. Without this, the
+          # raw string "dhi.io/rust:${RUST_VERSION}-debian13-dev" gets passed
+          # through unresolved, and bash later expands the unset var to
+          # empty, producing a broken tag like "rust:-debian13-dev".
+          while IFS= read -r line; do
+            var_assignment=$(echo "$line" | sed -E 's/^ARG[[:space:]]+//')
+            if [[ "$var_assignment" == *"="* ]]; then
+              export "${var_assignment?}"
+            fi
+          done < <(awk '/^FROM/{exit} /^ARG/{print}' "$DOCKERFILE")
+
+          RAW_FROM=$(grep -m1 '^FROM' "$DOCKERFILE" | awk '{print $2}')
+          BASE_IMAGE=$(envsubst <<< "$RAW_FROM")
+
+          echo "Resolved base image: $BASE_IMAGE"
           echo "base_image=$BASE_IMAGE" >> $GITHUB_OUTPUT
 
       - name: Install cosign
