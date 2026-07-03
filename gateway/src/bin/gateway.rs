@@ -14,6 +14,8 @@ struct Args {
     auth_plugin: String,
     #[clap(long, env = "ORBITPORT_KMS_PLUGIN")]
     kms_plugin: String,
+    #[clap(long, env = "ORBITPORT_THRESHOLD_ENABLED", default_value = "false")]
+    threshold_enabled: bool,
     #[clap(long, env = "ORBITPORT_THRESHOLD_PLUGIN", default_value = "")]
     threshold_plugin: String,
     #[clap(long, env = "ORBITPORT_THRESHOLD_GROUPS", default_value = "")]
@@ -71,8 +73,15 @@ async fn main() -> Result<(), GatewayError> {
     if let Some(ref url) = args.account_plugin {
         plugin_urls.push(url.to_string());
     }
-    if !args.threshold_plugin.trim().is_empty() {
-        plugin_urls.push(args.threshold_plugin.to_string());
+    if args.threshold_enabled {
+        let threshold_plugin = args.threshold_plugin.trim();
+        if threshold_plugin.is_empty() {
+            return Err(GatewayError::BadRequest(
+                "ORBITPORT_THRESHOLD_PLUGIN is required when ORBITPORT_THRESHOLD_ENABLED=true"
+                    .to_string(),
+            ));
+        }
+        plugin_urls.push(threshold_plugin.to_string());
     }
 
     plugins::wait_for(
@@ -94,15 +103,19 @@ async fn main() -> Result<(), GatewayError> {
     });
 
     let service_manager = Arc::new(service_manager);
-    let threshold_groups =
+    let threshold_groups = if args.threshold_enabled {
         gateway::services::threshold::ThresholdGroupRegistry::from_json(&args.threshold_groups)
-            .map_err(|e| GatewayError::BadRequest(e.to_string()))?;
+            .map_err(|e| GatewayError::BadRequest(e.to_string()))?
+    } else {
+        gateway::services::threshold::ThresholdGroupRegistry::default()
+    };
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
         &args.masterseed_plugin,
         &args.kms_plugin,
         args.account_plugin.as_deref(),
-        &args.threshold_plugin,
+        args.threshold_enabled,
+        args.threshold_plugin.trim(),
         threshold_groups,
     ));
 

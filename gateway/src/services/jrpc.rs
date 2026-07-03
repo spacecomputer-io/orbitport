@@ -225,6 +225,10 @@ async fn execute_threshold(
     plugin_catalog: &PluginCatalog,
     call: ThresholdRpcCall,
 ) -> Result<serde_json::Value, tonic::Status> {
+    if !plugin_catalog.threshold_enabled() {
+        return Err(tonic::Status::unavailable("Threshold feature disabled"));
+    }
+
     let grpc_client = plugin_catalog
         .get_threshold_client()
         .await
@@ -303,5 +307,34 @@ mod test {
             }
             _ => panic!("expected kms_threshold.CoordinateDKG"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_threshold_coordinate_dkg_disabled() {
+        let plugin_catalog = PluginCatalog::new(
+            "http://auth:50000",
+            "http://masterseed:50003",
+            "http://kms:50004",
+            None,
+            false,
+            "",
+            crate::services::threshold::ThresholdGroupRegistry::default(),
+        );
+
+        let err = execute_threshold(
+            9,
+            "client-1",
+            &plugin_catalog,
+            ThresholdRpcCall::CoordinateDkg(DkgRequest {
+                alias: "key-1".to_string(),
+                group_name: "team-a".to_string(),
+                session_id: "dkg-1".to_string(),
+            }),
+        )
+        .await
+        .expect_err("threshold feature should be disabled");
+
+        assert_eq!(err.code(), tonic::Code::Unavailable);
+        assert_eq!(err.message(), "Threshold feature disabled");
     }
 }

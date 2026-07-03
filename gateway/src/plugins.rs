@@ -119,6 +119,7 @@ pub async fn wait_for(
 
 pub struct PluginCatalog {
     urls: Arc<HashMap<String, String>>,
+    threshold_enabled: bool,
     threshold_groups: ThresholdGroupRegistry,
 }
 
@@ -128,6 +129,7 @@ impl PluginCatalog {
         masterseed_url: &str,
         kms_url: &str,
         account_url: Option<&str>,
+        threshold_enabled: bool,
         threshold_url: &str,
         threshold_groups: ThresholdGroupRegistry,
     ) -> Self {
@@ -138,12 +140,13 @@ impl PluginCatalog {
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
         }
-        if !threshold_url.trim().is_empty() {
+        if threshold_enabled {
             urls.insert("threshold".to_string(), threshold_url.to_string());
         }
 
         PluginCatalog {
             urls: Arc::new(urls),
+            threshold_enabled,
             threshold_groups,
         }
     }
@@ -186,8 +189,15 @@ impl PluginCatalog {
     pub async fn get_threshold_client(
         &self,
     ) -> Result<ThresholdPluginClient<Channel>, PluginError> {
+        if !self.threshold_enabled {
+            return Err(PluginError::PluginNotFound("threshold".to_string()));
+        }
         let channel = self.get_client("threshold").await?;
         Ok(ThresholdPluginClient::new(channel))
+    }
+
+    pub fn threshold_enabled(&self) -> bool {
+        self.threshold_enabled
     }
 
     pub fn threshold_groups(&self) -> ThresholdGroupRegistry {
