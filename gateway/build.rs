@@ -86,7 +86,7 @@ fn protos_in_dir(dir: &str) -> Result<(String, Vec<String>)> {
     if !std::path::Path::new(dir).exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Directory {} not found", dir),
+            format!("Directory {dir} not found"),
         ));
     }
 

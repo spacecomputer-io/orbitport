@@ -180,8 +180,7 @@ impl ThresholdService {
         let session_id = req.session_id.trim().to_string();
         let group = self.groups.get(&group_name).ok_or_else(|| {
             tonic::Status::invalid_argument(format!(
-                "Threshold group {} is not configured",
-                group_name
+                "Threshold group {group_name} is not configured"
             ))
         })?;
 

@@ -201,7 +201,7 @@ fn serialize_success_response<T: Serialize>(
 ) -> Result<serde_json::Value, tonic::Status> {
     let res = JsonRpcResponse::success(req_id, result);
     serde_json::to_value(res)
-        .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {}", e)))
+        .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {e}")))
 }
 
 async fn execute_kms(
