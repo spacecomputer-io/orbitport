@@ -1,13 +1,6 @@
 name: Build Sign and Push Docker Hardened Images
 
 on:
-  push:
-    branches:
-      - feat/dhi-v2
-  # workflow_dispatch also kept for later — once this workflow file exists on
-  # main, manual "Run workflow" becomes available too. Until then, GitHub
-  # doesn't show workflow_dispatch as a runnable option for a branch that
-  # only has the workflow file on itself, not on the default branch.
   workflow_dispatch:
 
 # Image names as workflow-level constants.
@@ -38,7 +31,7 @@ jobs:
       - name: Extract FROM images from Dockerfile
         id: extract
         run: |
-          DOCKERFILE=gateway/DockerfileHardened
+          DOCKERFILE=gateway/HardenedDockerfile
 
           # Export any ARG defaults declared anywhere in the file (e.g.
           # `ARG RUST_VERSION=1.82`), so we can resolve ${RUST_VERSION}-style
@@ -170,7 +163,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./gateway
-          file: ./gateway/DockerfileHardened
+          file: ./gateway/HardenedDockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.GATEWAY_IMAGE }}:op-gateway-${{ github.sha }}
@@ -181,11 +174,9 @@ jobs:
           provenance: false
           attests: type=sbom
 
-      # Still non-blocking for now — the plugin scan surfaced CVEs we're
-      # deferring, and we haven't confirmed the gateway image is fully clean
-      # either. Flip to exit-code: true once those are triaged and this
-      # becomes the real gate for what ships.
-      - name: Docker Scout CVE scan on built image (report only, non-blocking)
+      # TODO: flip exit-code to true once the gateway image's CVE findings
+      # have been triaged — this becomes the real blocking gate for what ships.
+      - name: Docker Scout CVE scan — built image (non-blocking)
         uses: docker/scout-action@v1
         with:
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
@@ -235,13 +226,13 @@ jobs:
       - name: Sign Gateway digest (keyless)
         run: |
           cosign sign --yes \
-            docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
+            ${{ env.GATEWAY_IMAGE }}@${{ needs.build-gateway.outputs.digest }}
       - name: Verify Gateway signature
         run: |
           cosign verify \
             --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-            docker.io/spacecomp/orbitport@${{ needs.build-gateway.outputs.digest }}
+            ${{ env.GATEWAY_IMAGE }}@${{ needs.build-gateway.outputs.digest }}
 
   # ── 4. Build Plugin ───────────────────────────────────────────────────────────
   build-plugin:
@@ -279,7 +270,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./plugins
-          file: ./plugins/DockerfileHardened
+          file: ./plugins/HardenedDockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.PLUGIN_IMAGE }}:op-plugin-${{ github.sha }}
@@ -288,11 +279,9 @@ jobs:
           provenance: false
           attests: type=sbom
 
-      # TEMP: exit-code set to false while validating on this branch, so we
-      # can see the full report without every CVE finding killing the run.
-      # Flip back to exit-code: true once the plugin image's CVE posture
-      # has been reviewed and this becomes the real blocking gate.
-      - name: Docker Scout CVE scan on built image (report only, non-blocking)
+      # TODO: flip exit-code to true once the plugin image's CVE findings
+      # have been triaged — this becomes the real blocking gate for what ships.
+      - name: Docker Scout CVE scan — built image (non-blocking)
         uses: docker/scout-action@v1
         with:
           dockerhub-user: ${{ secrets.DOCKER_USERNAME }}
@@ -342,10 +331,10 @@ jobs:
       - name: Sign Plugin digest (keyless)
         run: |
           cosign sign --yes \
-            docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
+            ${{ env.PLUGIN_IMAGE }}@${{ needs.build-plugin.outputs.digest }}
       - name: Verify Plugin signature
         run: |
           cosign verify \
             --certificate-identity-regexp="https://github.com/spacecomputer-io/orbitport/.*" \
             --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-            docker.io/spacecomp/orbitport@${{ needs.build-plugin.outputs.digest }}
+            ${{ env.PLUGIN_IMAGE }}@${{ needs.build-plugin.outputs.digest }}
