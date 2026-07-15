@@ -2,7 +2,7 @@
 
 ################################################################################
 
-ARG GO_VERSION=1.24
+ARG GO_VERSION=1.25
 ARG ALPINE_VERSION=3.22
 
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
@@ -25,8 +25,12 @@ FROM alpine:${ALPINE_VERSION}
 
 ARG BUILD_TARGET=plugin
 
-RUN apk --no-cache add curl
+RUN apk --no-cache add curl \
+    && addgroup -S appgroup \
+    && adduser -S -G appgroup appuser
 
-COPY --from=builder /app/bin/${BUILD_TARGET} /app
+COPY --from=builder --chown=appuser:appgroup /app/bin/${BUILD_TARGET} /app
+
+USER appuser
 
 ENTRYPOINT ["/app"]
