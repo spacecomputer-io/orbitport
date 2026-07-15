@@ -31,7 +31,7 @@ jobs:
       - name: Extract FROM images from Dockerfile
         id: extract
         run: |
-          DOCKERFILE=gateway/HardenedDockerfile
+          DOCKERFILE=gateway/hardened.Dockerfile
 
           # Export any ARG defaults declared anywhere in the file (e.g.
           # `ARG RUST_VERSION=1.82`), so we can resolve ${RUST_VERSION}-style
@@ -163,7 +163,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./gateway
-          file: ./gateway/HardenedDockerfile
+          file: ./gateway/hardened.Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.GATEWAY_IMAGE }}:op-gateway-${{ github.sha }}
@@ -270,7 +270,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./plugins
-          file: ./plugins/HardenedDockerfile
+          file: ./plugins/hardened.Dockerfile
           platforms: linux/amd64
           push: true
           tags: ${{ env.PLUGIN_IMAGE }}:op-plugin-${{ github.sha }}
