@@ -1,3 +1,4 @@
+use serde::de::DeserializeOwned;
 use std::env;
 use thiserror::Error;
 use tokio::process::Command;
@@ -21,6 +22,7 @@ pub enum E2EError {
 }
 
 /// Get the TRNG service from the orbitport gateway.
+#[allow(dead_code)]
 pub async fn get_trng(
     base_url: &str,
     access_token: &str,
@@ -81,6 +83,93 @@ pub async fn get_trng(
     Ok(parsed)
 }
 
+#[allow(dead_code)]
+pub async fn rpc_ctrng_get(
+    base_url: &str,
+    access_token: &str,
+    count: u32,
+) -> Result<gateway::proto::services::ctrng::CTrngResponse, E2EError> {
+    let req_id = 1;
+    let payload = serde_json::json!(
+        {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "ctrng.Get",
+            "params": serde_json::json!({
+                "chunks": count
+            }),
+        }
+    );
+    rpc_success_result(base_url, access_token, req_id, payload).await
+}
+
+#[allow(dead_code)]
+pub async fn rpc_request(
+    base_url: &str,
+    access_token: &str,
+    payload: serde_json::Value,
+) -> Result<reqwest::Response, E2EError> {
+    reqwest::Client::new()
+        .post(format!("{base_url}/api/v1/rpc"))
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .bearer_auth(access_token)
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| E2EError::RequestError(e.to_string()))
+}
+
+#[allow(dead_code)]
+pub async fn rpc_success_result<T: DeserializeOwned>(
+    base_url: &str,
+    access_token: &str,
+    req_id: u64,
+    payload: serde_json::Value,
+) -> Result<T, E2EError> {
+    let response = rpc_request(base_url, access_token, payload).await?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        tracing::error!("Gateway returned Error: {} | Body: {}", status, text);
+        return Err(E2EError::AssertionFailed(format!(
+            "Server returned error {}: {}",
+            status, text
+        )));
+    }
+
+    let raw = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| E2EError::ParseError(e.to_string()))?;
+    tracing::debug!("jRPC response: {}", raw);
+
+    if raw.get("jsonrpc").and_then(|v| v.as_str()) != Some("2.0") {
+        return Err(E2EError::AssertionFailed(
+            "Response missing jsonrpc=2.0".to_string(),
+        ));
+    }
+    if raw.get("id").and_then(|v| v.as_u64()) != Some(req_id) {
+        return Err(E2EError::AssertionFailed(format!(
+            "Expected response id {req_id}, got {:?}",
+            raw.get("id")
+        )));
+    }
+    if raw.get("error").is_some() {
+        return Err(E2EError::AssertionFailed(format!(
+            "Expected success response, got error: {}",
+            raw.get("error").unwrap_or(&serde_json::Value::Null)
+        )));
+    }
+
+    let result = raw
+        .get("result")
+        .ok_or_else(|| E2EError::ParseError("Missing result field".to_string()))?;
+
+    serde_json::from_value::<T>(result.clone()).map_err(|e| E2EError::ParseError(e.to_string()))
+}
+
 /// Prepare the test environment by starting the orbitport Docker containers.
 /// This function is called before the tests are executed.
 /// It checks if the containers are already running, and if not, it starts them.
@@ -92,8 +181,8 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
     if !is_running("gateway").await.unwrap_or(false) {
         tracing::info!("Starting orbitport");
         let env_file = env::var("OPTEST_DOTENV").unwrap_or(".dev.env".to_string());
-        std::env::set_current_dir("../").expect("Failed to change directory");
         let output = Command::new("docker-compose")
+            .current_dir("..")
             .arg("-f")
             .arg("dev.docker-compose.yaml")
             .arg("--env-file")
@@ -114,7 +203,6 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
         }
         tracing::info!("Waiting for orbitport to start");
 
-        std::env::set_current_dir("gateway").expect("Failed to change directory");
         // Wait for the containers to be up for 10 sec
         tokio::select! {
             _ = tokio::time::sleep(std::time::Duration::from_secs(10)) => {
@@ -136,16 +224,14 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
 pub async fn post_test(started: bool) -> Result<(), E2EError> {
     if started {
         tracing::info!("Stopping orbitport");
-        std::env::set_current_dir("../").expect("Failed to change directory");
         let output = Command::new("docker-compose")
+            .current_dir("..")
             .arg("-f")
             .arg("dev.docker-compose.yaml")
             .arg("down")
             .output()
             .await
             .map_err(|e| E2EError::CommandError(e.to_string()))?;
-
-        std::env::set_current_dir("gateway").expect("Failed to change directory");
 
         if !output.status.success() {
             let error_message = String::from_utf8_lossy(&output.stderr);

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
+
+package ao;
+
+service RandomnessPlugin {
+    rpc GetTrng(TrngRequest) returns (TrngResponse); 
+}
+
+message TrngRequest {
+    bool ignore_sig = 1;
+    uint32 chunks = 2;
+}
+
+message TrngResponse {
+    repeated string values = 1; //multiple derived vals
+    string sig = 2;
+}

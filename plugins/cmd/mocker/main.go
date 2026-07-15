@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/joho/godotenv"
 	"github.com/spf13/viper"
@@ -54,7 +55,8 @@ func main() {
 		server := NewMockAptosOrbitalAuth(cfg.Profile)
 		server.ListenAndServe(fmt.Sprintf(":%d", cfg.Port))
 	default:
-		panic("Unknown service: " + cfg.Service)
+		fmt.Fprintf(os.Stderr, "Error: Unknown service: %s\n", cfg.Service)
+		os.Exit(1)
 	}
 }
 

@@ -1,0 +1,30 @@
+[
+  {
+    "name": "D_direct_block_seed_then_chacha_3x32",
+    "mode": "seed = block -> ChaCha20 (offset 0)",
+    "trng_block_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "seed_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "offset_bytes": 0,
+    "trng_size": 32,
+    "count": 3,
+    "outputs_hex": [
+      "7579d24e9d0e58ced67c55d57c6f60ad8d1c5d04f72134d82798391263e65595",
+      "10578b1de5166d33ff575d81ca60999b83551701e6b7f14c0909cb2988791e14",
+      "89e7bd45f921edc7d0e5d1e7968f6b998672bf05fbc0b9b807afb165732257f8"
+    ]
+  },
+  {
+    "name": "E_offset_based_stream_then_chacha_3x32",
+    "mode": "seed = block; discard offset_bytes; then ChaCha20",
+    "trng_block_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "seed_hex": "a0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    "offset_bytes": 96,
+    "trng_size": 32,
+    "count": 3,
+    "outputs_hex": [
+      "fa786b40ad85f70793a943b4595ad55637fb379082e24bd13cd487c9def9a157",
+      "23ec80c355f3829358c4058447050e5f238691bfa2e590d2b48f1888775a5740",
+      "b127cf65ae81e5f93c713cf8e20cdea9d6a6d4cfebf6d2b7028988ef56e010c4"
+    ]
+  }
+]

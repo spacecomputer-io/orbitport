@@ -23,6 +23,10 @@ pub enum GatewayError {
     AuthenticationFailed,
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
+    #[error("Insufficient credits")]
+    InsufficientCredits,
+    #[error("Account plugin unavailable: {0}")]
+    AccountPluginUnavailable(String),
     #[error("Error while waiting for termination signal: {0}")]
     TerminationError(String),
     #[error("Invalid encryption key")]
@@ -85,9 +89,7 @@ impl EncryptionKey {
         let scheme = match parts[0] {
             "" => EncryptionScheme::None,
             "threshold" => EncryptionScheme::Threshold,
-            _ => {
-                return Err(GatewayError::InvalidEncryptionScheme(key));
-            }
+            x => return Err(GatewayError::InvalidEncryptionScheme(x.to_string())),
         };
         Ok(EncryptionKey { key, scheme })
     }

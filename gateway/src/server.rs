@@ -1,158 +1,24 @@
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
-use std::{collections::HashMap, sync::Arc};
-use tokio::{
-    sync::Mutex,
-    time::{Duration, Instant, timeout},
-};
-use tonic::transport::Channel;
-use warp::{
-    Filter, Rejection, Reply,
-    filters::header::headers_cloned,
-    http::header::{AUTHORIZATION, HeaderMap, HeaderValue},
-    reject::Reject,
-};
+use std::convert::Infallible;
+use std::sync::Arc;
+use tokio::time::{Duration, Instant, timeout};
+use warp::{Filter, Rejection, Reply, http::StatusCode, reject::Reject};
 
 use crate::metrics;
-use crate::proto::auth::{
-    TokenValidationRequest, TokenValidationResponse, auth_plugin_client::AuthPluginClient,
-};
 use crate::service_manager::ServiceManager;
-use crate::trng::SRC_DERIVED_TRNG;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
+use crate::filters::{
+    AuthContextWithHold, RateLimiter, account_release, account_settle, with_account_hold,
+    with_auth, with_rate_limiter,
+};
+use crate::plugins::PluginCatalog;
+use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
+use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
+use crate::trng::SRC_DERIVED_TRNG;
+use tonic::transport::Channel;
+
 impl Reject for GatewayError {}
-
-const BEARER: &str = "Bearer ";
-
-/// Rate limit structure
-pub type RateLimit = (u32, Instant);
-/// Rate limit items
-type RateLimiterItems = Arc<Mutex<HashMap<String, RateLimit>>>;
-/// Rate limiter
-pub struct RateLimiter {
-    items: RateLimiterItems,
-    max_requests: u32,
-    time_window: Duration,
-}
-
-impl RateLimiter {
-    fn new(max_requests: u32, time_window: Duration) -> Self {
-        RateLimiter {
-            items: Arc::new(Mutex::new(HashMap::new())),
-            max_requests,
-            time_window,
-        }
-    }
-}
-
-pub fn with_auth(
-    service_manager: Arc<ServiceManager>,
-) -> impl Filter<Extract = (String,), Error = warp::Rejection> + Clone {
-    let auth_client = service_manager.get_auth_client();
-    headers_cloned()
-        .map(move |headers: HeaderMap<HeaderValue>| (headers, auth_client.clone()))
-        .and_then(authorize)
-}
-
-type ApiResult<T> = std::result::Result<T, warp::Rejection>;
-
-async fn authorize(
-    (headers, mut auth_client): (HeaderMap<HeaderValue>, AuthPluginClient<Channel>),
-) -> ApiResult<String> {
-    match jwt_from_header(&headers) {
-        Ok(jwt) => {
-            let request = tonic::Request::new(TokenValidationRequest { token: jwt.clone() });
-            let response: TokenValidationResponse = auth_client
-                .validate_token(request)
-                .await
-                .map_err(|e| match e.code() {
-                    tonic::Code::Unavailable | tonic::Code::NotFound => {
-                        tracing::error!("Auth plugin is unavailable: {}", e);
-                        warp::reject::custom(GatewayError::AuthPluginConnectionError(
-                            "unavailable".to_string(),
-                        ))
-                    }
-                    _ => {
-                        tracing::error!("Failed to authorize JWT: {}", e);
-                        warp::reject::custom(GatewayError::AuthenticationFailed)
-                    }
-                })?
-                .into_inner();
-            if !response.ok {
-                return Err(warp::reject::custom(GatewayError::AuthenticationFailed));
-            }
-            tracing::debug!("JWT authorized successfully");
-            Ok(jwt)
-        }
-        Err(e) => Err(warp::reject::custom(e)),
-    }
-}
-
-fn jwt_from_header(headers: &HeaderMap<HeaderValue>) -> Result<String, GatewayError> {
-    let header = match headers.get(AUTHORIZATION) {
-        Some(v) => v,
-        None => return Err(GatewayError::NoAuthHeaderError),
-    };
-    let auth_header = match std::str::from_utf8(header.as_bytes()) {
-        Ok(v) => v,
-        Err(_) => return Err(GatewayError::NoAuthHeaderError),
-    };
-    extract_jwt(auth_header)
-}
-
-fn extract_jwt(auth_header: &str) -> Result<String, GatewayError> {
-    if !auth_header.starts_with(BEARER) {
-        return Err(GatewayError::InvalidAuthHeaderError);
-    }
-    Ok(auth_header.trim_start_matches(BEARER).to_owned())
-}
-
-// Create a rate limiter filter
-pub fn with_rate_limiter(
-    rate_limiter: Arc<RateLimiter>,
-) -> impl Filter<Extract = ((),), Error = warp::Rejection> + Clone {
-    warp::any()
-        .and(warp::header::optional::<String>(AUTHORIZATION.as_str()))
-        .and(warp::any().map(move || rate_limiter.clone()))
-        .and_then(rate_limit)
-}
-
-/// Rate limiting logic.
-async fn rate_limit(
-    auth_header: Option<String>,
-    rate_limiter: Arc<RateLimiter>,
-) -> Result<(), warp::Rejection> {
-    // NOTE: Using empty_token in case authentication is off, in case authentication was on and there is no auth header
-    // this will be rejected before this point.
-    let empty_token = format!("{BEARER}empty");
-    let token = extract_jwt(auth_header.as_deref().unwrap_or(empty_token.as_str()))
-        .map_err(|_| warp::reject::custom(GatewayError::NoAuthHeaderError))?;
-    // Hash the token to avoid storing it directly
-    let mut hasher = Sha256::new();
-    hasher.update(token);
-    let token_hash = format!("{:x}", hasher.finalize());
-
-    let mut items = rate_limiter.items.lock().await;
-
-    // Check the current time and rate limit
-    let now = Instant::now();
-    let entry = items.entry(token_hash).or_insert((0, now));
-
-    // Reset the count if the time window has passed
-    if now.duration_since(entry.1) > rate_limiter.time_window {
-        entry.0 = 0;
-        entry.1 = now;
-    }
-    entry.0 += 1;
-
-    // Check if the request count exceeds the limit
-    if entry.0 > rate_limiter.max_requests {
-        return Err(warp::reject::custom(GatewayError::RateLimitExceeded)); // Use a custom rejection
-    }
-
-    Ok(())
-}
 
 #[derive(Debug, Clone, Deserialize)]
 struct QueryParams {
@@ -186,6 +52,7 @@ struct PostBody {
 pub async fn start(
     http_port: u16,
     service_manager: Arc<ServiceManager>,
+    plugin_catalog: Arc<PluginCatalog>,
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
@@ -195,46 +62,229 @@ pub async fn start(
 
     let rate_limiter = Arc::new(RateLimiter::new(limit, Duration::from_secs(limit_window))); // 100 requests per minute
 
+    let account_client: Option<AccountPluginClient<Channel>> =
+        plugin_catalog.get_account_client().await.ok();
+    let account_client_rpc = account_client.clone();
+    let account_client_get = account_client.clone();
+    let account_client_post = account_client.clone();
+
+    // MVP: account-plugin `operation` is a coarse HTTP-method tag, not the
+    // semantic op (e.g. "trng", "kms_sign"). Path-derived tagging requires
+    // pushing the matched path into `with_account_hold`, which the warp
+    // filter signature doesn't carry today.
+    // TODO(account-plugin): derive semantic operation tag from path.
+    let rpc_route = warp::post()
+        .and(warp::path("api").and(warp::path("v1").and(warp::path("rpc"))))
+        .and(with_account_hold(
+            with_rate_limiter(
+                with_auth(service_manager.get_auth_client()),
+                rate_limiter.clone(),
+            ),
+            account_client_rpc.clone(),
+            1,
+            "rpc",
+        ))
+        .and(warp::body::content_length_limit(1024))
+        .and(warp::body::json())
+        .and(warp::any().map(move || plugin_catalog.clone()))
+        .and(warp::any().map(move || account_client_rpc.clone()))
+        .and_then(handle_rpc);
+
     let bulk_max_get = bulk_max;
     let get_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::get())
-        .and(with_auth(service_manager.clone()))
-        .and(with_rate_limiter(rate_limiter.clone()))
+        .and(with_account_hold(
+            with_rate_limiter(
+                with_auth(service_manager.get_auth_client()),
+                rate_limiter.clone(),
+            ),
+            account_client_get.clone(),
+            1,
+            "service_get",
+        ))
         .and(warp::query::<QueryParams>())
         .and(warp::any().map(move || service_manager_clone.clone()))
         .and(warp::any().map(move || bulk_max_get))
+        .and(warp::any().map(move || account_client_get.clone()))
         .and_then(handle_get);
 
     let bulk_max_post = bulk_max;
     let post_route = warp::path!("api" / "v1" / "services" / String)
         .and(warp::post())
-        .and(with_auth(service_manager.clone()))
-        .and(with_rate_limiter(rate_limiter.clone()))
+        .and(with_account_hold(
+            with_rate_limiter(
+                with_auth(service_manager.get_auth_client()),
+                rate_limiter.clone(),
+            ),
+            account_client_post.clone(),
+            1,
+            "service_post",
+        ))
         .and(warp::body::content_length_limit(1024)) // limit to 1 KB payload
         .and(warp::body::json())
         .and(warp::query::<QueryParams>())
         .and(warp::any().map(move || service_manager_post_clone.clone()))
         .and(warp::any().map(move || bulk_max_post))
+        .and(warp::any().map(move || account_client_post.clone()))
         .and_then(handle_post);
 
-    //
+    // Allowlist: `/healthz` is the only route that bypasses `with_account_hold`.
+    // It runs without auth or rate-limiting so probes from k8s / load balancers
+    // never spend credits. There is no `/version` route today.
+    let health_route = warp::path("healthz").map(|| {
+        warp::reply::json(&serde_json::json!({
+            "status": "ok"
+        }))
+    });
 
-    let routes = get_route.or(post_route);
+    let routes = get_route
+        .or(post_route)
+        .or(rpc_route)
+        .or(health_route.with(warp::log("health_check")))
+        .recover(handle_rejection);
 
     tracing::info!("Starting http server on: 0.0.0.0:{}", http_port);
 
     warp::serve(routes).run(([0, 0, 0, 0], http_port)).await;
 }
 
+/// Maps gateway-specific custom rejections to HTTP responses. Without this,
+/// warp would default to 500 for every custom rejection.
+async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
+    if let Some(gw) = err.find::<GatewayError>() {
+        let (status, body) = match gw {
+            GatewayError::InsufficientCredits => (
+                StatusCode::PAYMENT_REQUIRED,
+                serde_json::json!({"error": "insufficient_credits"}),
+            ),
+            GatewayError::AccountPluginUnavailable(msg) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                serde_json::json!({"error": "account_plugin_unavailable", "detail": msg}),
+            ),
+            GatewayError::RateLimitExceeded => (
+                StatusCode::TOO_MANY_REQUESTS,
+                serde_json::json!({"error": "rate_limit_exceeded"}),
+            ),
+            GatewayError::NoAuthHeaderError | GatewayError::InvalidAuthHeaderError => (
+                StatusCode::UNAUTHORIZED,
+                serde_json::json!({"error": gw.to_string()}),
+            ),
+            GatewayError::AuthenticationFailed => (
+                StatusCode::UNAUTHORIZED,
+                serde_json::json!({"error": "authentication_failed"}),
+            ),
+            GatewayError::AuthPluginConnectionError(_) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                serde_json::json!({"error": "auth_plugin_unavailable"}),
+            ),
+            GatewayError::BadRequest(msg) => {
+                (StatusCode::BAD_REQUEST, serde_json::json!({"error": msg}))
+            }
+            GatewayError::ServiceTimeout => (
+                StatusCode::GATEWAY_TIMEOUT,
+                serde_json::json!({"error": "service_timeout"}),
+            ),
+            GatewayError::ServiceNotFoundError(name) => (
+                StatusCode::NOT_FOUND,
+                serde_json::json!({"error": "service_not_found", "service": name}),
+            ),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                serde_json::json!({"error": gw.to_string()}),
+            ),
+        };
+        return Ok(warp::reply::with_status(warp::reply::json(&body), status));
+    }
+    if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(
+                &serde_json::json!({"error": format!("Request body deserialize error: {e}")}),
+            ),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    if err.is_not_found() {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({"error": "not_found"})),
+            StatusCode::NOT_FOUND,
+        ));
+    }
+    if err.find::<warp::reject::MethodNotAllowed>().is_some() {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({"error": "method_not_allowed"})),
+            StatusCode::METHOD_NOT_ALLOWED,
+        ));
+    }
+    tracing::error!("unhandled rejection: {err:?}");
+    Ok(warp::reply::with_status(
+        warp::reply::json(&serde_json::json!({"error": "internal_error"})),
+        StatusCode::INTERNAL_SERVER_ERROR,
+    ))
+}
+
+async fn handle_rpc(
+    ctx: AuthContextWithHold,
+    body: JsonRpcRequest,
+    plugin_catalog: Arc<PluginCatalog>,
+    account_client: Option<AccountPluginClient<Channel>>,
+) -> Result<impl Reply, Rejection> {
+    tracing::debug!("Handling RPC request [id={}] {:?}", body.id, body);
+    let req_id = body.id;
+    let rpc_call = body.call;
+    let ledger_id = ctx.ledger_id.clone();
+    if let Err(e) = rpc_call.validate() {
+        tracing::error!("RPC validation error [id={}]: {}", req_id, e);
+        account_release(account_client.clone(), &ledger_id).await;
+        let res: JsonRpcResponse<()> =
+            JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {}", e));
+        return Ok(warp::reply::json(&res));
+    }
+    const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+    let client_id = ctx.auth.client_id;
+
+    match timeout(
+        REQUEST_TIMEOUT,
+        rpc_call.execute(req_id, &client_id, &plugin_catalog),
+    )
+    .await
+    {
+        Ok(Ok(result)) => {
+            tracing::debug!("RPC executed successfully [id={}]", req_id);
+            tokio::spawn(async move {
+                account_settle(account_client, &ledger_id).await;
+            });
+            Ok(warp::reply::json(&result))
+        }
+        Ok(Err(e)) => {
+            tracing::warn!("RPC execution error [id={}]: {}", req_id, e);
+            account_release(account_client, &ledger_id).await;
+
+            let res: JsonRpcResponse<()> = JsonRpcResponse::error(req_id, -32001, e.to_string());
+
+            Ok(warp::reply::json(&res))
+        }
+        Err(_) => {
+            tracing::error!("RPC request timed out [id={}]", req_id);
+            account_release(account_client, &ledger_id).await;
+
+            let res: JsonRpcResponse<()> =
+                JsonRpcResponse::error(req_id, -32002, "Request timed out");
+
+            Ok(warp::reply::json(&res))
+        }
+    }
+}
+
 async fn handle_get(
     service: String,
-    _jwt: String,
-    _: (),
+    ctx: AuthContextWithHold,
     query: QueryParams,
     service_manager: Arc<ServiceManager>,
     bulk_max: usize,
+    account_client: Option<AccountPluginClient<Channel>>,
 ) -> Result<impl Reply, Rejection> {
     let req_id = new_req_id();
+    let ledger_id = ctx.ledger_id.clone();
     tracing::debug!(
         "[req={}] Handling GET request for service: {}",
         req_id,
@@ -247,6 +297,8 @@ async fn handle_get(
     };
     if let Some(b) = query.bulk {
         if b > bulk_max {
+            metrics::record_validation("GET", "bulk_limit_exceeded");
+            account_release(account_client.clone(), &ledger_id).await;
             return Err(warp::reject::custom(GatewayError::BadRequest(format!(
                 "Bulk size {} exceeds maximum {}",
                 b, bulk_max
@@ -255,13 +307,18 @@ async fn handle_get(
             tracing::debug!("[req={}] Bulk size: {}", req_id, b);
         }
     }
-    let enc_key = if let Some(key) = query.key {
-        Some(
-            EncryptionKey::new_from_arg(&key)
-                .map_err(|e| warp::reject::custom(GatewayError::BadRequest(e.to_string())))?,
-        )
-    } else {
-        None
+    let enc_key = match query.key {
+        Some(key) => match EncryptionKey::new_from_arg(&key) {
+            Ok(k) => Some(k),
+            Err(e) => {
+                metrics::record_validation("GET", "invalid_encryption_key");
+                account_release(account_client.clone(), &ledger_id).await;
+                return Err(warp::reject::custom(GatewayError::BadRequest(
+                    e.to_string(),
+                )));
+            }
+        },
+        None => None,
     };
     let svc_req = ServiceRequest {
         req_id,
@@ -271,19 +328,20 @@ async fn handle_get(
         enc_key,
         args: None,
     };
-    handle_service_req(svc_req, service_manager.clone()).await
+    handle_service_req(svc_req, service_manager.clone(), account_client, ledger_id).await
 }
 
 async fn handle_post(
     service: String,
-    _jwt: String,
-    _: (),
+    ctx: AuthContextWithHold,
     body: PostBody,
     query: QueryParams,
     service_manager: Arc<ServiceManager>,
     bulk_max: usize,
+    account_client: Option<AccountPluginClient<Channel>>,
 ) -> Result<impl Reply, Rejection> {
     let req_id = new_req_id();
+    let ledger_id = ctx.ledger_id.clone();
     let src = if let Some(s) = body.src {
         s.clone()
     } else {
@@ -297,6 +355,8 @@ async fn handle_post(
     };
     if let Some(b) = bulk {
         if b > bulk_max {
+            metrics::record_validation("POST", "bulk_limit_exceeded");
+            account_release(account_client.clone(), &ledger_id).await;
             return Err(warp::reject::custom(GatewayError::BadRequest(format!(
                 "Bulk size {} exceeds maximum {}",
                 b, bulk_max
@@ -310,13 +370,18 @@ async fn handle_post(
     } else {
         body.key
     };
-    let enc_key = if let Some(key) = key {
-        Some(
-            EncryptionKey::new_from_arg(&key)
-                .map_err(|e| warp::reject::custom(GatewayError::BadRequest(e.to_string())))?,
-        )
-    } else {
-        None
+    let enc_key = match key {
+        Some(key) => match EncryptionKey::new_from_arg(&key) {
+            Ok(k) => Some(k),
+            Err(e) => {
+                metrics::record_validation("POST", "invalid_encryption_key");
+                account_release(account_client.clone(), &ledger_id).await;
+                return Err(warp::reject::custom(GatewayError::BadRequest(
+                    e.to_string(),
+                )));
+            }
+        },
+        None => None,
     };
     let args = body.args.clone();
     let svc_req = ServiceRequest {
@@ -327,12 +392,14 @@ async fn handle_post(
         enc_key,
         args,
     };
-    handle_service_req(svc_req, service_manager.clone()).await
+    handle_service_req(svc_req, service_manager.clone(), account_client, ledger_id).await
 }
 
 async fn handle_service_req(
     svc_req: ServiceRequest,
     service_manager: Arc<ServiceManager>,
+    account_client: Option<AccountPluginClient<Channel>>,
+    ledger_id: String,
 ) -> Result<impl Reply, Rejection> {
     let timer: Instant = Instant::now();
 
@@ -357,14 +424,22 @@ async fn handle_service_req(
                 metrics::API_REQ_OK_COUNTER
                     .with_label_values(&[&svc_name])
                     .inc();
+                metrics::record_request(&svc_name, "ok", duration);
                 tracing::debug!("[req={}] Got service result", req_id);
+                let account_client = account_client.clone();
+                let ledger_id = ledger_id.clone();
+                tokio::spawn(async move {
+                    account_settle(account_client, &ledger_id).await;
+                });
                 Ok(warp::reply::json(&result))
             }
             Err(e) => {
                 metrics::API_REQ_ERR_COUNTER
                     .with_label_values(&[&svc_name])
                     .inc();
+                metrics::record_request(&svc_name, "service_error", duration);
                 tracing::error!("[req={}] Error result: {:?}", req_id, e);
+                account_release(account_client.clone(), &ledger_id).await;
                 Err(warp::reject::custom(e))
             }
         },
@@ -372,14 +447,18 @@ async fn handle_service_req(
             metrics::API_REQ_FAILED_COUNTER
                 .with_label_values(&[&svc_name])
                 .inc();
+            metrics::record_request(&svc_name, "routing_error", duration);
             tracing::error!("[req={}] Error routing request: {:?}", req_id, e);
+            account_release(account_client.clone(), &ledger_id).await;
             Err(warp::reject::custom(e))
         }
         Err(_) => {
             metrics::API_REQ_TIMEOUT_COUNTER
                 .with_label_values(&[&svc_name])
                 .inc();
+            metrics::record_request(&svc_name, "timeout", duration);
             tracing::error!("[req={}] Request timed out", req_id);
+            account_release(account_client.clone(), &ledger_id).await;
             Err(warp::reject::custom(GatewayError::ServiceTimeout))
         }
     }
@@ -390,48 +469,4 @@ fn new_req_id() -> u64 {
     use rand::Rng;
     let mut rng = rand::rng();
     rng.random_range(1..u64::MAX)
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[tokio::test]
-    async fn test_jwt_from_header() {
-        let mut headers = HeaderMap::new();
-        headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer test_token"));
-        let jwt = jwt_from_header(&headers).unwrap();
-        assert_eq!(jwt, "test_token");
-    }
-
-    #[tokio::test]
-    async fn test_jwt_from_header_empty() {
-        let headers = HeaderMap::new();
-        match jwt_from_header(&headers) {
-            Err(GatewayError::NoAuthHeaderError) => {}
-            _ => panic!("Expected NoAuthHeaderError"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_rate_limiter() {
-        let rate_limiter = Arc::new(RateLimiter::new(5, Duration::from_secs(10)));
-        let token = format!("{}test_token", BEARER);
-
-        for _i in 0..5 {
-            rate_limit(Some(token.clone()), rate_limiter.clone())
-                .await
-                .unwrap();
-        }
-        match rate_limit(Some(token.clone()), rate_limiter.clone()).await {
-            Ok(_) => panic!("Rate limit should have been exceeded"),
-            Err(e) => {
-                assert_eq!(
-                    format!("{:?}", e),
-                    "Rejection(RateLimitExceeded)".to_string(),
-                    "Expected rate limit exceeded error"
-                );
-            }
-        }
-    }
 }

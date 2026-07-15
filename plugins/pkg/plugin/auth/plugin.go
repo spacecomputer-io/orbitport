@@ -11,7 +11,7 @@ import (
 	"github.com/auth0/go-jwt-middleware/v2/validator"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 // Plugin implements the AuthPluginServer interface for the Auth0 API.
@@ -28,10 +28,11 @@ func NewPlugin() (*Plugin, error) {
 	logger := utils.GetLogger("orbitport:auth")
 	logger.Infof("creating plugin with config: %+v", cfg)
 
+	// strict fail-closed validation
 	if len(cfg.Auth0Domain) == 0 || len(cfg.Auth0Audience) == 0 {
-		logger.Warn("Auth0 domain is not set, authentication is OFF")
-		return new(Plugin), nil
+		return nil, fmt.Errorf("FATAL: Auth0Domain or Auth0Audience is missing. Refusing to start without auth configuration")
 	}
+
 	logger.Debug("Auth0 domain is set, creating Auth plugin")
 	plugin, err := newAuthPlugin(cfg.Auth0Domain, cfg.Auth0Audience)
 	if err != nil {
@@ -72,20 +73,23 @@ func newAuthPlugin(auth0Domain, auth0Audience string) (*Plugin, error) {
 // It validates the JWT token using the Auth0 sdk.
 func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
 	logger := utils.GetLogger("orbitport:auth")
-	if p.jwtValidator == nil {
-		logger.Debug("Auth0 domain is not set, authentication is OFF")
-		return &proto.TokenValidationResponse{
-			Ok: true,
-		}, nil
-	}
 	logger.Debug("Validating token")
-	_, err := p.jwtValidator.ValidateToken(ctx, req.Token)
+	claims, err := p.jwtValidator.ValidateToken(ctx, req.Token)
 	if err != nil {
 		logger.Warnf("Encountered error while validating JWT: %v", err)
 		return nil, fmt.Errorf("failed to validate JWT token: %w", err)
 	}
+	validatedClaims, ok := claims.(*validator.ValidatedClaims)
+	if !ok {
+		return nil, fmt.Errorf("unexpected validated claims type %T", claims)
+	}
+	clientID := validatedClaims.RegisteredClaims.Subject
+	if clientID == "" {
+		return nil, fmt.Errorf("validated JWT is missing sub claim")
+	}
 
 	return &proto.TokenValidationResponse{
-		Ok: true,
+		Ok:       true,
+		ClientId: clientID,
 	}, nil
 }
