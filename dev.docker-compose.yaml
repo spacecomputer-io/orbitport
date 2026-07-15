@@ -21,6 +21,84 @@ x-mocker-base:
       max-file: "3"
 
 services:
+  openbao-eth-plugin-builder:
+    container_name: openbao-eth-plugin-builder
+    image: golang:1.25-alpine
+    working_dir: /src
+    volumes:
+      - ${ORBITPORT_OPENBAO_ETH_PLUGIN_DIR:-../openbao-eth-plugin-poc}:/src:ro
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+      - openbao-plugins:/out
+      - openbao-eth-go-pkg:/go/pkg/mod
+      - openbao-eth-go-build:/root/.cache/go-build
+    command:
+      - /bin/sh
+      - -ec
+      - apk add --no-cache build-base linux-headers >/dev/null && /bin/sh /orbitport/docker/openbao/build-eth-plugin.sh /src /out
+
+  openbao:
+    container_name: openbao
+    image: openbao/openbao:latest
+    depends_on:
+      openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+    command:
+      - server
+      - -dev
+      - -dev-root-token-id=root
+      - -dev-listen-address=0.0.0.0:8200
+      - -dev-plugin-dir=/openbao/plugins
+    cap_add:
+      - IPC_LOCK
+    ports:
+      - "18200:8200"
+    volumes:
+      - openbao-plugins:/openbao/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "BAO_ADDR=http://127.0.0.1:8200 BAO_TOKEN=root bao status >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+
+  openbao-bootstrap:
+    container_name: openbao-bootstrap
+    image: openbao/openbao:latest
+    depends_on:
+      openbao:
+        condition: service_healthy
+      openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+    restart: "no"
+    environment:
+      - OPENBAO_ADDR=http://openbao:8200
+      - OPENBAO_TOKEN=root
+      - OPENBAO_PLUGIN_DIR=/openbao/plugins
+      - OPENBAO_ETH_PLUGIN_NAME=ethereum-secrets-plugin
+      - OPENBAO_ETH_MOUNT=ethereum
+      - OPENBAO_TRANSIT_MOUNT=transit
+      - OPENBAO_KV_MOUNT=orbitport-kv
+    volumes:
+      - openbao-plugins:/openbao/plugins
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+    command: ["/bin/sh", "/orbitport/docker/openbao/bootstrap.sh"]
+
+  openbao-proxy:
+    container_name: openbao-proxy
+    image: nginx:1.27-alpine
+    depends_on:
+      - openbao
+    ports:
+      - "8200:8200"
+    volumes:
+      - ./docker/openbao/openbao-proxy.conf:/etc/nginx/nginx.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8200/v1/sys/health >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 2s
+
   plugin-ipfs:
     <<: *plugin-base
     container_name: plugin-ipfs
@@ -74,8 +152,9 @@ services:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=aptosorbital
       - ORBITPORT_GRPC_PORT=50001
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=2e4c704ae4d059e1
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=2e4c704ae4d059e1
+      # Mock credentials for the local dev mocker only. These are not real secrets.
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=dev-client-id
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=dev-client-secret
       - ORBITPORT_APTOS_ORBITAL_API_URL=http://aptos-orbital-api:8001
       - ORBITPORT_APTOS_ORBITAL_AUTH_URL=http://aptos-orbital-auth:8002
     depends_on:
@@ -99,10 +178,33 @@ services:
       - ORBITPORT_MASTERSEED_TRNG_SIZE=32
       - ORBITPORT_MASTERSEED_MAX_SEEDS=100
       - ORBITPORT_MASTERSEED_PERIOD=3600
+      - ORBITPORT_MASTER_SEED_MAX_COUNT_PER_REQUEST=1000
     ports:
       - 9003:9000
     depends_on:
       - plugin-aptos-orbital
+
+  plugin-kms:
+    <<: *plugin-base
+    container_name: plugin-kms
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=kms
+      - ORBITPORT_GRPC_PORT=50004
+      - ORBITPORT_KMS_OPENBAO_PROXY_URL=http://openbao-proxy:8200
+      - ORBITPORT_KMS_TRANSIT_MOUNT=transit
+      - ORBITPORT_KMS_KV_MOUNT=orbitport-kv
+      - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
+    ports:
+      - 9004:9000
+    depends_on:
+      openbao-bootstrap:
+        condition: service_completed_successfully
+      openbao-proxy:
+        condition: service_healthy
 
   plugin-auth:
     <<: *plugin-base
@@ -112,10 +214,30 @@ services:
     image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=auth
+      - ORBITPORT_PLUGIN=authnoop
       - ORBITPORT_GRPC_PORT=50000
-      # - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
-      # - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
+      # Dev compose intentionally runs the noop auth plugin.
+
+  # The account plugin is intentionally NOT enabled in dev compose because the
+  # dashboard backend isn't part of this stack. To enable locally, run the
+  # dashboard separately (e.g. on the host), uncomment the block below, and
+  # set ORBITPORT_ACCOUNT_PLUGIN on the gateway service.
+  #
+  # plugin-account:
+  #   <<: *plugin-base
+  #   container_name: plugin-account
+  #   build:
+  #     context: ./plugins
+  #   image: op-plugin:latest
+  #   environment:
+  #     - GOLOG_LOG_LEVEL=debug
+  #     - ORBITPORT_PLUGIN=account
+  #     - ORBITPORT_GRPC_PORT=50005
+  #     - ORBITPORT_ACCOUNT_DASHBOARD_URL=http://host.docker.internal:3000
+  #     - ORBITPORT_ACCOUNT_AUTH0_DOMAIN=${ORBITPORT_ACCOUNT_AUTH0_DOMAIN}
+  #     - ORBITPORT_ACCOUNT_AUTH0_AUDIENCE=${ORBITPORT_ACCOUNT_AUTH0_AUDIENCE}
+  #     - ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID}
+  #     - ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET}
 
   ipfs-node:
     image: ipfs/kubo:release
@@ -131,15 +253,32 @@ services:
     container_name: gateway 
     image: op-gateway:latest
     build:
-      context: ./gateway
+      context: .
+      dockerfile: gateway/Dockerfile
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       - RUST_LOG=warn,gateway=debug
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
+      - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
     ports:
       - 8080:8080
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    depends_on:
+      - plugin-auth
+      - plugin-kms
+      - plugin-masterseed
 
   plugin-beacon:
     <<: *plugin-base
@@ -157,3 +296,8 @@ services:
       - ORBITPORT_DEFAULT_BEACON_NAME=randomness-beacon-dev1.0
       - ORBITPORT_BEACON_REGISTRY=orbitport-dev-registry
       - ORBITPORT_REGISTRY_RETRIEVAL_TIMEOUT=90
+
+volumes:
+  openbao-plugins:
+  openbao-eth-go-pkg:
+  openbao-eth-go-build:

@@ -15,12 +15,13 @@ type masterSeedConfig struct {
 	// MasterSeedMaxMasterSeeds is the maximum number of master seeds that will be kept in the ring buffer
 	MasterSeedMaxMasterSeeds int
 	// MaserSeedPeriod is the interval of time that must pass before a new master seed will be fetched from aptos orbital
-	MaserSeedPeriod int64
-	AptosPlugin     string `json:"aptos_plugin"`
+	MaserSeedPeriod              int64
+	AptosPlugin                  string `json:"aptos_plugin"`
+	MasterSeedMaxCountPerRequest int
 }
 
 func extractSeeds() []string {
-	rawSeeds := viper.GetString("DEFAULT_MASTER_SEEDS")
+	rawSeeds := strings.TrimSpace(viper.GetString("DEFAULT_MASTER_SEEDS"))
 	var seeds []string
 	if rawSeeds != "" {
 		parts := strings.Split(rawSeeds, ",")
@@ -45,6 +46,7 @@ func readFromEnv() *masterSeedConfig {
 		MasterSeedMaxMasterSeeds:     viper.GetInt("MASTER_SEED_MAX_MASTER_SEEDS"),
 		MaserSeedPeriod:              viper.GetInt64("MASTER_SEED_SEED_PERIOD"),
 		AptosPlugin:                  viper.GetString("APTOS_PLUGIN"),
+		MasterSeedMaxCountPerRequest: viper.GetInt("MASTER_SEED_MAX_COUNT_PER_REQUEST"),
 	}
 }
 
@@ -54,4 +56,5 @@ func setDefaults() {
 	viper.SetDefault("MASTER_SEED_MAX_MASTER_SEEDS", 100)
 	viper.SetDefault("MASTER_SEED_SEED_PERIOD", 3600)
 	viper.SetDefault("APTOS_PLUGIN", "plugin-aptos-orbital:50001")
+	viper.SetDefault("MASTER_SEED_MAX_COUNT_PER_REQUEST", 25000)
 }

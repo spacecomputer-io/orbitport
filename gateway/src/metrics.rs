@@ -47,6 +47,118 @@ lazy_static! {
         &["service"]
     )
     .unwrap();
+    static ref GATEWAY_REQUESTS_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_requests_total",
+        "Total number of gateway service requests",
+        &["service", "status"]
+    )
+    .unwrap();
+    static ref GATEWAY_REQUEST_DURATION_SECONDS: HistogramVec =
+        prometheus::register_histogram_vec!(
+            "op_gateway_request_duration_seconds",
+            "Duration of gateway service requests in seconds",
+            &["service", "status"]
+        )
+        .unwrap();
+    static ref GATEWAY_TRNG_SOURCE_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_trng_source_total",
+        "Total number of gateway TRNG source outcomes",
+        &["source", "status"]
+    )
+    .unwrap();
+    static ref GATEWAY_AUTH_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_auth_total",
+        "Total number of gateway authentication attempts",
+        &["status"]
+    )
+    .unwrap();
+    static ref GATEWAY_AUTH_DURATION_SECONDS: HistogramVec = prometheus::register_histogram_vec!(
+        "op_gateway_auth_duration_seconds",
+        "Duration of gateway authentication attempts in seconds",
+        &["status"]
+    )
+    .unwrap();
+    static ref GATEWAY_RATE_LIMIT_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_rate_limit_total",
+        "Total number of gateway rate limit outcomes",
+        &["status"]
+    )
+    .unwrap();
+    static ref GATEWAY_VALIDATION_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_validation_total",
+        "Total number of gateway request validation outcomes",
+        &["method", "reason"]
+    )
+    .unwrap();
+    static ref GATEWAY_ACCOUNT_HOLD_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_account_hold_total",
+        "Total number of account-plugin Hold outcomes",
+        &["status"]
+    )
+    .unwrap();
+    static ref GATEWAY_ACCOUNT_RELEASE_TOTAL: IntCounterVec =
+        prometheus::register_int_counter_vec!(
+            "op_gateway_account_release_total",
+            "Total number of account-plugin Release outcomes",
+            &["status"]
+        )
+        .unwrap();
+    static ref GATEWAY_ACCOUNT_SETTLE_TOTAL: IntCounterVec = prometheus::register_int_counter_vec!(
+        "op_gateway_account_settle_total",
+        "Total number of account-plugin Settle outcomes",
+        &["status"]
+    )
+    .unwrap();
+}
+
+pub fn record_request(service: &str, status: &str, duration_seconds: f64) {
+    GATEWAY_REQUESTS_TOTAL
+        .with_label_values(&[service, status])
+        .inc();
+    GATEWAY_REQUEST_DURATION_SECONDS
+        .with_label_values(&[service, status])
+        .observe(duration_seconds);
+}
+
+pub fn record_auth(status: &str, duration_seconds: f64) {
+    GATEWAY_AUTH_TOTAL.with_label_values(&[status]).inc();
+    GATEWAY_AUTH_DURATION_SECONDS
+        .with_label_values(&[status])
+        .observe(duration_seconds);
+}
+
+pub fn record_rate_limit(status: &str) {
+    GATEWAY_RATE_LIMIT_TOTAL.with_label_values(&[status]).inc();
+}
+
+pub fn record_validation(method: &str, reason: &str) {
+    GATEWAY_VALIDATION_TOTAL
+        .with_label_values(&[method, reason])
+        .inc();
+}
+
+pub fn record_trng_source(source: &str, status: &str) {
+    GATEWAY_TRNG_SOURCE_TOTAL
+        .with_label_values(&[source, status])
+        .inc();
+}
+
+pub fn record_account_hold(status: &str) {
+    GATEWAY_ACCOUNT_HOLD_TOTAL
+        .with_label_values(&[status])
+        .inc();
+}
+
+pub fn record_account_release(status: &str) {
+    GATEWAY_ACCOUNT_RELEASE_TOTAL
+        .with_label_values(&[status])
+        .inc();
+}
+
+pub fn record_account_settle(status: &str) {
+    GATEWAY_ACCOUNT_SETTLE_TOTAL
+        .with_label_values(&[status])
+        .inc();
 }
 
 /// Metrics endpoint handler, gathers metrics from the prometheus registry

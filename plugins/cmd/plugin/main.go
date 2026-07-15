@@ -9,13 +9,16 @@ import (
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/account"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/aptosorbital"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 func main() {
@@ -25,7 +28,9 @@ func main() {
 
 	logger := utils.GetLogger(fmt.Sprintf("orbitport:plugin:%s", cfg.Plugin))
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(core.UnaryMetricsInterceptor(cfg.Plugin)),
+	)
 
 	logger.Infof("Starting plugin %s", cfg.Plugin)
 
@@ -48,6 +53,13 @@ func main() {
 		}
 		proto.RegisterAuthPluginServer(grpcServer, plugin)
 		logger.Info("Auth plugin ready")
+	case "authnoop":
+		plugin, err := authnoop.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterAuthPluginServer(grpcServer, plugin)
+		logger.Info("Noop auth plugin ready")
 	case "ipfs":
 		plugin, err := ipfs.NewPlugin()
 		if err != nil {
@@ -92,6 +104,22 @@ func main() {
 				logger.Errorf("error closing masterseed plugin: %v", err)
 			}
 		}()
+	case "kms":
+		plugin, err := kms.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterKmsPluginServer(grpcServer, plugin)
+		logger.Info("KMS plugin ready")
+	case "account":
+		plugin, err := account.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterAccountPluginServer(grpcServer, plugin)
+		logger.Info("Account plugin ready")
+
+		defer plugin.Close()
 	default:
 		panic("unknown plugin")
 	}

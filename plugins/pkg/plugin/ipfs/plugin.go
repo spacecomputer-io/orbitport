@@ -14,13 +14,16 @@ import (
 	"github.com/ipfs/boxo/ipns"
 	"github.com/ipfs/boxo/path"
 	"github.com/ipfs/go-cid"
+	cmds "github.com/ipfs/go-ipfs-cmds"
 	"github.com/ipfs/kubo/client/rpc"
 	iface "github.com/ipfs/kubo/core/coreiface"
 	"github.com/ipfs/kubo/core/coreiface/options"
 	ma "github.com/multiformats/go-multiaddr"
+	"google.golang.org/grpc/codes"
+	statuspkg "google.golang.org/grpc/status"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
-	pluginsproto "github.com/spacecomputer-io/orbitport/plugins/proto"
+	pluginsproto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
 type Plugin struct {
@@ -31,6 +34,8 @@ type Plugin struct {
 	ipnsCache *lru.Cache
 
 	leaseDuration time.Duration
+	maxAddBytes   uint
+	maxGetBytes   uint
 }
 
 // NewPlugin creates a new IPFS plugin with a storage layer.
@@ -77,6 +82,8 @@ func NewPlugin() (*Plugin, error) {
 		cache:         cache,
 		ipnsCache:     ipnsCache,
 		leaseDuration: cfg.LeaseDuration,
+		maxAddBytes:   cfg.MaxAddBytes,
+		maxGetBytes:   cfg.MaxGetBytes,
 	}
 
 	pl.RegisterCacheGauges()
@@ -96,6 +103,13 @@ func (pi *Plugin) Add(ctx context.Context, req *pluginsproto.AddRequest) (*plugi
 	}()
 
 	addBytesTotal.Add(float64(len(req.Data)))
+
+	if uint(len(req.Data)) > pi.maxAddBytes {
+		status = "err"
+		err := fmt.Errorf("add payload too large: %d bytes exceeds max %d", len(req.Data), pi.maxAddBytes)
+		logger.Warn(err.Error())
+		return nil, err
+	}
 
 	block, err := pi.node.Block().Put(ctx, bytes.NewReader(req.Data))
 	if err != nil {
@@ -189,6 +203,17 @@ func (pi *Plugin) Get(ctx context.Context, req *pluginsproto.GetRequest) (*plugi
 				status = "err"
 				getTotal.WithLabelValues(source, req.Namespace, status).Inc()
 				logger.Warnf("failed to resolve name %q: %s", normalized, err)
+				logger.Warnf(
+					"IPNS resolve failed: reqKey=%q normalized=%q err=%s errType=%T",
+					name, normalized, err.Error(), err,
+				)
+
+				logErrorChain(logger, err)
+
+				if isUnpublishedIPNSRecordError(err) {
+					return nil, statuspkg.Errorf(codes.NotFound, "ipns record not published for %q", normalized)
+				}
+
 				return nil, err
 			}
 			p = resolved
@@ -346,12 +371,19 @@ func (pi *Plugin) publish(ctx context.Context, p path.Path, name string) (*ipns.
 		return nil, err
 	}
 
-	// cache the published name
-	_ = pi.ipnsCache.Add(name, p)
-	cacheItems.WithLabelValues("ipns").Set(float64(pi.ipnsCache.Len()))
+	pi.cachePublishedName(name, published, p)
 	logger.Infof("published %s", published.AsPath())
 
 	return &published, nil
+}
+
+func (pi *Plugin) cachePublishedName(alias string, published ipns.Name, p path.Path) {
+	// Cache the latest head under every form callers may use:
+	// local alias, bare peer ID, and canonical /ipns/<peerID>.
+	_ = pi.ipnsCache.Add(alias, p)
+	_ = pi.ipnsCache.Add(published.String(), p)
+	_ = pi.ipnsCache.Add(published.AsPath().String(), p)
+	cacheItems.WithLabelValues("ipns").Set(float64(pi.ipnsCache.Len()))
 }
 
 func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace string) ([]byte, error) {
@@ -384,12 +416,20 @@ func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace strin
 		return nil, err
 	}
 
-	data, err := io.ReadAll(reader)
+	data, err := io.ReadAll(io.LimitReader(reader, int64(pi.maxGetBytes)+1))
 	if err != nil {
 		status := "err"
 		getTotal.WithLabelValues(source, namespace, status).Inc()
 
 		logger.Warnf("failed to read data: %s", err)
+		return nil, err
+	}
+
+	if uint(len(data)) > pi.maxGetBytes {
+		status := "err"
+		getTotal.WithLabelValues(source, namespace, status).Inc()
+		err := fmt.Errorf("get payload too large: %d bytes exceeds max %d", len(data), pi.maxGetBytes)
+		logger.Warn(err.Error())
 		return nil, err
 	}
 
@@ -401,10 +441,18 @@ func (pi *Plugin) getByPath(ctx context.Context, path path.Path, namespace strin
 func (pi *Plugin) keyForName(ctx context.Context, name string) (iface.Key, error) {
 	logger := utils.GetLogger("orbitport:ipfs")
 
-	keys, err := pi.node.Key().List(ctx)
-	if err != nil {
-		logger.Warnf("failed to list keys: %s", err)
-		return nil, err
+	// Prefer direct key lookup by alias instead of depending on key listing support.
+	// Some IPFS deployments expose key generation and publishing but not key listing.
+	key, _, err := pi.node.Key().Sign(ctx, name, []byte("orbitport-key-lookup"))
+	if err == nil {
+		return key, nil
+	}
+	logger.Debugf("direct key lookup via sign failed for %q: %s", name, err)
+
+	keys, listErr := pi.node.Key().List(ctx)
+	if listErr != nil {
+		logger.Warnf("failed to list keys: %s", listErr)
+		return nil, errors.Join(err, listErr)
 	}
 
 	for _, key := range keys {
@@ -449,4 +497,46 @@ func (pi *Plugin) KeyInfo(ctx context.Context, req *pluginsproto.KeyInfoRequest)
 	// ipnsName is "/ipns/<peerID>"
 	ipnsName := key.Path().String()
 	return &pluginsproto.KeyInfoResponse{IpnsName: ipnsName}, nil
+}
+
+// logErrorChain prints useful diagnostics for wrapped errors (HTTP status, unwrap chain).
+func logErrorChain(logger interface {
+	Warnf(format string, args ...any)
+}, err error) {
+	if err == nil {
+		return
+	}
+
+	// Walk unwrap chain (prints wrapped HTTP/root-cause errors).
+	unwrapped := err
+	for depth := 0; depth < 10; depth++ {
+		next := errors.Unwrap(unwrapped)
+		if next == nil {
+			break
+		}
+		logger.Warnf("  unwrap[%d]: type=%T err=%s", depth, next, next.Error())
+		unwrapped = next
+	}
+
+	// If the error exposes a status code, print it (no internal imports).
+	type hasStatus interface{ StatusCode() int }
+	if se, ok := err.(hasStatus); ok {
+		logger.Warnf("  statusCode=%d", se.StatusCode())
+	}
+}
+
+func isUnpublishedIPNSRecordError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var cmdErr *rpc.Error
+	if !errors.As(err, &cmdErr) {
+		return false
+	}
+
+	return cmdErr.Code == cmds.ErrNormal
 }

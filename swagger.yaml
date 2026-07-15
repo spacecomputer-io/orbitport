@@ -13,11 +13,9 @@ paths:
         - in: query
           name: src
           schema:
-            type: array
-            items:
-              type: string
-              enum: [aptosorbital, derived]
-            default: [aptosorbital, derived]
+            type: string
+            enum: [aptosorbital, derived]
+            default: aptosorbital
           description: |
             The gateway supports multiple sources of randomness:
             1. **aptosorbital**: Space-based randomness provided by `cEDGE` or `Crypto2` satellites.
@@ -25,12 +23,10 @@ paths:
         - in: query
           name: bulk
           schema:
-            type: array
-            items:
-              type: number
-              minimum: 0
-              maximum: 10
-              default: 0
+            type: integer
+            minimum: 0
+            maximum: 10
+            default: 0
           description: |
             The number of derived random numbers to be generated. The maximum is 10. The default is 0.
       responses:

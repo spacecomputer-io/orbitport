@@ -2,9 +2,9 @@ use threshold::core::CiphertextMsg;
 use tonic::transport::Channel;
 
 use crate::metrics;
-use crate::proto::trng::TrngResponse;
+use crate::proto::plugins::ao::TrngResponse;
 
-use crate::proto::masterseed::{
+use crate::proto::plugins::masterseed::{
     GetSeedsRequest, GetSeedsResponse, master_seed_plugin_client::MasterSeedPluginClient,
 };
 
@@ -35,8 +35,6 @@ pub enum TrngError {
 pub struct TrngService {
     masterseed_client: MasterSeedPluginClient<Channel>,
 }
-
-unsafe impl Send for TrngService {}
 
 impl TrngService {
     /// Creates a new instance of the TrngService.
@@ -72,6 +70,7 @@ impl TrngService {
                 metrics::TRNG_MASTER_SEED_COUNTER
                     .with_label_values(&["error"])
                     .inc();
+                metrics::record_trng_source("masterseed", "error");
                 GatewayError::InternalError(
                     "Failed to get seeds from masterseed plugin".to_string(),
                 )
@@ -83,6 +82,7 @@ impl TrngService {
             metrics::TRNG_MASTER_SEED_COUNTER
                 .with_label_values(&["empty"])
                 .inc();
+            metrics::record_trng_source("masterseed", "empty");
             return Err(GatewayError::InternalError(
                 "Masterseed returned empty values".to_string(),
             ));
@@ -91,6 +91,7 @@ impl TrngService {
         metrics::TRNG_MASTER_SEED_COUNTER
             .with_label_values(&["success"])
             .inc();
+        metrics::record_trng_source("masterseed", "success");
 
         Ok(resp.values)
     }

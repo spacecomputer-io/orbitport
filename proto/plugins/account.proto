@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
+
+package account;
+
+// AccountPlugin gates JWT-authenticated requests by holding credits
+// against the dashboard backend account service before the gateway
+// dispatches the request to its downstream plugins.
+service AccountPlugin {
+  // Hold deducts credits atomically against the Account owning client_id.
+  // The dashboard returns a ledger_id the gateway uses to settle on success
+  // or release on failure.
+  rpc Hold(HoldRequest) returns (HoldResponse);
+
+  // Settle commits a previous hold: it marks the ledger row resolved so the
+  // dashboard sweeper no longer treats it as an orphan to refund. Balance is
+  // unchanged (the hold already deducted). Idempotent — duplicate calls are
+  // no-ops. The gateway calls this once the downstream request succeeds.
+  rpc Settle(SettleRequest) returns (SettleResponse);
+
+  // Release refunds a previous hold. Idempotent — duplicate calls are no-ops.
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+}
+
+message HoldRequest {
+  // Auth0 client_id from the validated JWT's sub claim.
+  string client_id = 1;
+  // Compute units consumed by this request. MVP: always 1.
+  uint32 units = 2;
+  // Operation tag for ledger description + metrics ("trng", "kms_sign", ...).
+  string operation = 3;
+}
+
+message HoldResponse {
+  // True when the dashboard accepted the hold.
+  bool ok = 1;
+  // CreditLedger row ID. Pass back to Release on downstream failure.
+  string ledger_id = 2;
+  // Account's balance after the hold. Surfaced in metrics, not headers.
+  int64 balance_after = 3;
+  // Reserved for future ok=false signaling. Currently the plugin returns a
+  // non-nil gRPC status (FailedPrecondition / Unavailable) instead of a
+  // response with ok=false, so callers should branch on the gRPC error code.
+  string error = 4;
+}
+
+message SettleRequest {
+  string ledger_id = 1;
+}
+
+message SettleResponse {
+  bool ok = 1;
+  int64 balance_after = 2;
+  string error = 3;
+}
+
+message ReleaseRequest {
+  string ledger_id = 1;
+}
+
+message ReleaseResponse {
+  bool ok = 1;
+  int64 balance_after = 2;
+  string error = 3;
+}

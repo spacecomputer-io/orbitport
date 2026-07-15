@@ -9,11 +9,13 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/testutils"
-	"github.com/spacecomputer-io/orbitport/plugins/proto"
+	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func TestIpfsPlugin(t *testing.T) {
@@ -102,6 +104,66 @@ func TestIpfsPlugin(t *testing.T) {
 		require.NoError(t, err, "failed to get data from IPFS via IPNS")
 		require.Equal(t, data, getResp.Data, "retrieved data should match the original")
 		t.Logf("data retrieved from IPFS via IPNS: %s", getResp.Path)
+
+		// Re-publish the same alias to ensure existing keys are reused cleanly.
+		updatedData := []byte(fmt.Sprintf("updated test data %d", now.UnixNano()))
+		updatedResp, err := plugin.Add(ctx, &proto.AddRequest{Data: updatedData})
+		require.NoError(t, err, "failed to add updated data to IPFS")
+
+		repubResp, err := plugin.Publish(ctx, &proto.PublishRequest{
+			Cid:         updatedResp.Cid,
+			PublishName: publishName,
+		})
+		require.NoError(t, err, "failed to re-publish data to existing IPNS key")
+		require.Equal(t, pubresp.IpnsName, repubResp.IpnsName, "IPNS name should stay stable for the same alias")
+
+		updatedGetResp, err := plugin.Get(ctx, getReq)
+		require.NoError(t, err, "failed to get updated data from IPFS via IPNS")
+		require.Equal(t, updatedData, updatedGetResp.Data, "retrieved data should match the updated payload")
+	})
+
+	t.Run("AddRejectsOversizedPayload", func(t *testing.T) {
+		pluginWithSmallAddLimit, err := createPluginWithLimits(apiPort, 16, 1048576)
+		require.NoError(t, err, "failed to create plugin with small add limit")
+
+		_, err = pluginWithSmallAddLimit.Add(ctx, &proto.AddRequest{
+			Data: []byte("this payload is definitely larger than sixteen bytes"),
+		})
+		require.Error(t, err, "expected oversized add payload to be rejected")
+		require.Contains(t, err.Error(), "add payload too large")
+	})
+
+	t.Run("GetRejectsOversizedPayload", func(t *testing.T) {
+		pluginWithDefaultLimits, err := createPluginWithLimits(apiPort, 1048576, 1048576)
+		require.NoError(t, err, "failed to create plugin with default limits")
+
+		addResp, err := pluginWithDefaultLimits.Add(ctx, &proto.AddRequest{
+			Data: []byte("this payload is larger than sixteen bytes"),
+		})
+		require.NoError(t, err, "failed to add data for oversized get test")
+
+		pluginWithSmallGetLimit, err := createPluginWithLimits(apiPort, 1048576, 16)
+		require.NoError(t, err, "failed to create plugin with small get limit")
+
+		_, err = pluginWithSmallGetLimit.Get(ctx, &proto.GetRequest{
+			Key:       addResp.Cid,
+			Namespace: "ipfs",
+		})
+		require.Error(t, err, "expected oversized get payload to be rejected")
+		require.Contains(t, err.Error(), "get payload too large")
+	})
+
+	t.Run("GetReturnsNotFoundForUnpublishedIPNSKey", func(t *testing.T) {
+		publishName := fmt.Sprintf("test-unpublished-name-%d", time.Now().UnixNano())
+		_, err := plugin.node.Key().Generate(ctx, publishName)
+		require.NoError(t, err, "failed to generate unpublished IPNS key")
+
+		_, err = plugin.Get(ctx, &proto.GetRequest{
+			Key:       publishName,
+			Namespace: "ipns",
+		})
+		require.Error(t, err, "expected unpublished IPNS key lookup to fail")
+		require.Equal(t, codes.NotFound, status.Code(err), "expected unpublished IPNS key lookup to return NotFound")
 	})
 }
 
@@ -131,7 +193,13 @@ func createIpfsNode(ctx context.Context, apiPort uint16) (testcontainers.Contain
 }
 
 func createPlugin(ipfsApiPort uint16) (*Plugin, error) {
+	return createPluginWithLimits(ipfsApiPort, 1048576, 1048576)
+}
+
+func createPluginWithLimits(ipfsApiPort uint16, maxAddBytes, maxGetBytes uint) (*Plugin, error) {
 	viper.Set("IPFS_ADDRESS", fmt.Sprintf("http://localhost:%d", ipfsApiPort))
+	viper.Set("PLUGIN_MAX_ADD_BYTES", maxAddBytes)
+	viper.Set("PLUGIN_MAX_GET_BYTES", maxGetBytes)
 	plugin, err := NewPlugin()
 	if err != nil {
 		return nil, err
