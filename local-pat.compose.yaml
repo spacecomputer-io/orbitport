@@ -1,0 +1,69 @@
+# PAT local-dev overlay — mint and verify Personal Access Tokens with NO
+# OpenBao and NO Auth0 secrets: the issuer plugin signs with an ephemeral
+# in-process ES256 key (every restart invalidates outstanding PATs).
+#
+#   docker compose --env-file=.dev.env \
+#     -f dev.docker-compose.yaml -f local-pat.compose.yaml up -d --build
+#
+# What it changes vs the dev stack:
+#   - adds plugin-issuer (mints PATs, serves JWKS)
+#   - swaps authnoop for the real auth plugin with the PAT path enabled
+#     (legacy Auth0 tokens still validate against the real tenant)
+#   - gateway mounts POST /internal/pat/issue (shared secret) and
+#     GET /.well-known/jwks.json
+#
+# Credit gating stays OFF here. For the full credit loop, additionally
+# apply your local account override (account plugin + dashboard URL +
+# Auth0 M2M credentials), e.g.:
+#   docker compose --env-file=.dev.env -f dev.docker-compose.yaml \
+#     -f local-pat.compose.yaml -f local-account.compose.yaml up -d --build
+#
+# The dashboard backend pairs with this via:
+#   PAT_ENABLED=true
+#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8080   (or localhost:8080 on the host)
+#   ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:-local-dev-secret}
+
+services:
+  plugin-issuer:
+    container_name: plugin-issuer
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=issuer
+      - ORBITPORT_GRPC_PORT=50006
+      - ORBITPORT_ISSUER_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
+      - ORBITPORT_ISSUER_AUD=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      # No ORBITPORT_ISSUER_LOCAL_KEY_PEM on purpose: ephemeral key, dev only.
+
+  # Real auth plugin (not authnoop) so the ES256/JWKS verification path is
+  # genuinely exercised. Auth0 vars serve the legacy-token path only.
+  plugin-auth:
+    environment:
+      - ORBITPORT_PLUGIN=auth
+      - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN:-auth.spacecomputer.io}
+      - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE:-https://op-dev.spacecomputer.io/api}
+      - ORBITPORT_AUTH_PAT_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
+      - ORBITPORT_AUTH_PAT_AUDIENCE=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      - ORBITPORT_AUTH_ISSUER_PLUGIN=plugin-issuer:50006
+    depends_on:
+      - plugin-issuer
+
+  gateway:
+    environment:
+      - ORBITPORT_ISSUER_PLUGIN=http://plugin-issuer:50006
+      - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:-local-dev-secret}
+    depends_on:
+      - plugin-issuer
