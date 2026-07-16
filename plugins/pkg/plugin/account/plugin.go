@@ -78,7 +78,7 @@ func (p *Plugin) Hold(ctx context.Context, req *proto.HoldRequest) (*proto.HoldR
 	}
 
 	credits := units * p.cfg.CreditsPerUnit
-	ledgerID, balance, err := p.client.Hold(ctx, clientID, credits, req.GetOperation())
+	ledgerID, balance, err := p.client.Hold(ctx, clientID, credits, req.GetOperation(), req.GetJti())
 	if err != nil {
 		if errors.Is(err, ErrInsufficientCredits) {
 			p.logger.Debugf("hold rejected for client_id=%s op=%s: insufficient credits", clientID, req.GetOperation())

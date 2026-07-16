@@ -14,9 +14,14 @@ use crate::filters::{
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
+use crate::proto::plugins::issuer::{
+    GetJwksRequest, IssueTokenRequest, issuer_plugin_client::IssuerPluginClient,
+};
 use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
 use crate::trng::SRC_DERIVED_TRNG;
 use tonic::transport::Channel;
+use warp::filters::BoxedFilter;
+use warp::reply::Response;
 
 impl Reject for GatewayError {}
 
@@ -56,6 +61,7 @@ pub async fn start(
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
+    issuer_shared_secret: Option<String>,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -64,6 +70,8 @@ pub async fn start(
 
     let account_client: Option<AccountPluginClient<Channel>> =
         plugin_catalog.get_account_client().await.ok();
+    let issuer_client: Option<IssuerPluginClient<Channel>> =
+        plugin_catalog.get_issuer_client().await.ok();
     let account_client_rpc = account_client.clone();
     let account_client_get = account_client.clone();
     let account_client_post = account_client.clone();
@@ -137,15 +145,155 @@ pub async fn start(
         }))
     });
 
-    let routes = get_route
+    let mut routes: BoxedFilter<(Response,)> = get_route
         .or(post_route)
         .or(rpc_route)
         .or(health_route.with(warp::log("health_check")))
-        .recover(handle_rejection);
+        .map(warp::reply::Reply::into_response)
+        .boxed();
+
+    // Issuer-backed routes are mounted only when the issuer plugin is
+    // configured and reachable at startup (same pattern as account_client).
+    if let Some(client) = issuer_client {
+        routes = routes.or(jwks_route(client.clone())).unify().boxed();
+
+        match issuer_shared_secret.as_deref() {
+            Some(secret) if !secret.is_empty() => {
+                routes = routes
+                    .or(pat_issue_route(client, secret.to_string()))
+                    .unify()
+                    .boxed();
+            }
+            _ => {
+                tracing::warn!(
+                    "ORBITPORT_ISSUER_PLUGIN is set but ORBITPORT_ISSUER_SHARED_SECRET is unset or empty; refusing to mount POST /internal/pat/issue"
+                );
+            }
+        }
+    }
+
+    let routes = routes.recover(handle_rejection);
 
     tracing::info!("Starting http server on: 0.0.0.0:{}", http_port);
 
     warp::serve(routes).run(([0, 0, 0, 0], http_port)).await;
+}
+
+/// PUBLIC `GET /.well-known/jwks.json` — like `health_route`, it bypasses
+/// `with_auth`/`with_account_hold`: verifiers must be able to fetch the key
+/// set anonymously. Proxies the issuer plugin's GetJwks and serves the raw
+/// JWKS JSON with a 5-minute cache hint.
+pub fn jwks_route(
+    client: IssuerPluginClient<Channel>,
+) -> impl Filter<Extract = (Response,), Error = Rejection> + Clone {
+    warp::get()
+        .and(warp::path!(".well-known" / "jwks.json"))
+        .and(warp::any().map(move || client.clone()))
+        .and_then(handle_jwks)
+}
+
+async fn handle_jwks(mut client: IssuerPluginClient<Channel>) -> Result<Response, Rejection> {
+    match client.get_jwks(GetJwksRequest {}).await {
+        Ok(resp) => {
+            let jwks = resp.into_inner().jwks_json;
+            let reply = warp::reply::with_header(jwks, "content-type", "application/json");
+            let reply = warp::reply::with_header(reply, "cache-control", "max-age=300");
+            Ok(warp::reply::Reply::into_response(reply))
+        }
+        Err(e) => {
+            tracing::error!("Issuer plugin GetJwks failed: {}", e);
+            Ok(json_status(
+                &serde_json::json!({"error": "issuer_plugin_unavailable"}),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ))
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PatIssueBody {
+    jti: String,
+    subject: String,
+    #[serde(default)]
+    kms_tenant: Option<String>,
+    expires_at: i64,
+}
+
+/// INTERNAL `POST /internal/pat/issue` — deliberately NOT wrapped in
+/// `with_auth`/`with_account_hold`: the caller is the dashboard backend, not
+/// an end user. Guarded by a constant-time shared-secret bearer check.
+pub fn pat_issue_route(
+    client: IssuerPluginClient<Channel>,
+    shared_secret: String,
+) -> impl Filter<Extract = (Response,), Error = Rejection> + Clone {
+    warp::post()
+        .and(warp::path!("internal" / "pat" / "issue"))
+        .and(warp::header::optional::<String>("authorization"))
+        .and(warp::body::content_length_limit(4096))
+        .and(warp::body::json())
+        .and(warp::any().map(move || client.clone()))
+        .and(warp::any().map(move || shared_secret.clone()))
+        .and_then(handle_pat_issue)
+}
+
+async fn handle_pat_issue(
+    auth_header: Option<String>,
+    body: PatIssueBody,
+    mut client: IssuerPluginClient<Channel>,
+    shared_secret: String,
+) -> Result<Response, Rejection> {
+    let expected = format!("Bearer {shared_secret}");
+    let authorized = auth_header
+        .as_deref()
+        .is_some_and(|header| constant_time_eq(header, &expected));
+    if !authorized {
+        return Ok(json_status(
+            &serde_json::json!({"error": "unauthorized"}),
+            StatusCode::UNAUTHORIZED,
+        ));
+    }
+
+    let request = tonic::Request::new(IssueTokenRequest {
+        jti: body.jti,
+        subject: body.subject,
+        kms_tenant: body.kms_tenant.unwrap_or_default(),
+        expires_at: body.expires_at,
+    });
+    match client.issue_token(request).await {
+        Ok(resp) => Ok(json_status(
+            &serde_json::json!({"token": resp.into_inner().token}),
+            StatusCode::OK,
+        )),
+        Err(e) if e.code() == tonic::Code::InvalidArgument => Ok(json_status(
+            &serde_json::json!({"error": e.message()}),
+            StatusCode::BAD_REQUEST,
+        )),
+        Err(e) => {
+            tracing::error!("Issuer plugin IssueToken failed: {}", e);
+            Ok(json_status(
+                &serde_json::json!({"error": "issuer_plugin_unavailable"}),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ))
+        }
+    }
+}
+
+fn json_status(body: &serde_json::Value, status: StatusCode) -> Response {
+    warp::reply::Reply::into_response(warp::reply::with_status(warp::reply::json(body), status))
+}
+
+/// Constant-time string equality via SHA-256 digests: hashing first makes
+/// the comparison length-independent, and the digest fold never
+/// short-circuits.
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    use sha2::{Digest, Sha256};
+    let a = Sha256::digest(a.as_bytes());
+    let b = Sha256::digest(b.as_bytes());
+    a.iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 /// Maps gateway-specific custom rejections to HTTP responses. Without this,

@@ -29,7 +29,7 @@ async fn test_e2e_threshold() {
         for _ in 0..n {
             let resp =
                 common::get_trng(&base_url, &access_token, None, None, Some(tpk.clone())).await?;
-            assert!(resp.data.len() > 0, "Response data is empty");
+            assert!(!resp.data.is_empty(), "Response data is empty");
             let ciphertext_msg =
                 threshold::core::CiphertextMsg::try_from(resp.data.clone()).unwrap();
             let ciphertext = ciphertext_msg.get_ciphertext();

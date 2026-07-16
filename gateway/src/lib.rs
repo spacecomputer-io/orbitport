@@ -14,6 +14,9 @@ pub mod proto {
         pub mod ipfs {
             tonic::include_proto!("ipfs");
         }
+        pub mod issuer {
+            tonic::include_proto!("issuer");
+        }
         pub mod kms {
             tonic::include_proto!("kmsapi");
         }

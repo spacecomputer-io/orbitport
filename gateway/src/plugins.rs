@@ -12,6 +12,7 @@ use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPlug
 
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
+use crate::proto::plugins::issuer::issuer_plugin_client::IssuerPluginClient;
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
 
 use thiserror::Error;
@@ -125,6 +126,7 @@ impl PluginCatalog {
         masterseed_url: &str,
         kms_url: &str,
         account_url: Option<&str>,
+        issuer_url: Option<&str>,
     ) -> Self {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
@@ -132,6 +134,9 @@ impl PluginCatalog {
         urls.insert("masterseed".to_string(), masterseed_url.to_string());
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
+        }
+        if let Some(url) = issuer_url {
+            urls.insert("issuer".to_string(), url.to_string());
         }
 
         PluginCatalog {
@@ -172,5 +177,10 @@ impl PluginCatalog {
     pub async fn get_account_client(&self) -> Result<AccountPluginClient<Channel>, PluginError> {
         let channel = self.get_client("account").await?;
         Ok(AccountPluginClient::new(channel))
+    }
+
+    pub async fn get_issuer_client(&self) -> Result<IssuerPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("issuer").await?;
+        Ok(IssuerPluginClient::new(channel))
     }
 }

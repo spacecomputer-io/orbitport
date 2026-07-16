@@ -28,7 +28,10 @@ type HoldRequest struct {
 	// Compute units consumed by this request. MVP: always 1.
 	Units uint32 `protobuf:"varint,2,opt,name=units,proto3" json:"units,omitempty"`
 	// Operation tag for ledger description + metrics ("trng", "kms_sign", ...).
-	Operation     string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
+	Operation string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
+	// Non-empty jti = the token was a PAT (dual-validation discriminator);
+	// empty = legacy Auth0 M2M.
+	Jti           string `protobuf:"bytes,4,opt,name=jti,proto3" json:"jti,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -80,6 +83,13 @@ func (x *HoldRequest) GetUnits() uint32 {
 func (x *HoldRequest) GetOperation() string {
 	if x != nil {
 		return x.Operation
+	}
+	return ""
+}
+
+func (x *HoldRequest) GetJti() string {
+	if x != nil {
+		return x.Jti
 	}
 	return ""
 }
@@ -370,11 +380,12 @@ var File_proto_plugins_account_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_account_proto_rawDesc = "" +
 	"\n" +
-	"\x1bproto/plugins/account.proto\x12\aaccount\"^\n" +
+	"\x1bproto/plugins/account.proto\x12\aaccount\"p\n" +
 	"\vHoldRequest\x12\x1b\n" +
 	"\tclient_id\x18\x01 \x01(\tR\bclientId\x12\x14\n" +
 	"\x05units\x18\x02 \x01(\rR\x05units\x12\x1c\n" +
-	"\toperation\x18\x03 \x01(\tR\toperation\"v\n" +
+	"\toperation\x18\x03 \x01(\tR\toperation\x12\x10\n" +
+	"\x03jti\x18\x04 \x01(\tR\x03jti\"v\n" +
 	"\fHoldResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x1b\n" +
 	"\tledger_id\x18\x02 \x01(\tR\bledgerId\x12#\n" +

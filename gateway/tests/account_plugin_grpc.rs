@@ -117,6 +117,7 @@ async fn hold_success_returns_ledger_id() {
             client_id: "client-1".to_string(),
             units: 1,
             operation: "trng".to_string(),
+            jti: String::new(),
         })
         .await
         .unwrap()
@@ -137,6 +138,7 @@ async fn hold_insufficient_credits_maps_to_failed_precondition() {
             client_id: "client-1".to_string(),
             units: 1,
             operation: "trng".to_string(),
+            jti: String::new(),
         })
         .await
         .unwrap_err();
@@ -155,6 +157,7 @@ async fn hold_unavailable_propagates() {
             client_id: "client-1".to_string(),
             units: 1,
             operation: "trng".to_string(),
+            jti: String::new(),
         })
         .await
         .unwrap_err();

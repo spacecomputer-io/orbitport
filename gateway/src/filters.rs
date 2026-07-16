@@ -23,6 +23,9 @@ const BEARER: &str = "Bearer ";
 pub struct AuthContext {
     pub jwt: String,
     pub client_id: String,
+    /// Non-empty jti = the token was a PAT (dual-validation discriminator);
+    /// empty = legacy Auth0 M2M.
+    pub jti: String,
 }
 
 /// AuthContextWithHold carries both the validated JWT context and the
@@ -107,7 +110,11 @@ async fn authorize(
             }
             metrics::record_auth("ok", timer.elapsed().as_secs_f64());
             tracing::debug!("JWT authorized successfully");
-            Ok(AuthContext { jwt, client_id })
+            Ok(AuthContext {
+                jwt,
+                client_id,
+                jti: response.jti.trim().to_string(),
+            })
         }
         Err(GatewayError::NoAuthHeaderError) => {
             metrics::record_auth("missing_header", timer.elapsed().as_secs_f64());
@@ -186,14 +193,21 @@ async fn account_hold(
     // stores the bare client_id. Strip the suffix here (account boundary only)
     // so the credit lookup matches. Left untouched elsewhere (e.g. KMS keys are
     // namespaced by the full `client_id` and must not change).
-    let request = tonic::Request::new(HoldRequest {
-        client_id: auth
-            .client_id
+    // PATs (non-empty jti) carry the Account.id as `sub` — pass it through
+    // unstripped.
+    let client_id = if auth.jti.is_empty() {
+        auth.client_id
             .strip_suffix("@clients")
             .unwrap_or(&auth.client_id)
-            .to_string(),
+            .to_string()
+    } else {
+        auth.client_id.clone()
+    };
+    let request = tonic::Request::new(HoldRequest {
+        client_id,
         units,
         operation: operation.to_string(),
+        jti: auth.jti.clone(),
     });
 
     match client.hold(request).await {
@@ -237,10 +251,7 @@ async fn account_hold(
 /// settle leaves the hold unresolved, so the sweeper refunds it (the customer is
 /// never overcharged — at worst the request goes uncharged). Times out at 2 s
 /// regardless of the per-plugin HTTP timeout.
-pub async fn account_settle(
-    account_client: Option<AccountPluginClient<Channel>>,
-    ledger_id: &str,
-) {
+pub async fn account_settle(account_client: Option<AccountPluginClient<Channel>>, ledger_id: &str) {
     if ledger_id.is_empty() {
         return;
     }
@@ -378,6 +389,7 @@ mod test {
         let auth = AuthContext {
             jwt: "test_token".to_string(),
             client_id: "client".to_string(),
+            jti: String::new(),
         };
 
         for _i in 0..5 {

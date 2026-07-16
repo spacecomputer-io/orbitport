@@ -45,7 +45,7 @@ func TestDashboardClient_Hold_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 2, "trng")
+	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 2, "trng", "pat-jti-1")
 	require.NoError(t, err)
 	require.Equal(t, "ledger-abc", ledgerID)
 	require.Equal(t, int64(42), balance)
@@ -54,6 +54,7 @@ func TestDashboardClient_Hold_Success(t *testing.T) {
 	require.Equal(t, "client-x", capturedBody.ClientID)
 	require.Equal(t, uint32(2), capturedBody.Units)
 	require.Equal(t, "trng", capturedBody.Operation)
+	require.Equal(t, "pat-jti-1", capturedBody.Jti)
 }
 
 func TestDashboardClient_Hold_Accepts201(t *testing.T) {
@@ -63,7 +64,7 @@ func TestDashboardClient_Hold_Accepts201(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 1, "trng")
+	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.NoError(t, err)
 	require.Equal(t, "ledger-201", ledgerID)
 	require.Equal(t, int64(7), balance)
@@ -88,7 +89,7 @@ func TestDashboardClient_Hold_InsufficientCredits(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng")
+	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.ErrorIs(t, err, ErrInsufficientCredits)
 }
 
@@ -111,7 +112,7 @@ func TestDashboardClient_Hold_OtherErrors(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			_, _, err := client.Hold(context.Background(), "client-x", 1, "trng")
+			_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 			require.Error(t, err)
 			require.False(t, errors.Is(err, ErrInsufficientCredits))
 		})
@@ -194,6 +195,6 @@ func TestDashboardClient_NoToken_Errors(t *testing.T) {
 	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
 	client := newDashboardClient(cfg, staticTokens{err: errors.New("no token")})
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng")
+	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.Error(t, err)
 }

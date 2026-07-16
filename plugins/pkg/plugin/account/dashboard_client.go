@@ -38,6 +38,9 @@ type holdRequestBody struct {
 	ClientID  string `json:"clientId"`
 	Units     uint32 `json:"units"`
 	Operation string `json:"operation,omitempty"`
+	// Non-empty jti = the request was authenticated with a PAT
+	// (dual-validation discriminator); empty = legacy Auth0 M2M.
+	Jti string `json:"jti,omitempty"`
 }
 
 type holdResponseBody struct {
@@ -71,8 +74,8 @@ func newDashboardClient(cfg *accountConfig, tokens tokenProvider) *dashboardClie
 
 // Hold posts to /service/credits/hold. Returns ErrInsufficientCredits on 422,
 // or a wrapped transport error on any other non-2xx.
-func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint32, operation string) (string, int64, error) {
-	body, err := json.Marshal(holdRequestBody{ClientID: clientID, Units: units, Operation: operation})
+func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint32, operation, jti string) (string, int64, error) {
+	body, err := json.Marshal(holdRequestBody{ClientID: clientID, Units: units, Operation: operation, Jti: jti})
 	if err != nil {
 		return "", 0, fmt.Errorf("marshal hold request: %w", err)
 	}

@@ -15,4 +15,7 @@ message TokenValidationRequest {
 message TokenValidationResponse {
     bool ok = 1;
     string client_id = 2;
+    // Non-empty jti = the token was a PAT (dual-validation discriminator);
+    // empty = legacy Auth0 M2M.
+    string jti = 3;
 }

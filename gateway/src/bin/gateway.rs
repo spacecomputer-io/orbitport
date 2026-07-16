@@ -21,6 +21,15 @@ struct Args {
     /// release on downstream failure.
     #[clap(long, env = "ORBITPORT_ACCOUNT_PLUGIN")]
     account_plugin: Option<String>,
+    /// Optional issuer plugin gRPC URL. When set, the gateway serves the
+    /// public JWKS route and (with the shared secret) the internal PAT
+    /// issuance route.
+    #[clap(long, env = "ORBITPORT_ISSUER_PLUGIN")]
+    issuer_plugin: Option<String>,
+    /// Shared secret guarding POST /internal/pat/issue. Required for that
+    /// route to be mounted when the issuer plugin is configured.
+    #[clap(long, env = "ORBITPORT_ISSUER_SHARED_SECRET")]
+    issuer_shared_secret: Option<String>,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
@@ -67,6 +76,9 @@ async fn main() -> Result<(), GatewayError> {
     if let Some(ref url) = args.account_plugin {
         deps.push(url.to_string());
     }
+    if let Some(ref url) = args.issuer_plugin {
+        deps.push(url.to_string());
+    }
     plugins::wait_for(deps, std::time::Duration::from_secs(60), shutdown.clone())
         .await
         .map_err(|e| {
@@ -87,6 +99,7 @@ async fn main() -> Result<(), GatewayError> {
         &args.masterseed_plugin,
         &args.kms_plugin,
         args.account_plugin.as_deref(),
+        args.issuer_plugin.as_deref(),
     ));
 
     server::start(
@@ -96,6 +109,7 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
+        args.issuer_shared_secret.clone(),
     )
     .await;
 
