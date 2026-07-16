@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package issuer;
+
+option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
+
+// IssuerPlugin mints Personal Access Tokens (Model B): compact JWS signed
+// with the platform signing key. The dashboard owns the PAT metadata row
+// (jti) and the charge flow; this plugin owns claims assembly and signing.
+// Verifiers fetch the public keys via GetJwks.
+service IssuerPlugin {
+  rpc IssueToken(IssueTokenRequest) returns (IssueTokenResponse);
+  rpc GetJwks(GetJwksRequest) returns (GetJwksResponse);
+}
+
+message IssueTokenRequest {
+  // PersonalAccessToken.id from the dashboard — becomes the jti claim,
+  // the revocation key on the Hold path.
+  string jti = 1;
+  // Account.id — becomes the sub claim.
+  string subject = 2;
+  // Frozen per-account KMS namespace input (D9) — carried as the
+  // kms_tenant claim. May be empty until the D9 backfill lands.
+  string kms_tenant = 3;
+  // Expiry as unix seconds. iat/exp are the issuer's responsibility to
+  // stamp; the request only bounds the lifetime.
+  int64 expires_at = 4;
+}
+
+message IssueTokenResponse {
+  bool ok = 1;
+  // Compact JWS (header.payload.signature).
+  string token = 2;
+  string error = 3;
+}
+
+message GetJwksRequest {}
+
+message GetJwksResponse {
+  // RFC 7517 JWK Set JSON — public keys only, kid-selected by verifiers.
+  string jwks_json = 1;
+}
