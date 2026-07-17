@@ -65,5 +65,9 @@ services:
     environment:
       - ORBITPORT_ISSUER_PLUGIN=http://plugin-issuer:50006
       - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:-local-dev-secret}
+      # FR-O6: without the account plugin, revoked PATs cannot be cut off.
+      # The gateway refuses to start in that state unless this is set.
+      # Local mint/verify dev only — the local-account overlay removes the need.
+      - ORBITPORT_ALLOW_UNGATED_PATS=true
     depends_on:
       - plugin-issuer

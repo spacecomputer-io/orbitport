@@ -50,6 +50,7 @@ beacons.yaml                Public beacon registry
 | [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS | No RPC; consumes the others |
 | [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate) backed by OpenBao | Wraps Transit + Ethereum secrets engines |
 | [`account`](plugins/pkg/plugin/account/README.md) | Per-request credit gating against the dashboard backend account service | Holds credits before serving compute; settles on success, releases on failure |
+| [`issuer`](plugins/pkg/plugin/issuer/README.md) | Mints Personal Access Tokens (ES256 JWS) and serves the JWKS verifiers cache | Key custody behind a signer seam: local P-256 key now, OpenBao Transit when provisioned |
 
 ## Configuration
 
@@ -66,6 +67,9 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_TRNG_PLUGIN` | — | gRPC URL of the cTRNG plugin (`aptosorbital`) |
 | `ORBITPORT_KMS_PLUGIN` | — | gRPC URL of the KMS plugin |
 | `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving, settle on success, and release on downstream failure. |
+| `ORBITPORT_ISSUER_PLUGIN` | — | gRPC URL of the issuer plugin. When set, mounts `POST /internal/pat/issue` and `GET /.well-known/jwks.json` |
+| `ORBITPORT_ISSUER_SHARED_SECRET` | — | Bearer secret guarding `/internal/pat/issue` (constant-time compare). Route is not mounted when empty |
+| `ORBITPORT_ALLOW_UNGATED_PATS` | `false` | FR-O6 escape hatch: allow starting with the issuer configured but no account plugin. Revoked PATs cannot be cut off in this state — local dev only |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
@@ -87,7 +91,27 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | `ORBITPORT_AUTH0_DOMAIN` | yes | Auth0 tenant domain |
 | `ORBITPORT_AUTH0_AUDIENCE` | yes | Expected `aud` claim value |
 
+Optional PAT (Personal Access Token) dual-validation path — all three must be
+set together (partial config refuses startup); when unset the plugin behaves
+exactly as before:
+
+| Env var | Required | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_AUTH_PAT_ISS` | with PAT path | Expected `iss` of self-issued PATs; also the routing key (tokens with any other `iss` take the Auth0 path) |
+| `ORBITPORT_AUTH_PAT_AUDIENCE` | no | Expected `aud` for PATs (defaults to `ORBITPORT_AUTH0_AUDIENCE`) |
+| `ORBITPORT_AUTH_ISSUER_PLUGIN` | with PAT path | gRPC address of the issuer plugin — source of the JWKS (5-min cache, refetch on unknown kid) |
+
 `authnoop` takes no configuration.
+
+### Plugin: `issuer`
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_ISSUER_ISS` | — | `iss` claim stamped into every PAT (required) |
+| `ORBITPORT_ISSUER_AUD` | — | `aud` claim (required) |
+| `ORBITPORT_ISSUER_SIGNER` | `local` | Key custody: `local` (in-process EC P-256) or `transit` (OpenBao — not implemented yet) |
+| `ORBITPORT_ISSUER_LOCAL_KEY_PEM` | — | PEM EC P-256 private key for the local signer. Empty = ephemeral key generated at startup (dev only: restarts invalidate all outstanding PATs) |
+| `ORBITPORT_ISSUER_MAX_TTL_DAYS` | `370` | Ceiling on requested `expires_at` (backstop; the dashboard enforces the product cap) |
 
 ### Plugin: `aptosorbital`
 
