@@ -71,7 +71,11 @@ type TokenValidationResponse struct {
 	ClientId string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	// Non-empty jti = the token was a PAT (dual-validation discriminator);
 	// empty = legacy Auth0 M2M.
-	Jti           string `protobuf:"bytes,3,opt,name=jti,proto3" json:"jti,omitempty"`
+	Jti string `protobuf:"bytes,3,opt,name=jti,proto3" json:"jti,omitempty"`
+	// KMS tenancy input (D9). PATs: the token's kms_tenant claim (may be
+	// empty until the backfill lands). Legacy Auth0: the RAW sub including
+	// any @clients suffix, keeping legacy KMS tenancy byte-identical.
+	KmsTenant     string `protobuf:"bytes,4,opt,name=kms_tenant,json=kmsTenant,proto3" json:"kms_tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -127,17 +131,26 @@ func (x *TokenValidationResponse) GetJti() string {
 	return ""
 }
 
+func (x *TokenValidationResponse) GetKmsTenant() string {
+	if x != nil {
+		return x.KmsTenant
+	}
+	return ""
+}
+
 var File_proto_plugins_auth_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_auth_proto_rawDesc = "" +
 	"\n" +
 	"\x18proto/plugins/auth.proto\x12\x04auth\".\n" +
 	"\x16TokenValidationRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\"X\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\"w\n" +
 	"\x17TokenValidationResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x10\n" +
-	"\x03jti\x18\x03 \x01(\tR\x03jti2Z\n" +
+	"\x03jti\x18\x03 \x01(\tR\x03jti\x12\x1d\n" +
+	"\n" +
+	"kms_tenant\x18\x04 \x01(\tR\tkmsTenant2Z\n" +
 	"\n" +
 	"AuthPlugin\x12L\n" +
 	"\rValidateToken\x12\x1c.auth.TokenValidationRequest\x1a\x1d.auth.TokenValidationResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"

@@ -121,6 +121,7 @@ fn synthetic_auth() -> impl Filter<Extract = (AuthContext,), Error = Rejection> 
             jwt: "test-jwt".to_string(),
             client_id: "client-warp".to_string(),
             jti: String::new(),
+            kms_tenant: String::new(),
         })
     })
 }

@@ -21,6 +21,8 @@ pub enum GatewayError {
     AuthPluginConnectionError(String),
     #[error("Failed to authenticate")]
     AuthenticationFailed,
+    #[error("Personal access token expired")]
+    PatExpired,
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
     #[error("Insufficient credits")]

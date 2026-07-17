@@ -18,4 +18,8 @@ message TokenValidationResponse {
     // Non-empty jti = the token was a PAT (dual-validation discriminator);
     // empty = legacy Auth0 M2M.
     string jti = 3;
+    // KMS tenancy input (D9). PATs: the token's kms_tenant claim (may be
+    // empty until the backfill lands). Legacy Auth0: the RAW sub including
+    // any @clients suffix, keeping legacy KMS tenancy byte-identical.
+    string kms_tenant = 4;
 }

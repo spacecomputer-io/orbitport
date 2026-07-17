@@ -321,6 +321,13 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
                 StatusCode::UNAUTHORIZED,
                 serde_json::json!({"error": "authentication_failed"}),
             ),
+            GatewayError::PatExpired => (
+                StatusCode::UNAUTHORIZED,
+                serde_json::json!({
+                    "error": "token_expired",
+                    "message": "Personal access token expired — create a new one in the dashboard"
+                }),
+            ),
             GatewayError::AuthPluginConnectionError(_) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 serde_json::json!({"error": "auth_plugin_unavailable"}),
@@ -388,7 +395,15 @@ async fn handle_rpc(
         return Ok(warp::reply::json(&res));
     }
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-    let client_id = ctx.auth.client_id;
+    // D9: KMS tenancy comes from the verified kms_tenant (PATs carry it as a
+    // claim, legacy Auth0 tokens echo their raw sub). Empty — auth plugin
+    // predating the field or a pre-backfill PAT — falls back to client_id,
+    // the exact value this path forwarded before.
+    let client_id = if ctx.auth.kms_tenant.is_empty() {
+        ctx.auth.client_id
+    } else {
+        ctx.auth.kms_tenant
+    };
 
     match timeout(
         REQUEST_TIMEOUT,
@@ -611,4 +626,24 @@ fn new_req_id() -> u64 {
     use rand::Rng;
     let mut rng = rand::rng();
     rng.random_range(1..u64::MAX)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn pat_expired_rejection_maps_to_401_token_expired() {
+        let route = warp::any()
+            .and_then(|| async {
+                Err::<warp::reply::Json, Rejection>(warp::reject::custom(GatewayError::PatExpired))
+            })
+            .recover(handle_rejection);
+
+        let resp = warp::test::request().reply(&route).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+        assert_eq!(body["error"], "token_expired");
+        assert!(body["message"].as_str().unwrap().contains("expired"));
+    }
 }

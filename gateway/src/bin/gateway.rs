@@ -48,6 +48,32 @@ impl Args {
     }
 }
 
+/// FR-O6: PAT revocation is only enforced on the account plugin's Hold path.
+/// An issuer plugin without an account plugin mints tokens that can never be
+/// revoked — fail closed unless explicitly overridden for local dev.
+fn validate_pat_revocation_gating(
+    issuer_configured: bool,
+    account_configured: bool,
+    allow_ungated: bool,
+) -> Result<(), String> {
+    if !issuer_configured || account_configured {
+        return Ok(());
+    }
+    if allow_ungated {
+        tracing::warn!(
+            "ORBITPORT_ALLOW_UNGATED_PATS=true: PATs are mintable but revocation is NOT enforced — local dev only"
+        );
+        return Ok(());
+    }
+    Err(
+        "ORBITPORT_ISSUER_PLUGIN is set but ORBITPORT_ACCOUNT_PLUGIN is not: PATs would be \
+         mintable but never revocable (revocation is enforced on the account plugin's Hold \
+         path). Set ORBITPORT_ACCOUNT_PLUGIN, or ORBITPORT_ALLOW_UNGATED_PATS=true for local \
+         dev only."
+            .to_string(),
+    )
+}
+
 #[tokio::main]
 async fn main() -> Result<(), GatewayError> {
     let _log_guard = logging::initialize_logging();
@@ -56,6 +82,16 @@ async fn main() -> Result<(), GatewayError> {
 
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
+
+    validate_pat_revocation_gating(
+        args.issuer_plugin.is_some(),
+        args.account_plugin.is_some(),
+        std::env::var("ORBITPORT_ALLOW_UNGATED_PATS").as_deref() == Ok("true"),
+    )
+    .map_err(|e| {
+        tracing::error!("{}", e);
+        GatewayError::InternalError(e)
+    })?;
 
     let shutdown = Arc::new(Notify::new());
     {
@@ -119,4 +155,26 @@ async fn main() -> Result<(), GatewayError> {
         time_elapsed.as_secs_f64()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::validate_pat_revocation_gating;
+
+    #[test]
+    fn issuer_without_account_fails_closed() {
+        assert!(validate_pat_revocation_gating(true, false, false).is_err());
+    }
+
+    #[test]
+    fn override_allows_ungated_issuer() {
+        assert!(validate_pat_revocation_gating(true, false, true).is_ok());
+    }
+
+    #[test]
+    fn other_combinations_pass() {
+        assert!(validate_pat_revocation_gating(false, false, false).is_ok());
+        assert!(validate_pat_revocation_gating(false, true, false).is_ok());
+        assert!(validate_pat_revocation_gating(true, true, false).is_ok());
+    }
 }

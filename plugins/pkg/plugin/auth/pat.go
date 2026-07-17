@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -164,6 +165,11 @@ func (p *Plugin) validatePAT(ctx context.Context, tokenString string) (*proto.To
 		jwt.WithLeeway(time.Minute),
 	)
 	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			// "pat_expired:" prefix is the gateway's contract for mapping
+			// this to a distinguishable 401.
+			return nil, fmt.Errorf("pat_expired: %w", err)
+		}
 		return nil, fmt.Errorf("failed to validate PAT: %w", err)
 	}
 
@@ -179,10 +185,13 @@ func (p *Plugin) validatePAT(ctx context.Context, tokenString string) (*proto.To
 	if jti == "" {
 		return nil, fmt.Errorf("validated PAT is missing jti claim")
 	}
+	// Optional until the D9 backfill lands — empty means "no frozen tenant".
+	kmsTenant, _ := claims["kms_tenant"].(string)
 
 	return &proto.TokenValidationResponse{
-		Ok:       true,
-		ClientId: sub,
-		Jti:      jti,
+		Ok:        true,
+		ClientId:  sub,
+		Jti:       jti,
+		KmsTenant: kmsTenant,
 	}, nil
 }

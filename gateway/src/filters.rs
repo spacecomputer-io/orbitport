@@ -26,6 +26,10 @@ pub struct AuthContext {
     /// Non-empty jti = the token was a PAT (dual-validation discriminator);
     /// empty = legacy Auth0 M2M.
     pub jti: String,
+    /// KMS tenancy input (D9). PATs: the token's kms_tenant claim; legacy
+    /// Auth0: the raw sub. Empty when the auth plugin predates the field —
+    /// callers fall back to client_id.
+    pub kms_tenant: String,
 }
 
 /// AuthContextWithHold carries both the validated JWT context and the
@@ -91,6 +95,11 @@ async fn authorize(
                             "unavailable".to_string(),
                         ))
                     }
+                    _ if e.message().contains("pat_expired") => {
+                        metrics::record_auth("pat_expired", timer.elapsed().as_secs_f64());
+                        tracing::info!("Rejected expired PAT");
+                        warp::reject::custom(GatewayError::PatExpired)
+                    }
                     _ => {
                         metrics::record_auth("failed", timer.elapsed().as_secs_f64());
                         tracing::error!("Failed to authorize JWT: {}", e);
@@ -114,6 +123,7 @@ async fn authorize(
                 jwt,
                 client_id,
                 jti: response.jti.trim().to_string(),
+                kms_tenant: response.kms_tenant.trim().to_string(),
             })
         }
         Err(GatewayError::NoAuthHeaderError) => {
@@ -390,6 +400,7 @@ mod test {
             jwt: "test_token".to_string(),
             client_id: "client".to_string(),
             jti: String::new(),
+            kms_tenant: String::new(),
         };
 
         for _i in 0..5 {

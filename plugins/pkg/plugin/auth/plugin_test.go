@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -86,12 +87,13 @@ func newP256Key(t *testing.T) *ecdsa.PrivateKey {
 func patClaims() jwt.MapClaims {
 	now := time.Now()
 	return jwt.MapClaims{
-		"iss": testPatIss,
-		"aud": testPatAud,
-		"sub": "acct-1",
-		"jti": "pat-jti-1",
-		"iat": now.Unix(),
-		"exp": now.Add(time.Hour).Unix(),
+		"iss":        testPatIss,
+		"aud":        testPatAud,
+		"sub":        "acct-1",
+		"jti":        "pat-jti-1",
+		"kms_tenant": "tenant-1",
+		"iat":        now.Unix(),
+		"exp":        now.Add(time.Hour).Unix(),
 	}
 }
 
@@ -136,6 +138,16 @@ func TestValidateToken_PATHappyPath(t *testing.T) {
 	require.True(t, resp.Ok)
 	require.Equal(t, "acct-1", resp.ClientId)
 	require.Equal(t, "pat-jti-1", resp.Jti)
+	require.Equal(t, "tenant-1", resp.KmsTenant)
+
+	// Absent kms_tenant claim (pre-D9-backfill PATs) → empty string.
+	claims := patClaims()
+	delete(claims, "kms_tenant")
+	resp, err = p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintES256(t, key, "kid-1", claims),
+	})
+	require.NoError(t, err)
+	require.Empty(t, resp.KmsTenant)
 }
 
 func TestValidateToken_WrongIssFallsThroughToAuth0(t *testing.T) {
@@ -191,6 +203,8 @@ func TestValidateToken_ExpiredPATRejected(t *testing.T) {
 	_, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{Token: token})
 	require.Error(t, err)
 	require.ErrorIs(t, err, jwt.ErrTokenExpired)
+	// Gateway contract: expired PATs are distinguishable by this prefix.
+	require.True(t, strings.HasPrefix(err.Error(), "pat_expired:"), "got: %v", err)
 }
 
 func TestValidateToken_AlgConfusionRejected(t *testing.T) {

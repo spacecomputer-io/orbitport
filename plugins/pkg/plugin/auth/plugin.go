@@ -126,5 +126,8 @@ func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRe
 	return &proto.TokenValidationResponse{
 		Ok:       true,
 		ClientId: clientID,
+		// D9: legacy KMS tenancy is the RAW sub (including any @clients
+		// suffix) — byte-identical to what the gateway used before.
+		KmsTenant: clientID,
 	}, nil
 }
