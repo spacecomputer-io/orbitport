@@ -14,7 +14,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     pkg-config \
-    libssl-dev \ 
+    libssl-dev \
     protobuf-compiler
 
 # Leverage a cache mount to /usr/local/cargo/registry/
@@ -43,7 +43,10 @@ FROM dhi.io/debian-base:trixie AS final
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
+RUN groupadd --system appgroup \
+    && useradd --system --gid appgroup --no-create-home --home-dir /nonexistent appuser
+COPY --from=build --chown=appuser:appgroup /bin/gateway /bin/gateway
 
-COPY --from=build /bin/gateway /bin/gateway
+USER appuser
 
 ENTRYPOINT ["/bin/gateway"]
