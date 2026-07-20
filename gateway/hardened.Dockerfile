@@ -17,13 +17,6 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     protobuf-compiler
 
-# Created here rather than in the final stage — dhi.io/debian-base's
-# non-dev runtime image doesn't ship shadow-utils, so groupadd/useradd
-# aren't available there. /etc/passwd and /etc/group are just text files,
-# so copying them across stages is enough for USER to resolve appuser.
-RUN groupadd --system appgroup \
-    && useradd --system --gid appgroup --no-create-home --home-dir /nonexistent appuser
-
 # Leverage a cache mount to /usr/local/cargo/registry/
 # for downloaded dependencies and a cache mount to /app/target/ for 
 # compiled dependencies which will speed up subsequent builds.
@@ -50,8 +43,14 @@ FROM dhi.io/debian-base:trixie AS final
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
-COPY --from=build /etc/passwd /etc/passwd
-COPY --from=build /etc/group /etc/group
+# dhi.io/debian-base doesn't ship shadow-utils, so groupadd/useradd aren't
+# available — /etc/passwd and /etc/group are just text files though, so
+# appending the entries by hand needs nothing but a shell. UID/GID 10001
+# is picked to avoid colliding with this image's existing system accounts
+# (which occupy the low/system range).
+RUN echo "appgroup:x:10001:" >> /etc/group \
+    && echo "appuser:x:10001:10001::/nonexistent:/usr/sbin/nologin" >> /etc/passwd
+
 COPY --from=build --chown=appuser:appgroup /bin/gateway /bin/gateway
 
 USER appuser
