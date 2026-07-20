@@ -43,16 +43,14 @@ FROM dhi.io/debian-base:trixie AS final
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
-# dhi.io/debian-base doesn't ship shadow-utils, so groupadd/useradd aren't
-# available — /etc/passwd and /etc/group are just text files though, so
-# appending the entries by hand needs nothing but a shell. UID/GID 10001
-# is picked to avoid colliding with this image's existing system accounts
-# (which occupy the low/system range).
-RUN echo "appgroup:x:10001:" >> /etc/group \
-    && echo "appuser:x:10001:10001::/nonexistent:/usr/sbin/nologin" >> /etc/passwd
+# dhi.io/debian-base ships neither shadow-utils nor a writable /etc, so
+# there's no way to register a named user/group here. USER accepts a raw
+# numeric UID:GID with no /etc/passwd entry required — the kernel only
+# needs one to resolve a UID to a *name* (e.g. `whoami`), not to run a
+# process as that UID. 10001 is picked to avoid colliding with this
+# image's existing system accounts (which occupy the low/system range).
+COPY --from=build --chown=10001:10001 /bin/gateway /bin/gateway
 
-COPY --from=build --chown=appuser:appgroup /bin/gateway /bin/gateway
-
-USER appuser
+USER 10001:10001
 
 ENTRYPOINT ["/bin/gateway"]
