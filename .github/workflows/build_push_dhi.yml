@@ -14,15 +14,21 @@ env:
 permissions: {}
 
 jobs:
-  # ── 0. Pre-build: Scan and Verify Hardened Base Image ───────────────────────
+  # ── 0. Pre-build: Scan and Verify Hardened Base Images ──────────────────────
   scan-base-image:
-    name: Scan & Verify Hardened Base Image
+    name: Scan & Verify Hardened Base Image (${{ matrix.service }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    outputs:
-      final_image: ${{ steps.extract.outputs.final_image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: gateway
+            dockerfile: gateway/hardened.Dockerfile
+          - service: plugin
+            dockerfile: plugins/hardened.Dockerfile
 
     steps:
       - name: Checkout
@@ -31,7 +37,7 @@ jobs:
       - name: Extract FROM images from Dockerfile
         id: extract
         run: |
-          DOCKERFILE=gateway/hardened.Dockerfile
+          DOCKERFILE=${{ matrix.dockerfile }}
 
           # Export any ARG defaults declared anywhere in the file (e.g.
           # `ARG RUST_VERSION=1.82`), so we can resolve ${RUST_VERSION}-style
