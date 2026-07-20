@@ -2,7 +2,7 @@
 
 ################################################################################
 
-ARG GO_VERSION=1.24
+ARG GO_VERSION=1.25
 ARG ALPINE_VERSION=3.22
 
 FROM dhi.io/golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
@@ -31,7 +31,6 @@ ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 ARG BUILD_TARGET=plugin
 
-RUN apk --no-cache add curl
 RUN apk --no-cache add curl \
     && addgroup -S appgroup \
     && adduser -S -G appgroup appuser
