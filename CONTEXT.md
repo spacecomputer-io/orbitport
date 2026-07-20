@@ -109,9 +109,13 @@ exactly as before:
 | --- | --- | --- |
 | `ORBITPORT_ISSUER_ISS` | — | `iss` claim stamped into every PAT (required) |
 | `ORBITPORT_ISSUER_AUD` | — | `aud` claim (required) |
-| `ORBITPORT_ISSUER_SIGNER` | `local` | Key custody: `local` (in-process EC P-256) or `transit` (OpenBao — not implemented yet) |
+| `ORBITPORT_ISSUER_SIGNER` | `local` | Key custody: `local` (in-process EC P-256) or `transit` (OpenBao Transit via the proxy) |
 | `ORBITPORT_ISSUER_LOCAL_KEY_PEM` | — | PEM EC P-256 private key for the local signer. Empty = ephemeral key generated at startup (dev only: restarts invalidate all outstanding PATs) |
 | `ORBITPORT_ISSUER_MAX_TTL_DAYS` | `370` | Ceiling on requested `expires_at` (backstop; the dashboard enforces the product cap) |
+| `ORBITPORT_ISSUER_OPENBAO_PROXY_URL` | — | HTTP base URL of the OpenBao proxy (required for `transit`). The proxy owns auth — the plugin never holds OpenBao credentials, same contract as the KMS plugin |
+| `ORBITPORT_ISSUER_TRANSIT_MOUNT` | `transit` | Transit secrets engine mount path |
+| `ORBITPORT_ISSUER_TRANSIT_KEY` | `pat-signing` | Signing key name; `kid` = the Transit key version, rotation is a key-rotate away |
+| `ORBITPORT_ISSUER_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 
 ### Plugin: `aptosorbital`
 

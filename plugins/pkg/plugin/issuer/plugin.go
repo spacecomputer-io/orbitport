@@ -2,7 +2,6 @@ package issuer
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -33,9 +32,11 @@ func NewPlugin() (*Plugin, error) {
 	logger := utils.GetLogger("orbitport:issuer")
 
 	if cfg.Signer == signerTransit {
-		// ponytail: lands when the OpenBao infra work (pat-signing key,
-		// AppRole, network path) is provisioned; same signer seam.
-		return nil, fmt.Errorf("ORBITPORT_ISSUER_SIGNER=transit is not implemented yet")
+		logger.Infof(
+			"transit signer: %s (mount=%s key=%s) — the OpenBao proxy owns auth",
+			cfg.OpenBaoProxyURL, cfg.TransitMount, cfg.TransitKey,
+		)
+		return &Plugin{cfg: cfg, signer: newTransitSigner(cfg), logger: logger}, nil
 	}
 
 	s, generated, err := newLocalSigner(cfg.LocalKeyPEM)

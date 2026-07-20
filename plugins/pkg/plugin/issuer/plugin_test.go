@@ -178,7 +178,7 @@ func TestConfigFailClosed(t *testing.T) {
 	require.Contains(t, err.Error(), "ORBITPORT_ISSUER_ISS")
 }
 
-func TestTransitSignerNotImplemented(t *testing.T) {
+func TestTransitRequiresProxyURL(t *testing.T) {
 	viper.Reset()
 	t.Setenv("ORBITPORT_ISSUER_ISS", "https://auth.orbitport.test")
 	t.Setenv("ORBITPORT_ISSUER_AUD", "https://api.orbitport.test")
@@ -188,5 +188,5 @@ func TestTransitSignerNotImplemented(t *testing.T) {
 
 	_, err := NewPlugin()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "not implemented")
+	require.Contains(t, err.Error(), "OPENBAO_PROXY_URL")
 }

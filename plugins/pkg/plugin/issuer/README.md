@@ -26,8 +26,12 @@ Hold path, keyed by `jti` — a signed token cannot be un-issued.
   ephemerally at startup with a loud warning — ephemeral means **every
   restart invalidates all outstanding PATs**. Tokens and JWKS are real
   ES256 either way; only custody differs from production.
-- `transit`: OpenBao Transit via the OpenBao proxy (`pat-signing` key,
-  `marshaling_algorithm=jws`) — refuses to start until the infra
-  provisioning lands. Same signer seam, no other code changes.
+- `transit`: OpenBao Transit via the OpenBao proxy — hash-then-sign
+  (`/sign/<key>/sha2-256`, `prehashed=false`, `marshaling_algorithm=jws`,
+  `key_version` pinned to the `kid` so rotation can't race), JWKS built
+  from every published key version. The proxy injects the vault token;
+  this plugin holds no OpenBao credentials. Live-tested against the dev
+  compose stack (`ORBITPORT_ISSUER_LIVE_TEST=1 go test ./pkg/plugin/issuer/
+  -run TestTransitLive` with the stack up).
 
 Env reference: see the repo-root `CONTEXT.md`.

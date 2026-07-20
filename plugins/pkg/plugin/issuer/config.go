@@ -31,6 +31,17 @@ type issuerConfig struct {
 	// against a buggy caller minting effectively-eternal tokens; the
 	// dashboard enforces the real product cap (D6).
 	MaxTTLDays int
+	// OpenBaoProxyURL is the HTTP base URL of the OpenBao proxy for the
+	// transit signer. The proxy owns authentication (it injects the
+	// vault token) — this plugin never holds OpenBao credentials, same
+	// contract as the KMS plugin's ORBITPORT_KMS_OPENBAO_PROXY_URL.
+	OpenBaoProxyURL string
+	// TransitMount is the Transit secrets engine mount path.
+	TransitMount string
+	// TransitKey is the signing key name within the mount.
+	TransitKey string
+	// TimeoutSecs is the per-request HTTP timeout for OpenBao calls.
+	TimeoutSecs int
 }
 
 func trimValue(value string) string {
@@ -41,11 +52,15 @@ func readFromEnv() *issuerConfig {
 	setDefaults()
 
 	return &issuerConfig{
-		Issuer:      trimValue(viper.GetString("ISSUER_ISS")),
-		Audience:    trimValue(viper.GetString("ISSUER_AUD")),
-		Signer:      trimValue(viper.GetString("ISSUER_SIGNER")),
-		LocalKeyPEM: viper.GetString("ISSUER_LOCAL_KEY_PEM"),
-		MaxTTLDays:  viper.GetInt("ISSUER_MAX_TTL_DAYS"),
+		Issuer:          trimValue(viper.GetString("ISSUER_ISS")),
+		Audience:        trimValue(viper.GetString("ISSUER_AUD")),
+		Signer:          trimValue(viper.GetString("ISSUER_SIGNER")),
+		LocalKeyPEM:     viper.GetString("ISSUER_LOCAL_KEY_PEM"),
+		MaxTTLDays:      viper.GetInt("ISSUER_MAX_TTL_DAYS"),
+		OpenBaoProxyURL: trimValue(viper.GetString("ISSUER_OPENBAO_PROXY_URL")),
+		TransitMount:    trimValue(viper.GetString("ISSUER_TRANSIT_MOUNT")),
+		TransitKey:      trimValue(viper.GetString("ISSUER_TRANSIT_KEY")),
+		TimeoutSecs:     viper.GetInt("ISSUER_TIMEOUT_SECS"),
 	}
 }
 
@@ -55,6 +70,10 @@ func setDefaults() {
 	viper.SetDefault("ISSUER_SIGNER", signerLocal)
 	viper.SetDefault("ISSUER_LOCAL_KEY_PEM", "")
 	viper.SetDefault("ISSUER_MAX_TTL_DAYS", 370)
+	viper.SetDefault("ISSUER_OPENBAO_PROXY_URL", "")
+	viper.SetDefault("ISSUER_TRANSIT_MOUNT", "transit")
+	viper.SetDefault("ISSUER_TRANSIT_KEY", "pat-signing")
+	viper.SetDefault("ISSUER_TIMEOUT_SECS", 10)
 }
 
 // validate refuses startup when required vars are missing. Fail-closed.
@@ -71,6 +90,17 @@ func (c *issuerConfig) validate() error {
 	}
 	if c.Signer != signerLocal && c.Signer != signerTransit {
 		return fmt.Errorf("ORBITPORT_ISSUER_SIGNER must be %q or %q, got %q", signerLocal, signerTransit, c.Signer)
+	}
+	if c.Signer == signerTransit {
+		if c.OpenBaoProxyURL == "" {
+			return fmt.Errorf("FATAL: ORBITPORT_ISSUER_OPENBAO_PROXY_URL is required when ORBITPORT_ISSUER_SIGNER=transit")
+		}
+		if c.TransitMount == "" || c.TransitKey == "" {
+			return fmt.Errorf("ORBITPORT_ISSUER_TRANSIT_MOUNT and ORBITPORT_ISSUER_TRANSIT_KEY must be non-empty")
+		}
+		if c.TimeoutSecs <= 0 {
+			return fmt.Errorf("ORBITPORT_ISSUER_TIMEOUT_SECS must be > 0")
+		}
 	}
 	if c.MaxTTLDays <= 0 {
 		return fmt.Errorf("ORBITPORT_ISSUER_MAX_TTL_DAYS must be > 0")
