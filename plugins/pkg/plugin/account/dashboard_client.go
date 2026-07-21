@@ -18,6 +18,12 @@ import (
 // dashboard responds with HTTP 422 + code=INSUFFICIENT_CREDITS.
 var ErrInsufficientCredits = errors.New("insufficient_credits")
 
+// ErrUnknownCredential is returned by dashboardClient.Hold when the
+// dashboard cannot resolve the identity (404): unknown, revoked, or
+// expired credential/token. Under PATs this is the revocation path —
+// an auth failure, never a plugin outage.
+var ErrUnknownCredential = errors.New("unknown_or_revoked_credential")
+
 // dashboardClient is a typed HTTP wrapper around the dashboard backend's
 // service credit endpoints. It attaches an Auth0 M2M bearer token on every
 // request and applies a per-request timeout.
@@ -110,6 +116,8 @@ func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint3
 			return "", 0, ErrInsufficientCredits
 		}
 		return "", 0, fmt.Errorf("dashboard hold rejected (422): %s", strings.TrimSpace(string(rawBody)))
+	case http.StatusNotFound:
+		return "", 0, ErrUnknownCredential
 	default:
 		return "", 0, fmt.Errorf("dashboard hold returned %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
 	}

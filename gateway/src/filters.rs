@@ -245,6 +245,12 @@ async fn account_hold(
                 metrics::record_account_hold("insufficient_credits");
                 Err(warp::reject::custom(GatewayError::InsufficientCredits))
             }
+            // Dashboard 404: unknown/revoked/expired credential or token —
+            // the PAT revocation path. An auth failure, not a plugin outage.
+            tonic::Code::PermissionDenied => {
+                metrics::record_account_hold("invalid_credential");
+                Err(warp::reject::custom(GatewayError::InvalidCredential))
+            }
             _ => {
                 metrics::record_account_hold("plugin_unavailable");
                 tracing::error!("Account plugin Hold failed: {}", e);

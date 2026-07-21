@@ -328,6 +328,13 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
                     "message": "Personal access token expired — create a new one in the dashboard"
                 }),
             ),
+            GatewayError::InvalidCredential => (
+                StatusCode::UNAUTHORIZED,
+                serde_json::json!({
+                    "error": "invalid_credential",
+                    "message": "Unknown or revoked credential"
+                }),
+            ),
             GatewayError::AuthPluginConnectionError(_) => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 serde_json::json!({"error": "auth_plugin_unavailable"}),

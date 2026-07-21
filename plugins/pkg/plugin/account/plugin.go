@@ -84,6 +84,10 @@ func (p *Plugin) Hold(ctx context.Context, req *proto.HoldRequest) (*proto.HoldR
 			p.logger.Debugf("hold rejected for client_id=%s op=%s: insufficient credits", clientID, req.GetOperation())
 			return nil, status.Error(codes.FailedPrecondition, sentinelInsufficient)
 		}
+		if errors.Is(err, ErrUnknownCredential) {
+			p.logger.Debugf("hold rejected for client_id=%s op=%s: unknown or revoked credential", clientID, req.GetOperation())
+			return nil, status.Error(codes.PermissionDenied, ErrUnknownCredential.Error())
+		}
 		p.logger.Warnf("hold failed for client_id=%s op=%s: %v", clientID, req.GetOperation(), err)
 		return nil, status.Error(codes.Unavailable, err.Error())
 	}
