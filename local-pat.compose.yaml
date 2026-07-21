@@ -46,7 +46,18 @@ services:
       - ORBITPORT_GRPC_PORT=50006
       - ORBITPORT_ISSUER_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
       - ORBITPORT_ISSUER_AUD=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      # local (default): ephemeral in-process key, dev only.
+      # transit: real OpenBao signing via the dev proxy (which injects the
+      # token) — the pat-signing key is created by openbao-bootstrap. Run:
+      #   ORBITPORT_ISSUER_SIGNER=transit docker compose ... up -d
+      - ORBITPORT_ISSUER_SIGNER=${ORBITPORT_ISSUER_SIGNER:-local}
+      - ORBITPORT_ISSUER_OPENBAO_PROXY_URL=http://openbao-proxy:8200
       # No ORBITPORT_ISSUER_LOCAL_KEY_PEM on purpose: ephemeral key, dev only.
+    depends_on:
+      openbao-bootstrap:
+        condition: service_completed_successfully
+      openbao-proxy:
+        condition: service_healthy
 
   # Real auth plugin (not authnoop) so the ES256/JWKS verification path is
   # genuinely exercised. Auth0 vars serve the legacy-token path only.
