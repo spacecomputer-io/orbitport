@@ -602,6 +602,238 @@ func (x *SignResponse) GetSigningAlgorithm() string {
 	return ""
 }
 
+type EncapsulateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EncapsulateRequest) Reset() {
+	*x = EncapsulateRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EncapsulateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EncapsulateRequest) ProtoMessage() {}
+
+func (x *EncapsulateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EncapsulateRequest.ProtoReflect.Descriptor instead.
+func (*EncapsulateRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *EncapsulateRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *EncapsulateRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type EncapsulateResponse struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	KeyId                 string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	Ciphertext            string                 `protobuf:"bytes,2,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
+	SharedKey             string                 `protobuf:"bytes,3,opt,name=shared_key,json=sharedKey,proto3" json:"shared_key,omitempty"`
+	KeyAgreementAlgorithm string                 `protobuf:"bytes,4,opt,name=key_agreement_algorithm,json=keyAgreementAlgorithm,proto3" json:"key_agreement_algorithm,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *EncapsulateResponse) Reset() {
+	*x = EncapsulateResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EncapsulateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EncapsulateResponse) ProtoMessage() {}
+
+func (x *EncapsulateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EncapsulateResponse.ProtoReflect.Descriptor instead.
+func (*EncapsulateResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *EncapsulateResponse) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *EncapsulateResponse) GetCiphertext() string {
+	if x != nil {
+		return x.Ciphertext
+	}
+	return ""
+}
+
+func (x *EncapsulateResponse) GetSharedKey() string {
+	if x != nil {
+		return x.SharedKey
+	}
+	return ""
+}
+
+func (x *EncapsulateResponse) GetKeyAgreementAlgorithm() string {
+	if x != nil {
+		return x.KeyAgreementAlgorithm
+	}
+	return ""
+}
+
+type DecapsulateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	Ciphertext    string                 `protobuf:"bytes,2,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
+	ClientId      string                 `protobuf:"bytes,3,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DecapsulateRequest) Reset() {
+	*x = DecapsulateRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecapsulateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecapsulateRequest) ProtoMessage() {}
+
+func (x *DecapsulateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecapsulateRequest.ProtoReflect.Descriptor instead.
+func (*DecapsulateRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *DecapsulateRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *DecapsulateRequest) GetCiphertext() string {
+	if x != nil {
+		return x.Ciphertext
+	}
+	return ""
+}
+
+func (x *DecapsulateRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type DecapsulateResponse struct {
+	state                 protoimpl.MessageState `protogen:"open.v1"`
+	KeyId                 string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	KeyAgreementAlgorithm string                 `protobuf:"bytes,2,opt,name=key_agreement_algorithm,json=keyAgreementAlgorithm,proto3" json:"key_agreement_algorithm,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *DecapsulateResponse) Reset() {
+	*x = DecapsulateResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DecapsulateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DecapsulateResponse) ProtoMessage() {}
+
+func (x *DecapsulateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DecapsulateResponse.ProtoReflect.Descriptor instead.
+func (*DecapsulateResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *DecapsulateResponse) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *DecapsulateResponse) GetKeyAgreementAlgorithm() string {
+	if x != nil {
+		return x.KeyAgreementAlgorithm
+	}
+	return ""
+}
+
 type CreateKeyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Description   string                 `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
@@ -617,7 +849,7 @@ type CreateKeyRequest struct {
 
 func (x *CreateKeyRequest) Reset() {
 	*x = CreateKeyRequest{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[8]
+	mi := &file_proto_plugins_kms_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -629,7 +861,7 @@ func (x *CreateKeyRequest) String() string {
 func (*CreateKeyRequest) ProtoMessage() {}
 
 func (x *CreateKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[8]
+	mi := &file_proto_plugins_kms_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -642,7 +874,7 @@ func (x *CreateKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateKeyRequest.ProtoReflect.Descriptor instead.
 func (*CreateKeyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{8}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CreateKeyRequest) GetDescription() string {
@@ -703,7 +935,7 @@ type CreateKeyResponse struct {
 
 func (x *CreateKeyResponse) Reset() {
 	*x = CreateKeyResponse{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[9]
+	mi := &file_proto_plugins_kms_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -715,7 +947,7 @@ func (x *CreateKeyResponse) String() string {
 func (*CreateKeyResponse) ProtoMessage() {}
 
 func (x *CreateKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[9]
+	mi := &file_proto_plugins_kms_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -728,7 +960,7 @@ func (x *CreateKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateKeyResponse.ProtoReflect.Descriptor instead.
 func (*CreateKeyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{9}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateKeyResponse) GetKeyMetadata() *KeyMetadata {
@@ -750,7 +982,7 @@ type GenerateDataKeyRequest struct {
 
 func (x *GenerateDataKeyRequest) Reset() {
 	*x = GenerateDataKeyRequest{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[10]
+	mi := &file_proto_plugins_kms_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +994,7 @@ func (x *GenerateDataKeyRequest) String() string {
 func (*GenerateDataKeyRequest) ProtoMessage() {}
 
 func (x *GenerateDataKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[10]
+	mi := &file_proto_plugins_kms_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,7 +1007,7 @@ func (x *GenerateDataKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateDataKeyRequest.ProtoReflect.Descriptor instead.
 func (*GenerateDataKeyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{10}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GenerateDataKeyRequest) GetKeyId() string {
@@ -817,7 +1049,7 @@ type GenerateDataKeyResponse struct {
 
 func (x *GenerateDataKeyResponse) Reset() {
 	*x = GenerateDataKeyResponse{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[11]
+	mi := &file_proto_plugins_kms_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -829,7 +1061,7 @@ func (x *GenerateDataKeyResponse) String() string {
 func (*GenerateDataKeyResponse) ProtoMessage() {}
 
 func (x *GenerateDataKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[11]
+	mi := &file_proto_plugins_kms_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -842,7 +1074,7 @@ func (x *GenerateDataKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GenerateDataKeyResponse.ProtoReflect.Descriptor instead.
 func (*GenerateDataKeyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{11}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GenerateDataKeyResponse) GetKeyId() string {
@@ -876,7 +1108,7 @@ type RotateKeyRequest struct {
 
 func (x *RotateKeyRequest) Reset() {
 	*x = RotateKeyRequest{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[12]
+	mi := &file_proto_plugins_kms_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -888,7 +1120,7 @@ func (x *RotateKeyRequest) String() string {
 func (*RotateKeyRequest) ProtoMessage() {}
 
 func (x *RotateKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[12]
+	mi := &file_proto_plugins_kms_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -901,7 +1133,7 @@ func (x *RotateKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateKeyRequest.ProtoReflect.Descriptor instead.
 func (*RotateKeyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{12}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *RotateKeyRequest) GetKeyId() string {
@@ -927,7 +1159,7 @@ type RotateKeyResponse struct {
 
 func (x *RotateKeyResponse) Reset() {
 	*x = RotateKeyResponse{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[13]
+	mi := &file_proto_plugins_kms_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -939,7 +1171,7 @@ func (x *RotateKeyResponse) String() string {
 func (*RotateKeyResponse) ProtoMessage() {}
 
 func (x *RotateKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[13]
+	mi := &file_proto_plugins_kms_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -952,7 +1184,7 @@ func (x *RotateKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateKeyResponse.ProtoReflect.Descriptor instead.
 func (*RotateKeyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{13}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RotateKeyResponse) GetKeyMetadata() *KeyMetadata {
@@ -1019,7 +1251,27 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\fSignResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12+\n" +
-	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"\xe8\x01\n" +
+	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"H\n" +
+	"\x12EncapsulateRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"\xa3\x01\n" +
+	"\x13EncapsulateResponse\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1e\n" +
+	"\n" +
+	"ciphertext\x18\x02 \x01(\tR\n" +
+	"ciphertext\x12\x1d\n" +
+	"\n" +
+	"shared_key\x18\x03 \x01(\tR\tsharedKey\x126\n" +
+	"\x17key_agreement_algorithm\x18\x04 \x01(\tR\x15keyAgreementAlgorithm\"h\n" +
+	"\x12DecapsulateRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1e\n" +
+	"\n" +
+	"ciphertext\x18\x02 \x01(\tR\n" +
+	"ciphertext\x12\x1b\n" +
+	"\tclient_id\x18\x03 \x01(\tR\bclientId\"d\n" +
+	"\x13DecapsulateResponse\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x126\n" +
+	"\x17key_agreement_algorithm\x18\x02 \x01(\tR\x15keyAgreementAlgorithm\"\xe8\x01\n" +
 	"\x10CreateKeyRequest\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x19\n" +
 	"\bkey_spec\x18\x02 \x01(\tR\akeySpec\x12\x1b\n" +
@@ -1046,11 +1298,13 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"K\n" +
 	"\x11RotateKeyResponse\x126\n" +
-	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata2\x8e\x03\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata2\x9e\x04\n" +
 	"\tKmsPlugin\x12:\n" +
 	"\aEncrypt\x12\x16.kmsapi.EncryptRequest\x1a\x17.kmsapi.EncryptResponse\x12:\n" +
 	"\aDecrypt\x12\x16.kmsapi.DecryptRequest\x1a\x17.kmsapi.DecryptResponse\x121\n" +
-	"\x04Sign\x12\x13.kmsapi.SignRequest\x1a\x14.kmsapi.SignResponse\x12@\n" +
+	"\x04Sign\x12\x13.kmsapi.SignRequest\x1a\x14.kmsapi.SignResponse\x12F\n" +
+	"\vEncapsulate\x12\x1a.kmsapi.EncapsulateRequest\x1a\x1b.kmsapi.EncapsulateResponse\x12F\n" +
+	"\vDecapsulate\x12\x1a.kmsapi.DecapsulateRequest\x1a\x1b.kmsapi.DecapsulateResponse\x12@\n" +
 	"\tCreateKey\x12\x18.kmsapi.CreateKeyRequest\x1a\x19.kmsapi.CreateKeyResponse\x12R\n" +
 	"\x0fGenerateDataKey\x12\x1e.kmsapi.GenerateDataKeyRequest\x1a\x1f.kmsapi.GenerateDataKeyResponse\x12@\n" +
 	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
@@ -1067,7 +1321,7 @@ func file_proto_plugins_kms_proto_rawDescGZIP() []byte {
 	return file_proto_plugins_kms_proto_rawDescData
 }
 
-var file_proto_plugins_kms_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_proto_plugins_kms_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_proto_plugins_kms_proto_goTypes = []any{
 	(*Tag)(nil),                     // 0: kmsapi.Tag
 	(*KeyMetadata)(nil),             // 1: kmsapi.KeyMetadata
@@ -1077,12 +1331,16 @@ var file_proto_plugins_kms_proto_goTypes = []any{
 	(*DecryptResponse)(nil),         // 5: kmsapi.DecryptResponse
 	(*SignRequest)(nil),             // 6: kmsapi.SignRequest
 	(*SignResponse)(nil),            // 7: kmsapi.SignResponse
-	(*CreateKeyRequest)(nil),        // 8: kmsapi.CreateKeyRequest
-	(*CreateKeyResponse)(nil),       // 9: kmsapi.CreateKeyResponse
-	(*GenerateDataKeyRequest)(nil),  // 10: kmsapi.GenerateDataKeyRequest
-	(*GenerateDataKeyResponse)(nil), // 11: kmsapi.GenerateDataKeyResponse
-	(*RotateKeyRequest)(nil),        // 12: kmsapi.RotateKeyRequest
-	(*RotateKeyResponse)(nil),       // 13: kmsapi.RotateKeyResponse
+	(*EncapsulateRequest)(nil),      // 8: kmsapi.EncapsulateRequest
+	(*EncapsulateResponse)(nil),     // 9: kmsapi.EncapsulateResponse
+	(*DecapsulateRequest)(nil),      // 10: kmsapi.DecapsulateRequest
+	(*DecapsulateResponse)(nil),     // 11: kmsapi.DecapsulateResponse
+	(*CreateKeyRequest)(nil),        // 12: kmsapi.CreateKeyRequest
+	(*CreateKeyResponse)(nil),       // 13: kmsapi.CreateKeyResponse
+	(*GenerateDataKeyRequest)(nil),  // 14: kmsapi.GenerateDataKeyRequest
+	(*GenerateDataKeyResponse)(nil), // 15: kmsapi.GenerateDataKeyResponse
+	(*RotateKeyRequest)(nil),        // 16: kmsapi.RotateKeyRequest
+	(*RotateKeyResponse)(nil),       // 17: kmsapi.RotateKeyResponse
 }
 var file_proto_plugins_kms_proto_depIdxs = []int32{
 	0,  // 0: kmsapi.KeyMetadata.tags:type_name -> kmsapi.Tag
@@ -1092,17 +1350,21 @@ var file_proto_plugins_kms_proto_depIdxs = []int32{
 	2,  // 4: kmsapi.KmsPlugin.Encrypt:input_type -> kmsapi.EncryptRequest
 	4,  // 5: kmsapi.KmsPlugin.Decrypt:input_type -> kmsapi.DecryptRequest
 	6,  // 6: kmsapi.KmsPlugin.Sign:input_type -> kmsapi.SignRequest
-	8,  // 7: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
-	10, // 8: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
-	12, // 9: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
-	3,  // 10: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
-	5,  // 11: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
-	7,  // 12: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
-	9,  // 13: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
-	11, // 14: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
-	13, // 15: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
-	10, // [10:16] is the sub-list for method output_type
-	4,  // [4:10] is the sub-list for method input_type
+	8,  // 7: kmsapi.KmsPlugin.Encapsulate:input_type -> kmsapi.EncapsulateRequest
+	10, // 8: kmsapi.KmsPlugin.Decapsulate:input_type -> kmsapi.DecapsulateRequest
+	12, // 9: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
+	14, // 10: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
+	16, // 11: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
+	3,  // 12: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
+	5,  // 13: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
+	7,  // 14: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
+	9,  // 15: kmsapi.KmsPlugin.Encapsulate:output_type -> kmsapi.EncapsulateResponse
+	11, // 16: kmsapi.KmsPlugin.Decapsulate:output_type -> kmsapi.DecapsulateResponse
+	13, // 17: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
+	15, // 18: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
+	17, // 19: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
+	12, // [12:20] is the sub-list for method output_type
+	4,  // [4:12] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -1117,15 +1379,15 @@ func file_proto_plugins_kms_proto_init() {
 	file_proto_plugins_kms_proto_msgTypes[2].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[4].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[6].OneofWrappers = []any{}
-	file_proto_plugins_kms_proto_msgTypes[8].OneofWrappers = []any{}
-	file_proto_plugins_kms_proto_msgTypes[10].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[12].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_plugins_kms_proto_rawDesc), len(file_proto_plugins_kms_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

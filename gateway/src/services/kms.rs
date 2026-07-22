@@ -3,8 +3,11 @@ use tonic::transport::Channel;
 
 use crate::proto::plugins::kms::{
     CreateKeyRequest as PluginCreateKeyRequest, CreateKeyResponse as PluginCreateKeyResponse,
-    DecryptRequest as PluginDecryptRequest, DecryptResponse as PluginDecryptResponse,
-    EncryptRequest as PluginEncryptRequest, EncryptResponse as PluginEncryptResponse,
+    DecapsulateRequest as PluginDecapsulateRequest,
+    DecapsulateResponse as PluginDecapsulateResponse, DecryptRequest as PluginDecryptRequest,
+    DecryptResponse as PluginDecryptResponse, EncapsulateRequest as PluginEncapsulateRequest,
+    EncapsulateResponse as PluginEncapsulateResponse, EncryptRequest as PluginEncryptRequest,
+    EncryptResponse as PluginEncryptResponse,
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
     GenerateDataKeyResponse as PluginGenerateDataKeyResponse,
     RotateKeyRequest as PluginRotateKeyRequest, RotateKeyResponse as PluginRotateKeyResponse,
@@ -12,16 +15,18 @@ use crate::proto::plugins::kms::{
     kms_plugin_client::KmsPluginClient,
 };
 use crate::proto::services::kms::{
-    CreateKeyRequest, CreateKeyResponse, DecryptRequest, DecryptResponse, EncryptRequest,
-    EncryptResponse, GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
-    RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest, SignResponse,
-    SigningCapability, Tag,
+    CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
+    DecryptResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest, EncryptResponse,
+    GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
+    KeyAgreementCapability, RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest,
+    SignResponse, SigningCapability, Tag,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Scheme {
     Transit,
     Ethereum,
+    Pqc,
 }
 
 impl Scheme {
@@ -29,6 +34,7 @@ impl Scheme {
         match value.map(str::trim).filter(|v| !v.is_empty()) {
             None | Some("TRANSIT") => Ok(Self::Transit),
             Some("ETHEREUM") => Ok(Self::Ethereum),
+            Some("PQC") => Ok(Self::Pqc),
             Some(_) => Err("Scheme is not supported".to_string()),
         }
     }
@@ -46,6 +52,7 @@ impl Scheme {
                 | (Self::Transit, SigningAlgorithm::RsassaPkcs1V15Sha256)
                 | (Self::Transit, SigningAlgorithm::RsassaPssSha256)
                 | (Self::Ethereum, SigningAlgorithm::EthereumSecp256k1)
+                | (Self::Pqc, SigningAlgorithm::MlDsa)
         )
     }
 
@@ -53,6 +60,7 @@ impl Scheme {
         match self {
             Self::Transit => "TRANSIT",
             Self::Ethereum => "ETHEREUM",
+            Self::Pqc => "PQC",
         }
     }
 }
@@ -65,6 +73,11 @@ enum KeySpec {
     Ed25519,
     Rsa4096,
     EccSecgP256k1,
+    MlKem768,
+    MlKem1024,
+    MlDsa44,
+    MlDsa65,
+    MlDsa87,
 }
 
 impl KeySpec {
@@ -76,6 +89,11 @@ impl KeySpec {
             "ED25519" => Ok(Self::Ed25519),
             "RSA_4096" => Ok(Self::Rsa4096),
             "ECC_SECG_P256K1" => Ok(Self::EccSecgP256k1),
+            "ML_KEM_768" => Ok(Self::MlKem768),
+            "ML_KEM_1024" => Ok(Self::MlKem1024),
+            "ML_DSA_44" => Ok(Self::MlDsa44),
+            "ML_DSA_65" => Ok(Self::MlDsa65),
+            "ML_DSA_87" => Ok(Self::MlDsa87),
             _ => Err("KeySpec is not supported".to_string()),
         }
     }
@@ -83,17 +101,24 @@ impl KeySpec {
     fn allowed_usage(self) -> KeyUsage {
         match self {
             Self::Aes256Gcm96 => KeyUsage::EncryptDecrypt,
+            Self::MlKem768 | Self::MlKem1024 => KeyUsage::KeyAgreement,
             Self::EcdsaP256
             | Self::EcdsaP384
             | Self::Ed25519
             | Self::Rsa4096
-            | Self::EccSecgP256k1 => KeyUsage::SignVerify,
+            | Self::EccSecgP256k1
+            | Self::MlDsa44
+            | Self::MlDsa65
+            | Self::MlDsa87 => KeyUsage::SignVerify,
         }
     }
 
     fn requires_scheme(self) -> Scheme {
         match self {
             Self::EccSecgP256k1 => Scheme::Ethereum,
+            Self::MlKem768 | Self::MlKem1024 | Self::MlDsa44 | Self::MlDsa65 | Self::MlDsa87 => {
+                Scheme::Pqc
+            }
             Self::Aes256Gcm96
             | Self::EcdsaP256
             | Self::EcdsaP384
@@ -110,6 +135,11 @@ impl KeySpec {
             Self::Ed25519 => "ED25519",
             Self::Rsa4096 => "RSA_4096",
             Self::EccSecgP256k1 => "ECC_SECG_P256K1",
+            Self::MlKem768 => "ML_KEM_768",
+            Self::MlKem1024 => "ML_KEM_1024",
+            Self::MlDsa44 => "ML_DSA_44",
+            Self::MlDsa65 => "ML_DSA_65",
+            Self::MlDsa87 => "ML_DSA_87",
         }
     }
 }
@@ -117,6 +147,7 @@ impl KeySpec {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum KeyUsage {
     EncryptDecrypt,
+    KeyAgreement,
     SignVerify,
 }
 
@@ -124,14 +155,16 @@ impl KeyUsage {
     fn parse(value: &str) -> Result<Self, String> {
         match value {
             "ENCRYPT_DECRYPT" => Ok(Self::EncryptDecrypt),
+            "KEY_AGREEMENT" => Ok(Self::KeyAgreement),
             "SIGN_VERIFY" => Ok(Self::SignVerify),
-            _ => Err("KeyUsage must be ENCRYPT_DECRYPT or SIGN_VERIFY".to_string()),
+            _ => Err("KeyUsage must be ENCRYPT_DECRYPT, KEY_AGREEMENT, or SIGN_VERIFY".to_string()),
         }
     }
 
     fn as_str(self) -> &'static str {
         match self {
             Self::EncryptDecrypt => "ENCRYPT_DECRYPT",
+            Self::KeyAgreement => "KEY_AGREEMENT",
             Self::SignVerify => "SIGN_VERIFY",
         }
     }
@@ -163,8 +196,22 @@ enum SigningAlgorithm {
     EcdsaSha384,
     Ed25519,
     EthereumSecp256k1,
+    MlDsa,
     RsassaPkcs1V15Sha256,
     RsassaPssSha256,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum KeyAgreementAlgorithm {
+    MlKem,
+}
+
+impl KeyAgreementAlgorithm {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::MlKem => "ML_KEM",
+        }
+    }
 }
 
 impl SigningAlgorithm {
@@ -174,6 +221,7 @@ impl SigningAlgorithm {
             "ECDSA_SHA_384" => Ok(Self::EcdsaSha384),
             "ED25519" => Ok(Self::Ed25519),
             "ETHEREUM_SECP256K1" => Ok(Self::EthereumSecp256k1),
+            "ML_DSA" => Ok(Self::MlDsa),
             "RSASSA_PKCS1_V1_5_SHA_256" => Ok(Self::RsassaPkcs1V15Sha256),
             "RSASSA_PSS_SHA_256" => Ok(Self::RsassaPssSha256),
             _ => Err("SigningAlgorithm is not supported".to_string()),
@@ -186,6 +234,7 @@ impl SigningAlgorithm {
             Self::EcdsaSha384 => "ECDSA_SHA_384",
             Self::Ed25519 => "ED25519",
             Self::EthereumSecp256k1 => "ETHEREUM_SECP256K1",
+            Self::MlDsa => "ML_DSA",
             Self::RsassaPkcs1V15Sha256 => "RSASSA_PKCS1_V1_5_SHA_256",
             Self::RsassaPssSha256 => "RSASSA_PSS_SHA_256",
         }
@@ -210,9 +259,11 @@ impl MessageType {
     }
 
     fn allowed_for(self, signing_algorithm: SigningAlgorithm) -> bool {
-        match self {
-            Self::Raw | Self::Digest => true,
-            Self::Eip191 => Scheme::Ethereum.supports_signing_algorithm(signing_algorithm),
+        match (self, signing_algorithm) {
+            (Self::Raw, _) => true,
+            (Self::Digest, SigningAlgorithm::MlDsa) => false,
+            (Self::Digest, _) => true,
+            (Self::Eip191, _) => Scheme::Ethereum.supports_signing_algorithm(signing_algorithm),
         }
     }
 
@@ -256,6 +307,8 @@ pub enum KmsRpcCall {
     Encrypt(EncryptRequest),
     Decrypt(DecryptRequest),
     Sign(SignRequest),
+    Encapsulate(EncapsulateRequest),
+    Decapsulate(DecapsulateRequest),
     CreateKey(CreateKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
@@ -267,6 +320,8 @@ impl KmsRpcCall {
             Self::Encrypt(req) => KmsService::validate_encrypt(req),
             Self::Decrypt(req) => KmsService::validate_decrypt(req),
             Self::Sign(req) => KmsService::validate_sign(req),
+            Self::Encapsulate(req) => KmsService::validate_encapsulate(req),
+            Self::Decapsulate(req) => KmsService::validate_decapsulate(req),
             Self::CreateKey(req) => KmsService::validate_create_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
@@ -290,6 +345,16 @@ impl KmsRpcCall {
                 req_id,
                 req.key_id,
                 req.signing_algorithm
+            ),
+            Self::Encapsulate(req) => tracing::debug!(
+                "Executing KMS Encapsulate RPC [id={} key_id={}]",
+                req_id,
+                req.key_id
+            ),
+            Self::Decapsulate(req) => tracing::debug!(
+                "Executing KMS Decapsulate RPC [id={} key_id={}]",
+                req_id,
+                req.key_id
             ),
             Self::CreateKey(req) => tracing::debug!(
                 "Executing KMS CreateKey RPC [id={} scheme={} key_spec={} key_usage={}]",
@@ -318,6 +383,8 @@ pub enum KmsRpcResult {
     Encrypt(EncryptResponse),
     Decrypt(DecryptResponse),
     Sign(SignResponse),
+    Encapsulate(EncapsulateResponse),
+    Decapsulate(DecapsulateResponse),
     CreateKey(CreateKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
@@ -341,6 +408,18 @@ impl KmsRpcResult {
                 req_id,
                 result.key_id,
                 result.signing_algorithm
+            ),
+            Self::Encapsulate(result) => tracing::debug!(
+                "KMS Encapsulate RPC succeeded [id={} key_id={} key_agreement_algorithm={}]",
+                req_id,
+                result.key_id,
+                result.key_agreement_algorithm
+            ),
+            Self::Decapsulate(result) => tracing::debug!(
+                "KMS Decapsulate RPC succeeded [id={} key_id={} key_agreement_algorithm={}]",
+                req_id,
+                result.key_id,
+                result.key_agreement_algorithm
             ),
             Self::CreateKey(result) => {
                 if let Some(metadata) = result.key_metadata.as_ref() {
@@ -409,11 +488,23 @@ impl KmsService {
         if let Some(message_type) = req.message_type.as_ref() {
             let message_type = MessageType::parse(message_type)?;
             if !message_type.allowed_for(signing_algorithm) {
-                return Err(
-                    "MessageType EIP191 requires SigningAlgorithm ETHEREUM_SECP256K1".to_string(),
-                );
+                return Err(format!(
+                    "MessageType {} is not supported for SigningAlgorithm {}",
+                    message_type.as_str(),
+                    signing_algorithm.as_str()
+                ));
             }
         }
+        Ok(())
+    }
+
+    pub fn validate_encapsulate(req: &EncapsulateRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)
+    }
+
+    pub fn validate_decapsulate(req: &DecapsulateRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)?;
+        validate_required("Ciphertext", &req.ciphertext)?;
         Ok(())
     }
 
@@ -430,7 +521,11 @@ impl KmsService {
                 (_, KeySpec::Aes256Gcm96) => {
                     "AES_256_GCM96 keys must use ENCRYPT_DECRYPT".to_string()
                 }
+                (_, KeySpec::MlKem768 | KeySpec::MlKem1024) => {
+                    "PQC ML-KEM keys must use KEY_AGREEMENT".to_string()
+                }
                 (Scheme::Ethereum, _) => "ETHEREUM keys must use SIGN_VERIFY".to_string(),
+                (Scheme::Pqc, _) => "PQC keys must use SIGN_VERIFY".to_string(),
                 (Scheme::Transit, _) => "Asymmetric KMS keys must use SIGN_VERIFY".to_string(),
             });
         }
@@ -469,7 +564,11 @@ impl KmsService {
 
     pub fn get_capabilities() -> GetCapabilitiesResponse {
         GetCapabilitiesResponse {
-            schemes: vec![transit_capability(), ethereum_capability()],
+            schemes: vec![
+                transit_capability(),
+                ethereum_capability(),
+                pqc_capability(),
+            ],
         }
     }
 
@@ -485,6 +584,12 @@ impl KmsService {
             KmsRpcCall::Encrypt(req) => KmsRpcResult::Encrypt(self.encrypt(client_id, req).await?),
             KmsRpcCall::Decrypt(req) => KmsRpcResult::Decrypt(self.decrypt(client_id, req).await?),
             KmsRpcCall::Sign(req) => KmsRpcResult::Sign(self.sign(client_id, req).await?),
+            KmsRpcCall::Encapsulate(req) => {
+                KmsRpcResult::Encapsulate(self.encapsulate(client_id, req).await?)
+            }
+            KmsRpcCall::Decapsulate(req) => {
+                KmsRpcResult::Decapsulate(self.decapsulate(client_id, req).await?)
+            }
             KmsRpcCall::CreateKey(req) => {
                 KmsRpcResult::CreateKey(self.create_key(client_id, req).await?)
             }
@@ -567,6 +672,49 @@ impl KmsService {
             key_id: response.key_id,
             signature: response.signature,
             signing_algorithm: response.signing_algorithm,
+        })
+    }
+
+    pub async fn encapsulate(
+        &mut self,
+        client_id: &str,
+        req: EncapsulateRequest,
+    ) -> Result<EncapsulateResponse, tonic::Status> {
+        let response: PluginEncapsulateResponse = self
+            .client
+            .encapsulate(tonic::Request::new(PluginEncapsulateRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(EncapsulateResponse {
+            key_id: response.key_id,
+            ciphertext: response.ciphertext,
+            shared_key: response.shared_key,
+            key_agreement_algorithm: response.key_agreement_algorithm,
+        })
+    }
+
+    pub async fn decapsulate(
+        &mut self,
+        client_id: &str,
+        req: DecapsulateRequest,
+    ) -> Result<DecapsulateResponse, tonic::Status> {
+        let response: PluginDecapsulateResponse = self
+            .client
+            .decapsulate(tonic::Request::new(PluginDecapsulateRequest {
+                key_id: req.key_id,
+                ciphertext: req.ciphertext,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(DecapsulateResponse {
+            key_id: response.key_id,
+            key_agreement_algorithm: response.key_agreement_algorithm,
         })
     }
 
@@ -692,6 +840,9 @@ fn transit_capability() -> SchemeCapability {
         supports_decrypt: true,
         supports_generate_data_key: true,
         supports_rotate_key: true,
+        key_agreement_capabilities: vec![],
+        supports_encapsulate: false,
+        supports_decapsulate: false,
     }
 }
 
@@ -710,6 +861,50 @@ fn ethereum_capability() -> SchemeCapability {
         supports_decrypt: false,
         supports_generate_data_key: false,
         supports_rotate_key: false,
+        key_agreement_capabilities: vec![],
+        supports_encapsulate: false,
+        supports_decapsulate: false,
+    }
+}
+
+fn pqc_capability() -> SchemeCapability {
+    SchemeCapability {
+        scheme: Scheme::Pqc.as_str().to_string(),
+        key_specs: vec![
+            KeySpec::MlDsa44,
+            KeySpec::MlDsa65,
+            KeySpec::MlDsa87,
+            KeySpec::MlKem768,
+            KeySpec::MlKem1024,
+        ]
+        .into_iter()
+        .map(|spec| spec.as_str().to_string())
+        .collect(),
+        key_usages: vec![KeyUsage::SignVerify, KeyUsage::KeyAgreement]
+            .into_iter()
+            .map(|usage| usage.as_str().to_string())
+            .collect(),
+        encryption_algorithms: vec![],
+        data_key_specs: vec![],
+        signing_capabilities: vec![signing_capability(
+            SigningAlgorithm::MlDsa,
+            &[MessageType::Raw],
+        )],
+        supports_encrypt: false,
+        supports_decrypt: false,
+        supports_generate_data_key: false,
+        supports_rotate_key: false,
+        key_agreement_capabilities: vec![key_agreement_capability(KeyAgreementAlgorithm::MlKem)],
+        supports_encapsulate: true,
+        supports_decapsulate: true,
+    }
+}
+
+fn key_agreement_capability(
+    key_agreement_algorithm: KeyAgreementAlgorithm,
+) -> KeyAgreementCapability {
+    KeyAgreementCapability {
+        key_agreement_algorithm: key_agreement_algorithm.as_str().to_string(),
     }
 }
 
@@ -737,6 +932,10 @@ fn validate_key_spec(value: &str, scheme: Scheme) -> Result<KeySpec, String> {
     let key_spec = KeySpec::parse(value).map_err(|_| match scheme {
         Scheme::Transit => "KeySpec is not supported".to_string(),
         Scheme::Ethereum => "ETHEREUM keys must use ECC_SECG_P256K1".to_string(),
+        Scheme::Pqc => {
+            "PQC keys must use ML_DSA_44, ML_DSA_65, ML_DSA_87, ML_KEM_768, or ML_KEM_1024"
+                .to_string()
+        }
     })?;
 
     if scheme.supports_key_spec(key_spec) {
@@ -745,6 +944,10 @@ fn validate_key_spec(value: &str, scheme: Scheme) -> Result<KeySpec, String> {
         Err(match scheme {
             Scheme::Transit => "KeySpec is not supported".to_string(),
             Scheme::Ethereum => "ETHEREUM keys must use ECC_SECG_P256K1".to_string(),
+            Scheme::Pqc => {
+                "PQC keys must use ML_DSA_44, ML_DSA_65, ML_DSA_87, ML_KEM_768, or ML_KEM_1024"
+                    .to_string()
+            }
         })
     }
 }
@@ -846,6 +1049,60 @@ mod test {
     }
 
     #[test]
+    fn test_validate_create_key_pqc_scheme() {
+        let req = CreateKeyRequest {
+            description: String::new(),
+            key_spec: "ML_DSA_65".to_string(),
+            key_usage: "SIGN_VERIFY".to_string(),
+            scheme: Some("PQC".to_string()),
+            alias: "pqc-main".to_string(),
+            tags: vec![],
+        };
+        KmsService::validate_create_key(&req).unwrap();
+    }
+
+    #[test]
+    fn test_validate_create_key_pqc_kem_scheme() {
+        let req = CreateKeyRequest {
+            description: String::new(),
+            key_spec: "ML_KEM_768".to_string(),
+            key_usage: "KEY_AGREEMENT".to_string(),
+            scheme: Some("PQC".to_string()),
+            alias: "pqc-kem-main".to_string(),
+            tags: vec![],
+        };
+        KmsService::validate_create_key(&req).unwrap();
+    }
+
+    #[test]
+    fn test_validate_create_key_pqc_kem_rejects_sign_usage() {
+        let req = CreateKeyRequest {
+            description: String::new(),
+            key_spec: "ML_KEM_768".to_string(),
+            key_usage: "SIGN_VERIFY".to_string(),
+            scheme: Some("PQC".to_string()),
+            alias: "pqc-kem-main".to_string(),
+            tags: vec![],
+        };
+        let err = KmsService::validate_create_key(&req).unwrap_err();
+        assert!(err.contains("KEY_AGREEMENT"));
+    }
+
+    #[test]
+    fn test_validate_create_key_pqc_rejects_transit_spec() {
+        let req = CreateKeyRequest {
+            description: String::new(),
+            key_spec: "ECDSA_P256".to_string(),
+            key_usage: "SIGN_VERIFY".to_string(),
+            scheme: Some("PQC".to_string()),
+            alias: "pqc-main".to_string(),
+            tags: vec![],
+        };
+        let err = KmsService::validate_create_key(&req).unwrap_err();
+        assert!(err.contains("ML_DSA_44"));
+    }
+
+    #[test]
     fn test_validate_create_key_alias() {
         let req = CreateKeyRequest {
             description: String::new(),
@@ -882,6 +1139,16 @@ mod test {
         };
         let err = KmsService::validate_generate_data_key(&req).unwrap_err();
         assert!(err.contains("Exactly one"));
+    }
+
+    #[test]
+    fn test_validate_decapsulate_requires_ciphertext() {
+        let req = DecapsulateRequest {
+            key_id: "kms:abc".to_string(),
+            ciphertext: "".to_string(),
+        };
+        let err = KmsService::validate_decapsulate(&req).unwrap_err();
+        assert!(err.to_ascii_lowercase().contains("ciphertext is required"));
     }
 
     #[test]
@@ -929,10 +1196,34 @@ mod test {
         assert!(!ethereum.supports_encrypt);
         assert!(!ethereum.supports_generate_data_key);
         assert!(!ethereum.supports_rotate_key);
+
+        let pqc = capabilities
+            .schemes
+            .iter()
+            .find(|scheme| scheme.scheme == "PQC")
+            .expect("missing PQC capability");
+        assert!(pqc.key_specs.contains(&"ML_DSA_65".to_string()));
+        assert!(pqc.key_specs.contains(&"ML_KEM_768".to_string()));
+        assert!(pqc.key_usages.contains(&"SIGN_VERIFY".to_string()));
+        assert!(pqc.key_usages.contains(&"KEY_AGREEMENT".to_string()));
+        assert!(pqc.signing_capabilities.iter().any(|capability| {
+            capability.signing_algorithm == "ML_DSA"
+                && capability.message_types == vec!["RAW".to_string()]
+        }));
+        assert!(
+            pqc.key_agreement_capabilities
+                .iter()
+                .any(|capability| capability.key_agreement_algorithm == "ML_KEM")
+        );
+        assert!(!pqc.supports_encrypt);
+        assert!(!pqc.supports_generate_data_key);
+        assert!(!pqc.supports_rotate_key);
+        assert!(pqc.supports_encapsulate);
+        assert!(pqc.supports_decapsulate);
     }
 
     #[test]
-    fn test_validate_sign_eip191_requires_ethereum_algorithm() {
+    fn test_validate_sign_rejects_unsupported_message_type_for_algorithm() {
         let req = SignRequest {
             key_id: "kms:abc".to_string(),
             message: "YWJj".to_string(),
@@ -940,6 +1231,27 @@ mod test {
             message_type: Some("EIP191".to_string()),
         };
         let err = KmsService::validate_sign(&req).unwrap_err();
-        assert!(err.contains("ETHEREUM_SECP256K1"));
+        assert_eq!(
+            err,
+            "MessageType EIP191 is not supported for SigningAlgorithm ECDSA_SHA_256"
+        );
+    }
+
+    #[test]
+    fn test_validate_sign_mldsa_raw_only() {
+        let raw_req = SignRequest {
+            key_id: "kms:abc".to_string(),
+            message: "YWJj".to_string(),
+            signing_algorithm: "ML_DSA".to_string(),
+            message_type: Some("RAW".to_string()),
+        };
+        KmsService::validate_sign(&raw_req).unwrap();
+
+        let digest_req = SignRequest {
+            message_type: Some("DIGEST".to_string()),
+            ..raw_req
+        };
+        let err = KmsService::validate_sign(&digest_req).unwrap_err();
+        assert!(err.contains("ML_DSA"));
     }
 }
