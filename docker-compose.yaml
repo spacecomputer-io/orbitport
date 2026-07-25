@@ -103,15 +103,15 @@ services:
       - ORBITPORT_GRPC_PORT=50002
       - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
 
-  plugin-aptos-orbital:
+  plugin-crypto2:
     <<: *plugin-base
-    container_name: plugin-aptos-orbital
+    container_name: plugin-crypto2
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=aptosorbital
+      - ORBITPORT_PLUGIN=crypto2
       - ORBITPORT_GRPC_PORT=50001
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=${ORBITPORT_APTOS_ORBITAL_CLIENT_ID}
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=${ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET}
+      - ORBITPORT_CRYPTO2_CLIENT_ID=${ORBITPORT_CRYPTO2_CLIENT_ID}
+      - ORBITPORT_CRYPTO2_CLIENT_SECRET=${ORBITPORT_CRYPTO2_CLIENT_SECRET}
     ports:
     - 9001:9000
 
@@ -122,7 +122,7 @@ services:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=masterseed
       - ORBITPORT_GRPC_PORT=50003
-      - ORBITPORT_APTOS_PLUGIN=plugin-aptos-orbital:50001
+      - ORBITPORT_CRYPTO2_PLUGIN=plugin-crypto2:50001
       # Configurable defaults for seed management
       - ORBITPORT_DEFAULT_MASTER_SEEDS=${ORBITPORT_DEFAULT_MASTER_SEEDS}
       - ORBITPORT_MASTERSEED_TRNG_SIZE=32
@@ -132,7 +132,7 @@ services:
     ports:
       - 9003:9000
     depends_on:
-      - plugin-aptos-orbital
+      - plugin-crypto2
 
   plugin-kms:
     <<: *plugin-base
@@ -206,11 +206,11 @@ services:
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
-      - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
+      - ORBITPORT_TRNG_PLUGIN=http://plugin-crypto2:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
       - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
     depends_on:
-      - plugin-aptos-orbital
+      - plugin-crypto2
       - plugin-auth
       - plugin-kms
       - plugin-account
@@ -233,7 +233,7 @@ services:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=beacon
       - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
-      - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
+      - ORBITPORT_CTRNG_PLUGIN=plugin-crypto2:50001
       - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
       - ORBITPORT_BEACON_UPDATE_INTERVAL=60
       - ORBITPORT_REGISTRY_RETRIEVAL_TIMEOUT=90

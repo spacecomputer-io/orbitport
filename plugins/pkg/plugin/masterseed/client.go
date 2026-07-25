@@ -8,13 +8,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func getAptosPluginClient(cfg masterSeedConfig) (*grpc.ClientConn, proto.RandomnessPluginClient, error) {
+func getCrypto2PluginClient(cfg masterSeedConfig) (*grpc.ClientConn, proto.RandomnessPluginClient, error) {
 	conn, err := grpc.NewClient(
-		cfg.AptosPlugin,
+		cfg.Crypto2Plugin,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to Aptos plugin: %w", err)
+		return nil, nil, fmt.Errorf("failed to connect to crypto2 plugin: %w", err)
 	}
 
 	client := proto.NewRandomnessPluginClient(conn)

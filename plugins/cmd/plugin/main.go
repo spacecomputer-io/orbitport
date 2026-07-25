@@ -10,10 +10,10 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/account"
-	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/aptosorbital"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/crypto2"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
@@ -39,13 +39,13 @@ func main() {
 	}
 
 	switch cfg.Plugin {
-	case "aptosorbital":
-		plugin, err := aptosorbital.NewPlugin()
+	case "crypto2", "aptosorbital":
+		plugin, err := crypto2.NewPlugin()
 		if err != nil {
 			panic(err)
 		}
 		proto.RegisterRandomnessPluginServer(grpcServer, plugin)
-		logger.Info("Aptos Orbital plugin ready")
+		logger.Info("Crypto2 plugin ready")
 	case "auth":
 		plugin, err := auth.NewPlugin()
 		if err != nil {

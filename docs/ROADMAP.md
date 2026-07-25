@@ -7,7 +7,7 @@ Orbitport’s long-term vision is to be a trust-minimized gateway for secure, ve
 ## v1 – Centralized Gateway (MVP)
 
 - **Functionality:**  
-  - Orbitport operates as an on-Earth gateway to Aptos Orbital infrastructure.
+  - Orbitport operates as an on-Earth gateway to upstream space infrastructure, beginning with the Crypto2 API.
   - Only SpaceComputer can deploy and manage the gateway.
   - Provides unified API for orbital services (e.g., cTRNG, spaceTEE).
 - **Trust Model:**  

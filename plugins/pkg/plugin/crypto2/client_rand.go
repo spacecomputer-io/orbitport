@@ -1,4 +1,4 @@
-package aptosorbital
+package crypto2
 
 import (
 	"context"
@@ -17,8 +17,8 @@ type trngSeed struct {
 	Signature string `json:"signature"`
 }
 
-// GetTrueRandomnessSeed retrieves a true randomness seed from the Aptos Orbital API.
-func (c *AptosClient) GetTrueRandomnessSeed(ctx context.Context, noSig bool, numChunk uint) (*proto.TrngResponse, error) {
+// GetTrueRandomnessSeed retrieves a true randomness seed from the Crypto2 API.
+func (c *Client) GetTrueRandomnessSeed(ctx context.Context, noSig bool, numChunk uint) (*proto.TrngResponse, error) {
 	if !c.limiter.Allow() {
 		c.logger.Warn("rate limit exceeded")
 		requestTotal.WithLabelValues("local_rate_limit_exceeded").Inc()

@@ -2,7 +2,7 @@ use std::env;
 
 mod common;
 
-/// Test e2e offline profile (aptos orbital api is down)
+/// Test e2e offline profile (crypto2 API is down)
 /// run with `cargo test --test e2e_offline --features localtest`
 /// to run the test with local docker containers.
 /// NOTE that you can also run from the root of the repo with:
@@ -25,6 +25,10 @@ async fn test_e2e_offline() {
         for _ in 0..n {
             let resp = common::get_trng(&base_url, &access_token, None, None, None).await?;
             assert!(resp.data.len() > 0, "Response data is empty");
+            assert_eq!(
+                resp.src, "derived",
+                "Offline TRNG source did not fall back to derived"
+            );
         }
         tracing::info!("All requests completed successfully");
         Ok::<(), common::E2EError>(())

@@ -14,18 +14,18 @@ var (
 	authStatusCollector = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "op",
-			Subsystem: "rand_aptos_orb",
+			Subsystem: "rand_crypto2",
 			Name:      "auth_status",
-			Help:      "Status of the Aptos Orbital API authentication",
+			Help:      "Status of the upstream OAuth authentication",
 		},
 		[]string{"endpoint"},
 	)
 	authExpireCollector = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: "op",
-			Subsystem: "rand_aptos_orb",
+			Subsystem: "rand_crypto2",
 			Name:      "auth_expire",
-			Help:      "Expiration time of the Aptos Orbital API access token",
+			Help:      "Expiration time of the upstream OAuth access token",
 		},
 		[]string{"endpoint"},
 	)

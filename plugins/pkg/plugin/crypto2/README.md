@@ -1,11 +1,14 @@
-# OrbitPort Plugin / Aptos Orbital
+# OrbitPort Plugin / Crypto2
 
-This document contains information on the integration with `Aptos Orbital` services.
+This document contains information on Orbitport's integration with the
+`Crypto2` satellite API.
 
 ## Overview
 
-The `Aptos Orbital` plugin is responsible for interacting with the `Aptos Orbital API` (`api.aptosorbital.com`). 
-It provides access to true random number generation and other services provided by the Aptos Orbital satellites.
+The `crypto2` plugin is responsible for interacting with the current
+Crypto2 randomness API. This integration is
+specific to the `Crypto2` satellite so it remains distinct from the upcoming
+`cEdge` API that will serve SpaceComputer compute-in-space workloads.
 
 **NOTE** at the moment, the only service available is the true random number generation.
 
@@ -13,13 +16,14 @@ It provides access to true random number generation and other services provided 
 
 The plugin is designed to be used in conjunction with the `orbitport` framework, which provides a unified interface for interacting with various services using `gRPC`.
 
-## Aptos Orbital API
+## Crypto2 API
 
-The gateway is using the following end-points from `Aptos Orbital API` (`api.aptosorbital.com`):
+The gateway uses the following endpoint from the Crypto2 API:
 
 ### Get True Random Seed
 
-Returns a true random seed harvested from hardware on cEDGE and Crypto2 satellites. The satellite also provides a signature to ensure the seed is authentic.
+Returns a true random seed harvested from hardware on the Crypto2 satellite.
+The satellite also provides a signature to ensure the seed is authentic.
 
 **Throughput**
 

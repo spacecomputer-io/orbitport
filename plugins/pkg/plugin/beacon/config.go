@@ -34,7 +34,7 @@ func readFromEnv() Config {
 
 func setDefaults() {
 	viper.SetDefault("IPFS_PLUGIN", "plugin-ipfs:50002")
-	viper.SetDefault("CTRNG_PLUGIN", "plugin-aptos-orbital:50001")
+	viper.SetDefault("CTRNG_PLUGIN", "plugin-crypto2:50001")
 	viper.SetDefault("MASTERSEED_PLUGIN", "plugin-masterseed:50003")
 	viper.SetDefault("BEACON_REGISTRY", "orbitport-registry")
 	viper.SetDefault("DEFAULT_BEACON_NAME", "randomness-beacon1.0")

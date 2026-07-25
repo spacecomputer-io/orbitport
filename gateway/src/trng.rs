@@ -29,8 +29,8 @@ pub enum TrngError {
     GatewayError(#[from] GatewayError),
 }
 
-/// The TrngService is a service that provides access to the Aptos Orbital
-/// randomness plugin (primary) and the masterseed plugin (fallback).
+/// The TrngService serves randomness derived from the rolling masterseed pool,
+/// which is continuously refreshed from the crypto2 plugin.
 #[derive(Clone)]
 pub struct TrngService {
     masterseed_client: MasterSeedPluginClient<Channel>,

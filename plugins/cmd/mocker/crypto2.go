@@ -21,25 +21,25 @@ func generateLocalRandomBytes(n int) ([]byte, error) {
 	return b, nil
 }
 
-func NewMockAptosOrbitalAPI(p Profile) HttpServer {
+func NewMockCrypto2API(p Profile) HttpServer {
 	mux := http.NewServeMux()
-	return &aptosOrbitalAPIMockServer{
+	return &crypto2APIMockServer{
 		mux: mux,
 		p:   p,
 	}
 }
 
-type aptosOrbitalAPIMockServer struct {
+type crypto2APIMockServer struct {
 	mux *http.ServeMux
 	p   Profile
 }
 
-func (m *aptosOrbitalAPIMockServer) ListenAndServe(addr string) {
+func (m *crypto2APIMockServer) ListenAndServe(addr string) {
 	m.mux.Handle("/", m)
 	_ = http.ListenAndServe(addr, m.mux)
 }
 
-func (m *aptosOrbitalAPIMockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (m *crypto2APIMockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if m.p == PROFILE_OFFLINE {
 		fmt.Println("offline profile, returning 503")
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -68,7 +68,7 @@ func (m *aptosOrbitalAPIMockServer) ServeHTTP(w http.ResponseWriter, r *http.Req
 	}
 }
 
-func NewMockAptosOrbitalAuth(p Profile) HttpServer {
+func NewMockCrypto2Auth(p Profile) HttpServer {
 	if p == PROFILE_OFFLINE {
 		fmt.Println("offline profile, server will return 500")
 		return testutils.NewMockServer(false)

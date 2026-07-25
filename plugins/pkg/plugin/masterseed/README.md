@@ -10,7 +10,7 @@ Implements `MasterSeedPlugin` (`proto/plugins/masterseed.proto`) with a single
 
 The plugin maintains an in-memory pool of master seeds and refreshes it on a
 ticker (`ORBITPORT_MASTERSEED_PERIOD`, default 3600s) by calling the
-`aptosorbital` plugin's `GetTrng` RPC for a fresh 32-byte chunk. The pool is
+`crypto2` plugin's `GetTrng` RPC for a fresh 32-byte chunk. The pool is
 capped at `ORBITPORT_MASTERSEED_MAX_SEEDS` (FIFO eviction).
 
 Optional `ORBITPORT_DEFAULT_MASTER_SEEDS` provides boot-time seeds that are
@@ -25,7 +25,7 @@ never share output ranges. Requests above
 `ORBITPORT_MASTER_SEED_MAX_COUNT_PER_REQUEST` are rejected to bound CPU and
 gRPC response size.
 
-Depends on the `aptosorbital` plugin being reachable at
-`ORBITPORT_APTOS_PLUGIN`.
+Depends on the `crypto2` plugin being reachable at
+`ORBITPORT_CRYPTO2_PLUGIN`.
 
 Configuration: see [CONTEXT.md → Plugin: `masterseed`](../../../../CONTEXT.md#plugin-masterseed).

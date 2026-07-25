@@ -12,7 +12,8 @@ import (
 
 type mockerConfig struct {
 	// Service is the name of the service to mock.
-	// Possible values: "aptosorbital_api" (default), "aptosorbital_auth"
+	// Possible values: "crypto2_api" (default), "crypto2_auth".
+	// Legacy aliases "aptosorbital_api" and "aptosorbital_auth" also work.
 	Service string
 	// The port to listen on. (default 8000)
 	Port uint16
@@ -36,7 +37,7 @@ func readFromEnv() *mockerConfig {
 }
 
 func setDefaults() {
-	viper.SetDefault("SERVICE", "aptosorbital_api")
+	viper.SetDefault("SERVICE", "crypto2_api")
 	viper.SetDefault("PORT", 8000)
 	viper.SetDefault("PROFILE", string(PROFILE_HAPPY_PATH))
 }
@@ -48,11 +49,11 @@ type HttpServer interface {
 func main() {
 	cfg := readFromEnv()
 	switch cfg.Service {
-	case "aptosorbital_api":
-		server := NewMockAptosOrbitalAPI(cfg.Profile)
+	case "crypto2_api", "aptosorbital_api":
+		server := NewMockCrypto2API(cfg.Profile)
 		server.ListenAndServe(fmt.Sprintf(":%d", cfg.Port))
-	case "aptosorbital_auth":
-		server := NewMockAptosOrbitalAuth(cfg.Profile)
+	case "crypto2_auth", "aptosorbital_auth":
+		server := NewMockCrypto2Auth(cfg.Profile)
 		server.ListenAndServe(fmt.Sprintf(":%d", cfg.Port))
 	default:
 		fmt.Fprintf(os.Stderr, "Error: Unknown service: %s\n", cfg.Service)

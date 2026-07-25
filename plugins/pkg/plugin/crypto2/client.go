@@ -1,4 +1,4 @@
-package aptosorbital
+package crypto2
 
 import (
 	"bytes"
@@ -16,20 +16,20 @@ import (
 )
 
 var (
-	ErrDailyRateLimitExceeded = fmt.Errorf("aptos orbital daily rate limit exceeded")
+	ErrDailyRateLimitExceeded = fmt.Errorf("crypto2 daily rate limit exceeded")
 	ErrRateLimitExceeded      = fmt.Errorf("rate limit exceeded")
 )
 
-// AptosClient is a client for the Aptos Orbital API.
-type AptosClient struct {
+// Client is a client for the Crypto2 API.
+type Client struct {
 	logger     *utils.Logger
 	opts       *ClientOptions
 	limiter    *rate.Limiter
 	authClient *oauth.OAuthClient
 }
 
-// NewClient creates a new AptosClient with the given options.
-func NewClient(opts ...ClientOption) (*AptosClient, error) {
+// NewClient creates a new Client with the given options.
+func NewClient(opts ...ClientOption) (*Client, error) {
 	o := &ClientOptions{}
 	if err := o.apply(opts...); err != nil {
 		return nil, err
@@ -37,9 +37,9 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 
 	limiter := rate.NewLimiter(rate.Limit(o.rateLimit), o.rateBurst)
 
-	logger := utils.GetLogger("orbitport:randomness:aptosorbital")
+	logger := utils.GetLogger("orbitport:randomness:crypto2")
 
-	return &AptosClient{
+	return &Client{
 		logger:     logger,
 		opts:       o,
 		limiter:    limiter,
@@ -48,7 +48,7 @@ func NewClient(opts ...ClientOption) (*AptosClient, error) {
 }
 
 // getHeaders retrieves the headers for making a request.
-func (c *AptosClient) getHeaders(ctx context.Context) (map[string]string, error) {
+func (c *Client) getHeaders(ctx context.Context) (map[string]string, error) {
 	atoken, err := c.authClient.GetAccessToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("authentication failed: %v", err)
@@ -61,7 +61,7 @@ func (c *AptosClient) getHeaders(ctx context.Context) (map[string]string, error)
 // makeRequest makes a request according to the given parameters.
 // This is a generic function that takes a type R which represents the Response.
 // TODO: manage request data properly.
-func makeRequest[R any](ctx context.Context, c *AptosClient, method, urlStr string, headers map[string]string, data interface{}, params map[string]string) (*R, error) {
+func makeRequest[R any](ctx context.Context, c *Client, method, urlStr string, headers map[string]string, data interface{}, params map[string]string) (*R, error) {
 	if params != nil {
 		query := url.Values{}
 		for key, value := range params {
@@ -127,7 +127,7 @@ func makeRequest[R any](ctx context.Context, c *AptosClient, method, urlStr stri
 		requestTotal.WithLabelValues("failed_read_res").Inc()
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
-	c.logger.Debugf("aptos response body: %s", body)
+	c.logger.Debugf("crypto2 response body: %s", body)
 
 	var result R
 	if err := json.Unmarshal(body, &result); err != nil {
