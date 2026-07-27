@@ -17,6 +17,7 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/threshold"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
@@ -120,6 +121,13 @@ func main() {
 		logger.Info("Account plugin ready")
 
 		defer plugin.Close()
+	case "threshold":
+		plugin, err := threshold.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterThresholdPluginServer(grpcServer, plugin)
+		logger.Info("Threshold plugin ready")
 	default:
 		panic("unknown plugin")
 	}
