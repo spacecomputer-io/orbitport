@@ -26,7 +26,7 @@ services:
     image: golang:1.25-alpine
     working_dir: /src
     volumes:
-      - ${ORBITPORT_OPENBAO_ETH_PLUGIN_DIR:-../openbao-eth-plugin-poc}:/src:ro
+      - ${ORBITPORT_OPENBAO_ETH_PLUGIN_DIR:-../openbao-eth-plugin}:/src:ro
       - ./docker/openbao:/orbitport/docker/openbao:ro
       - openbao-plugins:/out
       - openbao-eth-go-pkg:/go/pkg/mod

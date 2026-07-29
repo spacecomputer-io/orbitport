@@ -30,9 +30,9 @@ jobs:
       - name: Checkout OpenBao Ethereum plugin
         uses: actions/checkout@v4
         with:
-          repository: spacecomputer-io/openbao-eth-plugin-poc
+          repository: spacecomputer-io/openbao-eth-plugin
           ref: main
-          path: openbao-eth-plugin-poc
+          path: openbao-eth-plugin
           fetch-depth: 1
           token: ${{ secrets.OPENBAO_ETH_PLUGIN_PAT }}
       - name: Build docker images
