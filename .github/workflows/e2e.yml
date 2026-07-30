@@ -35,6 +35,14 @@ jobs:
           path: openbao-eth-plugin
           fetch-depth: 1
           token: ${{ secrets.OPENBAO_ETH_PLUGIN_PAT }}
+      - name: Checkout OpenBao Threshold plugin
+        uses: actions/checkout@v4
+        with:
+          repository: spacecomputer-io/openbao-threshold-plugin
+          ref: main
+          path: openbao-threshold-plugin
+          fetch-depth: 1
+          token: ${{ secrets.OPENBAO_THRESHOLD_PLUGIN_PAT }}
       - name: Build docker images
         run: |
           make docker-build

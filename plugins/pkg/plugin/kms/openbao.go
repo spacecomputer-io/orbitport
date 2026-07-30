@@ -1,22 +1,21 @@
 package kms
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
 	"time"
+
+	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 )
 
 type openBaoClient struct {
+	*openbao.Client
 	baseURL       string
 	ethereumMount string
-	httpClient    *http.Client
 	kvMount       string
 	transitMount  string
 }
@@ -42,15 +41,6 @@ type keyMetadataRecord struct {
 type pluginTag struct {
 	TagKey   string `json:"tag_key"`
 	TagValue string `json:"tag_value"`
-}
-
-type openBaoStatusError struct {
-	statusCode int
-	status     string
-}
-
-func (e *openBaoStatusError) Error() string {
-	return fmt.Sprintf("openbao returned %s", e.status)
 }
 
 type transitKeyInfo struct {
@@ -83,13 +73,13 @@ func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 		cfg.TimeoutSecs,
 	)
 	return &openBaoClient{
+		Client: openbao.NewClient(&http.Client{
+			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
+		}, logger),
 		baseURL:       strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		ethereumMount: cfg.EthereumMount,
-		httpClient: &http.Client{
-			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
-		},
-		kvMount:      cfg.KVMount,
-		transitMount: cfg.TransitMount,
+		kvMount:       cfg.KVMount,
+		transitMount:  cfg.TransitMount,
 	}
 }
 
@@ -110,7 +100,7 @@ func (m *keyMetadataRecord) backendKey() string {
 }
 
 func (c *openBaoClient) createTransitKey(ctx context.Context, name, keyType string) (*transitKeyInfo, error) {
-	if err := c.post(ctx, c.transitPath("keys", name), map[string]any{"type": keyType}, nil); err != nil {
+	if err := c.Post(ctx, c.transitPath("keys", name), map[string]any{"type": keyType}, nil); err != nil {
 		return nil, err
 	}
 	return c.readTransitKey(ctx, name)
@@ -120,7 +110,7 @@ func (c *openBaoClient) readTransitKey(ctx context.Context, name string) (*trans
 	var resp struct {
 		Data transitKeyInfo `json:"data"`
 	}
-	if err := c.get(ctx, c.transitPath("keys", name), &resp); err != nil {
+	if err := c.Get(ctx, c.transitPath("keys", name), &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
@@ -132,7 +122,7 @@ func (c *openBaoClient) encrypt(ctx context.Context, transitKey, plaintext strin
 			Ciphertext string `json:"ciphertext"`
 		} `json:"data"`
 	}
-	err := c.post(ctx, c.transitPath("encrypt", transitKey), map[string]any{
+	err := c.Post(ctx, c.transitPath("encrypt", transitKey), map[string]any{
 		"plaintext": plaintext,
 	}, &resp)
 	if err != nil {
@@ -147,7 +137,7 @@ func (c *openBaoClient) decrypt(ctx context.Context, transitKey, ciphertext stri
 			Plaintext string `json:"plaintext"`
 		} `json:"data"`
 	}
-	err := c.post(ctx, c.transitPath("decrypt", transitKey), map[string]any{
+	err := c.Post(ctx, c.transitPath("decrypt", transitKey), map[string]any{
 		"ciphertext": ciphertext,
 	}, &resp)
 	if err != nil {
@@ -170,7 +160,7 @@ func (c *openBaoClient) sign(ctx context.Context, transitKey, message string, ma
 			Signature string `json:"signature"`
 		} `json:"data"`
 	}
-	err := c.post(ctx, c.transitPath("sign", transitKey, mapping.pathAlgorithm), body, &resp)
+	err := c.Post(ctx, c.transitPath("sign", transitKey, mapping.pathAlgorithm), body, &resp)
 	if err != nil {
 		return "", err
 	}
@@ -184,7 +174,7 @@ func (c *openBaoClient) generateDataKey(ctx context.Context, transitKey string, 
 			Ciphertext string `json:"ciphertext"`
 		} `json:"data"`
 	}
-	err := c.post(ctx, c.transitPath("datakey", "plaintext", transitKey), map[string]any{
+	err := c.Post(ctx, c.transitPath("datakey", "plaintext", transitKey), map[string]any{
 		"bits": bits,
 	}, &resp)
 	if err != nil {
@@ -194,7 +184,7 @@ func (c *openBaoClient) generateDataKey(ctx context.Context, transitKey string, 
 }
 
 func (c *openBaoClient) rotateTransitKey(ctx context.Context, transitKey string) (*transitKeyInfo, error) {
-	if err := c.post(ctx, c.transitPath("keys", transitKey, "rotate"), map[string]any{}, nil); err != nil {
+	if err := c.Post(ctx, c.transitPath("keys", transitKey, "rotate"), map[string]any{}, nil); err != nil {
 		return nil, err
 	}
 	return c.readTransitKey(ctx, transitKey)
@@ -204,7 +194,7 @@ func (c *openBaoClient) createEthereumKey(ctx context.Context, name string) (*et
 	var resp struct {
 		Data ethereumKeyInfo `json:"data"`
 	}
-	if err := c.post(ctx, c.ethereumPath("keys", name), map[string]any{}, &resp); err != nil {
+	if err := c.Post(ctx, c.ethereumPath("keys", name), map[string]any{}, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
@@ -222,14 +212,14 @@ func (c *openBaoClient) signEthereum(ctx context.Context, keyName string, body m
 	var resp struct {
 		Data ethereumSignInfo `json:"data"`
 	}
-	if err := c.post(ctx, c.ethereumPath("sign", keyName), body, &resp); err != nil {
+	if err := c.Post(ctx, c.ethereumPath("sign", keyName), body, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data, nil
 }
 
 func (c *openBaoClient) putMetadata(ctx context.Context, clientID, keyID string, metadata *keyMetadataRecord) error {
-	return c.post(ctx, c.metadataPath(clientID, keyID), map[string]any{
+	return c.Post(ctx, c.metadataPath(clientID, keyID), map[string]any{
 		"data": metadata,
 	}, nil)
 }
@@ -240,7 +230,7 @@ func (c *openBaoClient) getMetadata(ctx context.Context, clientID, keyID string)
 			Data keyMetadataRecord `json:"data"`
 		} `json:"data"`
 	}
-	if err := c.get(ctx, c.metadataPath(clientID, keyID), &resp); err != nil {
+	if err := c.Get(ctx, c.metadataPath(clientID, keyID), &resp); err != nil {
 		return nil, err
 	}
 	record := &resp.Data.Data
@@ -278,59 +268,4 @@ func (c *openBaoClient) joinPath(parts ...string) string {
 	}
 	u.Path = path.Join(append([]string{u.Path}, clean...)...)
 	return u.String()
-}
-
-func (c *openBaoClient) post(ctx context.Context, target string, payload any, into any) error {
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal openbao payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("create openbao request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return c.do(req, into)
-}
-
-func (c *openBaoClient) get(ctx context.Context, target string, into any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-	if err != nil {
-		return fmt.Errorf("create openbao request: %w", err)
-	}
-	return c.do(req, into)
-}
-
-func (c *openBaoClient) do(req *http.Request, into any) error {
-	logger.Debugf("OpenBao request %s %s", req.Method, req.URL.Path)
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		logger.Warnf("OpenBao request failed %s %s: %v", req.Method, req.URL.Path, err)
-		return fmt.Errorf("openbao request failed: %w", err)
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Warnf("failed reading OpenBao response body for %s %s: %v", req.Method, req.URL.Path, err)
-		return fmt.Errorf("read openbao response: %w", err)
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		logger.Warnf("OpenBao returned %s for %s %s", resp.Status, req.Method, req.URL.Path)
-		return &openBaoStatusError{
-			statusCode: resp.StatusCode,
-			status:     resp.Status,
-		}
-	}
-	if into == nil {
-		return nil
-	}
-	if err := json.Unmarshal(body, into); err != nil {
-		logger.Warnf("failed decoding OpenBao response for %s %s: %v", req.Method, req.URL.Path, err)
-		return fmt.Errorf("decode openbao response: %w", err)
-	}
-	return nil
 }

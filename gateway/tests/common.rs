@@ -5,6 +5,9 @@ use tokio::process::Command;
 
 use gateway::structures::service::ServiceResult;
 
+const THRESHOLD_GROUP: &str = "e2e-group";
+const THRESHOLD_MOUNT: &str = "threshold";
+
 /// Error type for end-to-end tests
 #[allow(dead_code)]
 #[derive(Error, Debug)]
@@ -104,6 +107,120 @@ pub async fn rpc_ctrng_get(
 }
 
 #[allow(dead_code)]
+pub async fn rpc_threshold_coordinate_dkg(
+    base_url: &str,
+    access_token: &str,
+    req_id: u64,
+) -> Result<gateway::proto::services::threshold::DkgResponse, E2EError> {
+    let nodes = threshold_test_nodes();
+    prepare_threshold_nodes(&nodes).await?;
+
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "method": "kms_threshold.CoordinateDKG",
+        "params": {
+            "Alias": format!("e2e-key-{req_id}"),
+            "GroupName": THRESHOLD_GROUP,
+            "SessionId": format!("dkg-session-{req_id}")
+        },
+    });
+
+    rpc_success_result(base_url, access_token, req_id, payload).await
+}
+
+struct ThresholdTestNode {
+    node_id: &'static str,
+    party_index: i32,
+    host_openbao_url: &'static str,
+}
+
+fn threshold_test_nodes() -> Vec<ThresholdTestNode> {
+    vec![
+        ThresholdTestNode {
+            node_id: "node-a",
+            party_index: 0,
+            host_openbao_url: "http://localhost:8200",
+        },
+        ThresholdTestNode {
+            node_id: "node-b",
+            party_index: 1,
+            host_openbao_url: "http://localhost:8201",
+        },
+        ThresholdTestNode {
+            node_id: "node-c",
+            party_index: 2,
+            host_openbao_url: "http://localhost:8202",
+        },
+    ]
+}
+
+async fn prepare_threshold_nodes(nodes: &[ThresholdTestNode]) -> Result<(), E2EError> {
+    let client = reqwest::Client::new();
+    let participants = serde_json::to_string(
+        &nodes
+            .iter()
+            .map(|node| {
+                serde_json::json!({
+                    "node_id": node.node_id,
+                    "party_index": node.party_index,
+                })
+            })
+            .collect::<Vec<_>>(),
+    )
+    .map_err(|e| E2EError::ParseError(e.to_string()))?;
+
+    for node in nodes {
+        openbao_post(
+            &client,
+            node.host_openbao_url,
+            &format!("/v1/{THRESHOLD_MOUNT}/config/node"),
+            serde_json::json!({ "node_id": node.node_id }),
+        )
+        .await?;
+
+        openbao_post(
+            &client,
+            node.host_openbao_url,
+            &format!("/v1/{THRESHOLD_MOUNT}/groups/{THRESHOLD_GROUP}"),
+            serde_json::json!({
+                "threshold": 2,
+                "participants": participants,
+            }),
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn openbao_post(
+    client: &reqwest::Client,
+    base_url: &str,
+    path: &str,
+    payload: serde_json::Value,
+) -> Result<(), E2EError> {
+    let response = client
+        .post(format!("{}{}", base_url.trim_end_matches('/'), path))
+        .header("Content-Type", "application/json")
+        .header("X-Vault-Token", "root")
+        .json(&payload)
+        .send()
+        .await
+        .map_err(|e| E2EError::RequestError(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        return Err(E2EError::AssertionFailed(format!(
+            "OpenBao setup returned error {status}: {text}"
+        )));
+    }
+
+    Ok(())
+}
+
+#[allow(dead_code)]
 pub async fn rpc_request(
     base_url: &str,
     access_token: &str,
@@ -189,6 +306,8 @@ pub async fn pre_test(profile: &str) -> Result<bool, E2EError> {
             .arg(&env_file)
             .arg("up")
             .arg("-d")
+            .arg("--build")
+            .arg("--force-recreate")
             .env("OPMOCK_PROFILE", profile)
             .output()
             .await
