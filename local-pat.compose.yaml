@@ -19,7 +19,6 @@
 #     -f local-pat.compose.yaml -f local-account.compose.yaml up -d --build
 #
 # The dashboard backend pairs with this via:
-#   PAT_ENABLED=true
 #   ORBITPORT_ISSUER_URL=http://host.docker.internal:8080   (or localhost:8080 on the host)
 #   ORBITPORT_ISSUER_SHARED_SECRET=<the same secret you exported for this stack>
 
