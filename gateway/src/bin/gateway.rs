@@ -73,26 +73,16 @@ impl Args {
 
 /// FR-O6: PAT revocation is only enforced on the account plugin's Hold path.
 /// An issuer plugin without an account plugin mints tokens that can never be
-/// revoked — fail closed unless explicitly overridden for local dev.
+/// revoked — fail closed. There is deliberately no override: the only state it
+/// unlocked was a local stack that minted PATs without charging for them, which
+/// the account compose overlay covers properly.
 fn validate_pat_revocation_gating(
     issuer_configured: bool,
     account_configured: bool,
-    allow_ungated: bool,
 ) -> Result<(), String> {
     if !issuer_configured || account_configured {
         return Ok(());
     }
-    if allow_ungated {
-        tracing::warn!(
-            "ORBITPORT_ALLOW_UNGATED_PATS=true: PATs are mintable but revocation is NOT enforced — local dev only"
-        );
-        return Ok(());
-    }
-    // Deliberately does not name the override. This message is read by
-    // operators during a failed prod rollout, where reaching for the bypass
-    // would silently disable both revocation and billing; the local-dev
-    // escape hatch is documented in CONTEXT.md and preset in the compose
-    // overlay that needs it, which is where devs actually look.
     Err(
         "ORBITPORT_ISSUER_PLUGIN is set but ORBITPORT_ACCOUNT_PLUGIN is not: PATs would be \
          mintable but never revocable (revocation is enforced on the account plugin's Hold \
@@ -110,15 +100,11 @@ async fn main() -> Result<(), GatewayError> {
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
 
-    validate_pat_revocation_gating(
-        args.issuer_plugin.is_some(),
-        args.account_plugin.is_some(),
-        std::env::var("ORBITPORT_ALLOW_UNGATED_PATS").as_deref() == Ok("true"),
-    )
-    .map_err(|e| {
-        tracing::error!("{}", e);
-        GatewayError::InternalError(e)
-    })?;
+    validate_pat_revocation_gating(args.issuer_plugin.is_some(), args.account_plugin.is_some())
+        .map_err(|e| {
+            tracing::error!("{}", e);
+            GatewayError::InternalError(e)
+        })?;
 
     let shutdown = Arc::new(Notify::new());
     {
@@ -224,18 +210,13 @@ mod test {
 
     #[test]
     fn issuer_without_account_fails_closed() {
-        assert!(validate_pat_revocation_gating(true, false, false).is_err());
-    }
-
-    #[test]
-    fn override_allows_ungated_issuer() {
-        assert!(validate_pat_revocation_gating(true, false, true).is_ok());
+        assert!(validate_pat_revocation_gating(true, false).is_err());
     }
 
     #[test]
     fn other_combinations_pass() {
-        assert!(validate_pat_revocation_gating(false, false, false).is_ok());
-        assert!(validate_pat_revocation_gating(false, true, false).is_ok());
-        assert!(validate_pat_revocation_gating(true, true, false).is_ok());
+        assert!(validate_pat_revocation_gating(false, false).is_ok());
+        assert!(validate_pat_revocation_gating(false, true).is_ok());
+        assert!(validate_pat_revocation_gating(true, true).is_ok());
     }
 }

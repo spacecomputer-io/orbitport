@@ -69,7 +69,6 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving, settle on success, and release on downstream failure. |
 | `ORBITPORT_ISSUER_PLUGIN` | — | gRPC URL of the issuer plugin. When set, mounts `POST /internal/pat/issue` and `GET /.well-known/jwks.json` |
 | `ORBITPORT_ISSUER_SHARED_SECRET` | — | Bearer secret guarding `/internal/pat/issue` (constant-time compare). Route is not mounted when empty |
-| `ORBITPORT_ALLOW_UNGATED_PATS` | `false` | FR-O6 escape hatch: allow starting with the issuer configured but no account plugin. Revoked PATs cannot be cut off in this state — local dev only |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |

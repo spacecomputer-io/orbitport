@@ -1,9 +1,13 @@
 # PAT local-dev overlay — mint and verify Personal Access Tokens with NO
-# OpenBao and NO Auth0 secrets: the issuer plugin signs with an ephemeral
-# in-process ES256 key (every restart invalidates outstanding PATs).
+# OpenBao: the issuer plugin signs with an ephemeral in-process ES256 key
+# (every restart invalidates outstanding PATs).
 #
-#   docker compose --env-file=.dev.env \
-#     -f dev.docker-compose.yaml -f local-pat.compose.yaml up -d --build
+# MUST be stacked with the account overlay. PAT revocation is enforced on the
+# account plugin's Hold path, so the gateway refuses to start with an issuer
+# and no account plugin (FR-O6) — and there is no override:
+#
+#   docker compose --env-file=.dev.env -f dev.docker-compose.yaml \
+#     -f local-pat.compose.yaml -f local-account.compose.yaml up -d --build
 #
 # What it changes vs the dev stack:
 #   - adds plugin-issuer (mints PATs, serves JWKS)
@@ -12,11 +16,8 @@
 #   - gateway mounts POST /internal/pat/issue (shared secret) and
 #     GET /.well-known/jwks.json
 #
-# Credit gating stays OFF here. For the full credit loop, additionally
-# apply your local account override (account plugin + dashboard URL +
-# Auth0 M2M credentials), e.g.:
-#   docker compose --env-file=.dev.env -f dev.docker-compose.yaml \
-#     -f local-pat.compose.yaml -f local-account.compose.yaml up -d --build
+# The account overlay supplies the rest: account plugin, dashboard URL, and
+# the Auth0 M2M credentials it needs to call the dashboard.
 #
 # The dashboard backend pairs with this via:
 #   ORBITPORT_ISSUER_URL=http://host.docker.internal:8080   (or localhost:8080 on the host)
@@ -78,9 +79,5 @@ services:
       # caller and minting a PAT for any account. Compose fails the run if it is
       # unset rather than falling back to a value published in this repo.
       - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:?set it, e.g. export ORBITPORT_ISSUER_SHARED_SECRET=$(openssl rand -hex 16)}
-      # FR-O6: without the account plugin, revoked PATs cannot be cut off.
-      # The gateway refuses to start in that state unless this is set.
-      # Local mint/verify dev only — the local-account overlay removes the need.
-      - ORBITPORT_ALLOW_UNGATED_PATS=true
     depends_on:
       - plugin-issuer
