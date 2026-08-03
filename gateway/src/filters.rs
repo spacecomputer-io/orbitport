@@ -19,6 +19,9 @@ use warp::{
 
 const BEARER: &str = "Bearer ";
 
+/// Ceiling on a single auth-plugin validate_token call.
+const AUTH_VALIDATE_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Clone, Debug)]
 pub struct AuthContext {
     pub jwt: String,
@@ -84,9 +87,19 @@ async fn authorize(
     match jwt_from_header(&headers) {
         Ok(jwt) => {
             let request = tonic::Request::new(TokenValidationRequest { token: jwt.clone() });
-            let response: TokenValidationResponse = auth_client
-                .validate_token(request)
-                .await
+            // Bound the call: the auth plugin fetches issuer JWKS on the PAT
+            // path, so a hung issuer must not pin this request open forever.
+            let validated =
+                tokio::time::timeout(AUTH_VALIDATE_TIMEOUT, auth_client.validate_token(request))
+                    .await
+                    .map_err(|_| {
+                        metrics::record_auth("plugin_timeout", timer.elapsed().as_secs_f64());
+                        tracing::error!("Auth plugin validate_token timed out");
+                        warp::reject::custom(GatewayError::AuthPluginConnectionError(
+                            "timeout".to_string(),
+                        ))
+                    })?;
+            let response: TokenValidationResponse = validated
                 .map_err(|e| match e.code() {
                     tonic::Code::Unavailable | tonic::Code::NotFound => {
                         metrics::record_auth("plugin_unavailable", timer.elapsed().as_secs_f64());
@@ -95,7 +108,14 @@ async fn authorize(
                             "unavailable".to_string(),
                         ))
                     }
-                    _ if e.message().contains("pat_expired") => {
+                    // Auth plugin contract: expired PATs are typed
+                    // Unauthenticated AND carry a "pat_expired:" message.
+                    // Either signal alone is enough, so a plugin on either side
+                    // of that change still maps to a distinguishable 401.
+                    _ if e.message().contains("pat_expired")
+                        || (e.code() == tonic::Code::Unauthenticated
+                            && e.message().contains("expired")) =>
+                    {
                         metrics::record_auth("pat_expired", timer.elapsed().as_secs_f64());
                         tracing::info!("Rejected expired PAT");
                         warp::reject::custom(GatewayError::PatExpired)

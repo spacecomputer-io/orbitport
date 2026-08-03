@@ -15,9 +15,20 @@ import (
 type staticTokens struct {
 	value string
 	err   error
+	// rotated, when set, becomes the token served after invalidate() — lets a
+	// test tell the retry's token apart from the original.
+	rotated      string
+	invalidCalls int
 }
 
-func (s staticTokens) token(context.Context) (string, error) { return s.value, s.err }
+func (s *staticTokens) token(context.Context) (string, error) { return s.value, s.err }
+
+func (s *staticTokens) invalidate() {
+	s.invalidCalls++
+	if s.rotated != "" {
+		s.value = s.rotated
+	}
+}
 
 func newTestClient(t *testing.T, handler http.Handler) (*dashboardClient, *httptest.Server) {
 	t.Helper()
@@ -26,7 +37,7 @@ func newTestClient(t *testing.T, handler http.Handler) (*dashboardClient, *httpt
 		DashboardURL:    srv.URL,
 		HTTPTimeoutSecs: 5,
 	}
-	return newDashboardClient(cfg, staticTokens{value: "test-token"}), srv
+	return newDashboardClient(cfg, &staticTokens{value: "test-token"}), srv
 }
 
 func TestDashboardClient_Hold_Success(t *testing.T) {
@@ -193,8 +204,65 @@ func TestDashboardClient_NoToken_Errors(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
-	client := newDashboardClient(cfg, staticTokens{err: errors.New("no token")})
+	client := newDashboardClient(cfg, &staticTokens{err: errors.New("no token")})
 
 	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.Error(t, err)
+}
+
+// A 401 means the cached M2M token was rejected regardless of what its expiry
+// claimed — the client must drop it and retry once with a fresh one. Without
+// this, a stale token wedges every call until the process restarts.
+func TestDashboardClient_Hold_RetriesOnceAfter401(t *testing.T) {
+	var seenAuth []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = append(seenAuth, r.Header.Get("Authorization"))
+		if len(seenAuth) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Invalid or missing access token"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ledgerId":"ledger-retry","balance":7}`))
+	}))
+	defer srv.Close()
+
+	tokens := &staticTokens{value: "stale-token", rotated: "fresh-token"}
+	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
+	client := newDashboardClient(cfg, tokens)
+
+	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 1, "trng", "jti-1")
+	require.NoError(t, err)
+	require.Equal(t, "ledger-retry", ledgerID)
+	require.Equal(t, int64(7), balance)
+	require.Equal(t, 1, tokens.invalidCalls)
+	require.Equal(t, []string{"Bearer stale-token", "Bearer fresh-token"}, seenAuth)
+}
+
+// The retry is once, not a loop: a persistently rejecting dashboard must
+// surface an error rather than spin.
+func TestDashboardClient_Hold_401RetryHappensOnce(t *testing.T) {
+	var calls int
+	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	require.Error(t, err)
+	require.Equal(t, 2, calls)
+}
+
+// 404 is the PAT revocation path: unknown or revoked credential. It must be a
+// distinguishable client error, never folded into a generic transport failure.
+func TestDashboardClient_Hold_404IsUnknownCredential(t *testing.T) {
+	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+
+	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "revoked-jti")
+	require.ErrorIs(t, err, ErrUnknownCredential)
 }

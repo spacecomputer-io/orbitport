@@ -13,8 +13,8 @@
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tokio::net::TcpListener;
@@ -35,18 +35,27 @@ use gateway::types::GatewayError;
 enum HoldBehavior {
     Ok,
     Insufficient,
+    /// Dashboard 404 — unknown or revoked credential. The PAT revocation path.
+    Revoked,
 }
 
 struct MockAccountPlugin {
     hold_calls: Arc<AtomicU32>,
     release_calls: Arc<AtomicU32>,
+    /// (client_id, jti) of the last Hold, so tests can assert what the filter
+    /// forwarded to the account plugin.
+    last_hold: Arc<Mutex<(String, String)>>,
     behavior: HoldBehavior,
 }
 
 #[tonic::async_trait]
 impl AccountPlugin for MockAccountPlugin {
-    async fn hold(&self, _req: Request<HoldRequest>) -> Result<Response<HoldResponse>, Status> {
+    async fn hold(&self, req: Request<HoldRequest>) -> Result<Response<HoldResponse>, Status> {
         self.hold_calls.fetch_add(1, Ordering::SeqCst);
+        {
+            let body = req.into_inner();
+            *self.last_hold.lock().unwrap() = (body.client_id, body.jti);
+        }
         match self.behavior {
             HoldBehavior::Ok => Ok(Response::new(HoldResponse {
                 ok: true,
@@ -55,6 +64,9 @@ impl AccountPlugin for MockAccountPlugin {
                 error: String::new(),
             })),
             HoldBehavior::Insufficient => Err(Status::failed_precondition("insufficient_credits")),
+            HoldBehavior::Revoked => {
+                Err(Status::permission_denied("Unknown or revoked credential"))
+            }
         }
     }
 
@@ -83,11 +95,25 @@ impl AccountPlugin for MockAccountPlugin {
 }
 
 async fn start_mock_plugin(behavior: HoldBehavior) -> (SocketAddr, Arc<AtomicU32>, Arc<AtomicU32>) {
+    let (addr, hold_calls, release_calls, _) = start_mock_plugin_capturing(behavior).await;
+    (addr, hold_calls, release_calls)
+}
+
+async fn start_mock_plugin_capturing(
+    behavior: HoldBehavior,
+) -> (
+    SocketAddr,
+    Arc<AtomicU32>,
+    Arc<AtomicU32>,
+    Arc<Mutex<(String, String)>>,
+) {
     let hold_calls = Arc::new(AtomicU32::new(0));
     let release_calls = Arc::new(AtomicU32::new(0));
+    let last_hold = Arc::new(Mutex::new((String::new(), String::new())));
     let plugin = MockAccountPlugin {
         hold_calls: hold_calls.clone(),
         release_calls: release_calls.clone(),
+        last_hold: last_hold.clone(),
         behavior,
     };
 
@@ -103,7 +129,7 @@ async fn start_mock_plugin(behavior: HoldBehavior) -> (SocketAddr, Arc<AtomicU32
     });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
-    (addr, hold_calls, release_calls)
+    (addr, hold_calls, release_calls, last_hold)
 }
 
 async fn connect(addr: SocketAddr) -> AccountPluginClient<Channel> {
@@ -116,13 +142,28 @@ async fn connect(addr: SocketAddr) -> AccountPluginClient<Channel> {
 /// validation. Lets us exercise `with_account_hold` without standing up the
 /// real auth plugin.
 fn synthetic_auth() -> impl Filter<Extract = (AuthContext,), Error = Rejection> + Clone {
-    warp::any().and_then(|| async {
-        Ok::<_, Rejection>(AuthContext {
-            jwt: "test-jwt".to_string(),
-            client_id: "client-warp".to_string(),
-            jti: String::new(),
-            kms_tenant: String::new(),
-        })
+    synthetic_auth_as("client-warp", "")
+}
+
+/// Same, with a caller-chosen client_id/jti so tests can drive the PAT branch
+/// (non-empty jti) and the legacy Auth0 branch (empty jti).
+fn synthetic_auth_as(
+    client_id: &str,
+    jti: &str,
+) -> impl Filter<Extract = (AuthContext,), Error = Rejection> + Clone {
+    let client_id = client_id.to_string();
+    let jti = jti.to_string();
+    warp::any().and_then(move || {
+        let client_id = client_id.clone();
+        let jti = jti.clone();
+        async move {
+            Ok::<_, Rejection>(AuthContext {
+                jwt: "test-jwt".to_string(),
+                client_id,
+                jti,
+                kms_tenant: String::new(),
+            })
+        }
     })
 }
 
@@ -140,6 +181,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         let status = match gw {
             GatewayError::InsufficientCredits => StatusCode::PAYMENT_REQUIRED,
             GatewayError::AccountPluginUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+            GatewayError::InvalidCredential => StatusCode::UNAUTHORIZED,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         return Ok(warp::reply::with_status(
@@ -244,4 +286,82 @@ async fn filter_release_fires_when_handler_errors_after_hold() {
 
     assert_eq!(hold_calls.load(Ordering::SeqCst), 1);
     assert_eq!(release_calls.load(Ordering::SeqCst), 1);
+}
+
+/// PAT revocation: the dashboard's 404 arrives as PermissionDenied and must
+/// become a 401, not a 503. A revoked token is a client error, not an outage.
+#[tokio::test]
+async fn filter_revoked_credential_returns_401() {
+    let (addr, hold_calls, release_calls, _) =
+        start_mock_plugin_capturing(HoldBehavior::Revoked).await;
+    let client = connect(addr).await;
+
+    let route = warp::path("test")
+        .and(with_account_hold(
+            synthetic_auth_as("acct-1", "revoked-jti"),
+            Some(client),
+            1,
+            "trng",
+        ))
+        .and_then(ok_handler)
+        .recover(handle_rejection);
+
+    let resp = warp::test::request().path("/test").reply(&route).await;
+
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(hold_calls.load(Ordering::SeqCst), 1);
+    // Nothing was held, so there is nothing to release.
+    assert_eq!(release_calls.load(Ordering::SeqCst), 0);
+}
+
+/// A PAT carries the account id in `sub` and must reach the dashboard
+/// unstripped, with its jti. Stripping it here would look up the wrong account.
+#[tokio::test]
+async fn filter_pat_forwards_client_id_unstripped_with_jti() {
+    let (addr, _, _, last_hold) = start_mock_plugin_capturing(HoldBehavior::Ok).await;
+    let client = connect(addr).await;
+
+    let route = warp::path("test")
+        .and(with_account_hold(
+            synthetic_auth_as("acct-abc@clients", "pat-jti-9"),
+            Some(client),
+            1,
+            "trng",
+        ))
+        .and_then(ok_handler)
+        .recover(handle_rejection);
+
+    let resp = warp::test::request().path("/test").reply(&route).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let (client_id, jti) = last_hold.lock().unwrap().clone();
+    assert_eq!(
+        client_id, "acct-abc@clients",
+        "PAT sub must not be stripped"
+    );
+    assert_eq!(jti, "pat-jti-9");
+}
+
+/// Legacy Auth0 M2M tokens (empty jti) keep the existing `@clients` stripping.
+#[tokio::test]
+async fn filter_legacy_m2m_strips_clients_suffix() {
+    let (addr, _, _, last_hold) = start_mock_plugin_capturing(HoldBehavior::Ok).await;
+    let client = connect(addr).await;
+
+    let route = warp::path("test")
+        .and(with_account_hold(
+            synthetic_auth_as("cid-123@clients", ""),
+            Some(client),
+            1,
+            "trng",
+        ))
+        .and_then(ok_handler)
+        .recover(handle_rejection);
+
+    let resp = warp::test::request().path("/test").reply(&route).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let (client_id, jti) = last_hold.lock().unwrap().clone();
+    assert_eq!(client_id, "cid-123");
+    assert!(jti.is_empty());
 }

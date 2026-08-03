@@ -1,6 +1,7 @@
 package issuer
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -17,11 +18,13 @@ import (
 
 // signer is the key-custody seam: localSigner today, an OpenBao Transit
 // implementation when the infra lands (same JWS output, remote signing).
+// ctx carries caller cancellation/deadline through to remote signers;
+// localSigner ignores it since it's pure in-process crypto.
 type signer interface {
 	// Mint signs the claims and returns a compact JWS with a kid header.
-	Mint(claims jwt.MapClaims) (string, error)
+	Mint(ctx context.Context, claims jwt.MapClaims) (string, error)
 	// JWKS returns the RFC 7517 public key set verifiers select from by kid.
-	JWKS() (string, error)
+	JWKS(ctx context.Context) (string, error)
 }
 
 // localSigner holds an EC P-256 key in process memory. Key custody is the
@@ -59,13 +62,13 @@ func newLocalSigner(keyPEM string) (*localSigner, bool, error) {
 	return &localSigner{key: key, kid: kid}, generated, nil
 }
 
-func (s *localSigner) Mint(claims jwt.MapClaims) (string, error) {
+func (s *localSigner) Mint(_ context.Context, claims jwt.MapClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
 	token.Header["kid"] = s.kid
 	return token.SignedString(s.key)
 }
 
-func (s *localSigner) JWKS() (string, error) {
+func (s *localSigner) JWKS(_ context.Context) (string, error) {
 	pub := s.key.PublicKey
 	if pub.Curve != elliptic.P256() {
 		return "", fmt.Errorf("unsupported curve %s", pub.Curve.Params().Name)

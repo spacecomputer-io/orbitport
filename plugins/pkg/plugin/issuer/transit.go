@@ -49,11 +49,13 @@ type keyInfo struct {
 	PublicKeys map[int]string
 }
 
-func (s *transitSigner) Mint(claims jwt.MapClaims) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.client.Timeout)
-	defer cancel()
+func (s *transitSigner) Mint(ctx context.Context, claims jwt.MapClaims) (string, error) {
+	// Each round trip gets its own fresh budget off the caller's ctx so a
+	// slow key read can't starve the sign call (and vice versa).
+	readCtx, readCancel := context.WithTimeout(ctx, s.client.Timeout)
+	defer readCancel()
 
-	info, err := s.readKey(ctx)
+	info, err := s.readKey(readCtx)
 	if err != nil {
 		return "", err
 	}
@@ -87,8 +89,11 @@ func (s *transitSigner) Mint(claims jwt.MapClaims) (string, error) {
 		return "", err
 	}
 
+	signCtx, signCancel := context.WithTimeout(ctx, s.client.Timeout)
+	defer signCancel()
+
 	url := fmt.Sprintf("%s/v1/%s/sign/%s/sha2-256", s.baseURL, s.mount, s.keyName)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(signCtx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -107,11 +112,22 @@ func (s *transitSigner) Mint(claims jwt.MapClaims) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// ES256 is the only vetted alg (see jwsAlg), and it requires exactly
+	// 32+32 raw R||S bytes. This only holds if OpenBao honors
+	// marshaling_algorithm=jws; if it ever returned ASN.1 DER instead,
+	// this catches it here instead of minting a structurally invalid PAT.
+	sigBytes, err := base64.RawURLEncoding.DecodeString(sig)
+	if err != nil {
+		return "", fmt.Errorf("transit signature is not valid base64url: %w", err)
+	}
+	if len(sigBytes) != 64 {
+		return "", fmt.Errorf("transit signature has wrong length: want 64 bytes (ES256 R||S), got %d", len(sigBytes))
+	}
 	return signingString + "." + sig, nil
 }
 
-func (s *transitSigner) JWKS() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), s.client.Timeout)
+func (s *transitSigner) JWKS(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.client.Timeout)
 	defer cancel()
 
 	info, err := s.readKey(ctx)

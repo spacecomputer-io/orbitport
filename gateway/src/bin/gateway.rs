@@ -4,6 +4,23 @@ use tokio::sync::Notify;
 
 use gateway::{logging, plugins, server, service_manager, types::GatewayError};
 
+/// A config value that must never reach the logs. `Args` is dumped with `{:?}`
+/// at startup, so anything secret needs a `Debug` that redacts itself.
+#[derive(Clone)]
+struct Secret(String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[redacted]")
+    }
+}
+
+impl From<&str> for Secret {
+    fn from(s: &str) -> Self {
+        Secret(s.to_string())
+    }
+}
+
 #[derive(Parser, Debug)]
 struct Args {
     #[clap(short = 'p', long, env = "ORBITPORT_HTTP_PORT", default_value = "8080")]
@@ -35,7 +52,7 @@ struct Args {
     /// Shared secret guarding POST /internal/pat/issue. Required for that
     /// route to be mounted when the issuer plugin is configured.
     #[clap(long, env = "ORBITPORT_ISSUER_SHARED_SECRET")]
-    issuer_shared_secret: Option<String>,
+    issuer_shared_secret: Option<Secret>,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
@@ -175,7 +192,7 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
-        args.issuer_shared_secret.clone(),
+        args.issuer_shared_secret.clone().map(|s| s.0),
     )
     .await;
 
@@ -189,7 +206,17 @@ async fn main() -> Result<(), GatewayError> {
 
 #[cfg(test)]
 mod test {
-    use super::validate_pat_revocation_gating;
+    use super::{Secret, validate_pat_revocation_gating};
+
+    /// `Args` is logged with `{:?}` at startup, so a leaky `Debug` here puts the
+    /// PAT-minting secret in every log aggregator.
+    #[test]
+    fn secret_debug_is_redacted() {
+        let s = Secret::from("super-secret-value");
+        assert_eq!(format!("{s:?}"), "[redacted]");
+        assert!(!format!("{s:?}").contains("super-secret-value"));
+        assert!(!format!("{:?}", Some(s)).contains("super-secret-value"));
+    }
 
     #[test]
     fn issuer_without_account_fails_closed() {

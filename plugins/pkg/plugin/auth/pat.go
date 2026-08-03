@@ -15,12 +15,30 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
-const jwksCacheTTL = 5 * time.Minute
+const (
+	jwksCacheTTL = 5 * time.Minute
+	// jwksMinRefresh throttles the unknown-kid refetch. The JWT library runs
+	// the keyfunc BEFORE verifying any signature, so an unsigned token naming a
+	// made-up kid would otherwise buy an issuer-plugin RPC per request.
+	// Tradeoff: a freshly rotated signing key is picked up only after this
+	// interval, so PATs minted with the new kid can 401 for up to that long.
+	jwksMinRefresh = 10 * time.Second
+	// jwksFetchTimeout bounds a single GetJwks call so a hung issuer plugin
+	// cannot stall PAT validation indefinitely.
+	jwksFetchTimeout = 5 * time.Second
+)
+
+// errIssuerUnavailable marks a JWKS fetch that failed for transport reasons.
+// It travels out through jwt.Parse's keyfunc wrapping so validatePAT can tell
+// "we could not reach the issuer" (a 503) from "this token is bad" (a 401).
+var errIssuerUnavailable = errors.New("issuer plugin unavailable")
 
 // unverifiedIssuer decodes the JWT payload WITHOUT verification, solely to
 // read the iss claim for routing between the PAT and Auth0 paths. The token
@@ -48,9 +66,22 @@ func unverifiedIssuer(token string) string {
 type jwksCache struct {
 	client proto.IssuerPluginClient
 
-	mu        sync.Mutex
+	// mu guards the cached data only — never held across the network call.
+	mu        sync.RWMutex
 	keys      map[string]*ecdsa.PublicKey
 	fetchedAt time.Time
+
+	// refreshMu collapses concurrent refreshes into a single RPC.
+	refreshMu sync.Mutex
+
+	// minRefresh is jwksMinRefresh; a field so tests can drive the throttle.
+	minRefresh time.Duration
+}
+
+func (c *jwksCache) snapshot() (map[string]*ecdsa.PublicKey, time.Time) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.keys, c.fetchedAt
 }
 
 func newJWKSCache(issuerPluginURL string) (*jwksCache, error) {
@@ -61,45 +92,69 @@ func newJWKSCache(issuerPluginURL string) (*jwksCache, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to issuer plugin: %w", err)
 	}
-	return &jwksCache{client: proto.NewIssuerPluginClient(conn)}, nil
+	return &jwksCache{
+		client:     proto.NewIssuerPluginClient(conn),
+		minRefresh: jwksMinRefresh,
+	}, nil
 }
 
 // key returns the ES256 public key for kid, refreshing the cache when stale
 // or when the kid is unknown (key rotation).
-// ponytail: unknown-kid refetch is unthrottled; add a min-refresh interval if
-// a flood of bad-kid tokens ever hammers the issuer plugin.
 func (c *jwksCache) key(ctx context.Context, kid string) (*ecdsa.PublicKey, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	keys, fetchedAt := c.snapshot()
 
-	if c.keys == nil || time.Since(c.fetchedAt) > jwksCacheTTL {
-		if err := c.refreshLocked(ctx); err != nil {
+	if keys == nil || time.Since(fetchedAt) > jwksCacheTTL {
+		if err := c.refresh(ctx); err != nil {
 			return nil, err
 		}
+		keys, fetchedAt = c.snapshot()
 	}
-	if k, ok := c.keys[kid]; ok {
+	if k, ok := keys[kid]; ok {
 		return k, nil
 	}
-	if err := c.refreshLocked(ctx); err != nil {
+
+	// Unknown kid: refetch once to pick up a rotation, but no more often than
+	// jwksMinRefresh so bogus kids cannot be used to hammer the issuer plugin.
+	if time.Since(fetchedAt) < c.minRefresh {
+		return nil, fmt.Errorf("no JWKS key for kid %q", kid)
+	}
+	if err := c.refresh(ctx); err != nil {
 		return nil, err
 	}
-	if k, ok := c.keys[kid]; ok {
+	keys, _ = c.snapshot()
+	if k, ok := keys[kid]; ok {
 		return k, nil
 	}
 	return nil, fmt.Errorf("no JWKS key for kid %q", kid)
 }
 
-func (c *jwksCache) refreshLocked(ctx context.Context) error {
+// refresh fetches the JWKS with the RPC OUTSIDE the data lock, so a slow or
+// hung issuer plugin never blocks readers that already hold valid cached keys.
+func (c *jwksCache) refresh(ctx context.Context) error {
+	c.refreshMu.Lock()
+	defer c.refreshMu.Unlock()
+
+	// Another goroutine may have refreshed while we waited for the lock.
+	if keys, fetchedAt := c.snapshot(); keys != nil && time.Since(fetchedAt) < c.minRefresh {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, jwksFetchTimeout)
+	defer cancel()
+
 	resp, err := c.client.GetJwks(ctx, &proto.GetJwksRequest{})
 	if err != nil {
-		return fmt.Errorf("fetching JWKS from issuer plugin: %w", err)
+		return fmt.Errorf("%w: fetching JWKS from issuer plugin: %v", errIssuerUnavailable, err)
 	}
 	keys, err := parseJWKS(resp.GetJwksJson())
 	if err != nil {
 		return err
 	}
+
+	c.mu.Lock()
 	c.keys = keys
 	c.fetchedAt = time.Now()
+	c.mu.Unlock()
 	return nil
 }
 
@@ -165,10 +220,16 @@ func (p *Plugin) validatePAT(ctx context.Context, tokenString string) (*proto.To
 		jwt.WithLeeway(time.Minute),
 	)
 	if err != nil {
+		// A JWKS fetch failure is an outage on our side, not a bad token:
+		// report it as Unavailable so the gateway answers 503, not 401.
+		if errors.Is(err, errIssuerUnavailable) {
+			return nil, status.Error(codes.Unavailable, err.Error())
+		}
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			// "pat_expired:" prefix is the gateway's contract for mapping
-			// this to a distinguishable 401.
-			return nil, fmt.Errorf("pat_expired: %w", err)
+			// Gateway contract: the typed Unauthenticated code carries
+			// "expired", with the legacy "pat_expired:" message prefix kept so
+			// an older gateway still matches on the string.
+			return nil, status.Error(codes.Unauthenticated, "pat_expired: "+err.Error())
 		}
 		return nil, fmt.Errorf("failed to validate PAT: %w", err)
 	}

@@ -124,6 +124,111 @@ func TestTransitRejectsUnvettedKeyType(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestTransitRejectsWrongLengthSignature proves a signature that isn't
+// exactly 64 bytes (raw ES256 R||S) is rejected at mint time instead of
+// silently producing a structurally invalid token — the scenario if
+// OpenBao ever ignored marshaling_algorithm=jws and returned ASN.1 DER.
+func TestTransitRejectsWrongLengthSignature(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	pubPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/transit/keys/pat-signing", func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{"data": map[string]any{
+			"type":           "ecdsa-p256",
+			"latest_version": 1,
+			"keys": map[string]any{
+				"1": map[string]string{"public_key": pubPEM},
+			},
+		}}
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
+	})
+	mux.HandleFunc("POST /v1/transit/sign/pat-signing/sha2-256", func(w http.ResponseWriter, _ *http.Request) {
+		// 70 bytes: never a valid ES256 R||S length, standing in for a
+		// DER-marshaled signature.
+		bogus := make([]byte, 70)
+		resp := map[string]any{"data": map[string]string{
+			"signature": "vault:v1:" + base64.RawURLEncoding.EncodeToString(bogus),
+		}}
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	ts := newTransitSigner(&issuerConfig{
+		OpenBaoProxyURL: srv.URL,
+		TransitMount:    "transit",
+		TransitKey:      "pat-signing",
+		TimeoutSecs:     5,
+	})
+	_, err = ts.Mint(context.Background(), jwt.MapClaims{"sub": "acct-1"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "wrong length")
+}
+
+// TestTransitTimeoutIsPerCall proves the key-read and sign round trips each
+// get their own fresh timeout budget off the caller's ctx rather than
+// splitting one shared deadline. Two round trips that individually fit
+// within the configured timeout but together exceed it must still succeed.
+func TestTransitTimeoutIsPerCall(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	pubPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}))
+
+	const perCallDelay = 200 * time.Millisecond
+	const budget = 300 * time.Millisecond // < 2*perCallDelay: a shared budget would starve the sign call
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/transit/keys/pat-signing", func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(perCallDelay)
+		resp := map[string]any{"data": map[string]any{
+			"type":           "ecdsa-p256",
+			"latest_version": 1,
+			"keys": map[string]any{
+				"1": map[string]string{"public_key": pubPEM},
+			},
+		}}
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
+	})
+	mux.HandleFunc("POST /v1/transit/sign/pat-signing/sha2-256", func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(perCallDelay)
+		var body struct {
+			Input string `json:"input"`
+		}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		input, err := base64.StdEncoding.DecodeString(body.Input)
+		require.NoError(t, err)
+		digest := sha256.Sum256(input)
+		r32, s32, err := ecdsa.Sign(rand.Reader, key, digest[:])
+		require.NoError(t, err)
+		sig := append(r32.FillBytes(make([]byte, 32)), s32.FillBytes(make([]byte, 32))...)
+		resp := map[string]any{"data": map[string]string{
+			"signature": "vault:v1:" + base64.RawURLEncoding.EncodeToString(sig),
+		}}
+		require.NoError(t, json.NewEncoder(w).Encode(resp))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Constructed directly (rather than via newTransitSigner) so the
+	// timeout can be sub-second; TimeoutSecs on issuerConfig is whole
+	// seconds only.
+	ts := &transitSigner{
+		client:  &http.Client{Timeout: budget},
+		baseURL: srv.URL,
+		mount:   "transit",
+		keyName: "pat-signing",
+	}
+
+	_, err = ts.Mint(context.Background(), jwt.MapClaims{"sub": "acct-1"})
+	require.NoError(t, err)
+}
+
 func TestStripVaultEnvelope(t *testing.T) {
 	raw := []byte{0xfb, 0x01, 0x02, 0x03}
 	want := base64.RawURLEncoding.EncodeToString(raw)

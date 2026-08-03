@@ -186,3 +186,44 @@ func TestTokenManager_RefreshCount(t *testing.T) {
 	require.NoError(t, tm.refresh(context.Background()))
 	require.Equal(t, int32(2), atomic.LoadInt32(&calls))
 }
+
+// Regression: expiresAt must carry no monotonic clock reading. Monotonic time
+// does not advance while the host is suspended, so a monotonic expiry makes a
+// long-expired token still look fresh after the machine wakes — the plugin then
+// never refreshes and every dashboard call 401s until it restarts.
+// time.Time's == compares the monotonic reading too, so a stripped value equals
+// its own Round(0).
+func TestTokenManager_ExpiryHasNoMonotonicReading(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"access_token":"abc","expires_in":3600,"token_type":"Bearer"}`))
+	}))
+	defer srv.Close()
+
+	tm := newTestTokenManager(t, srv)
+	require.NoError(t, tm.refresh(context.Background()))
+
+	exp := tm.cache.Get().expiresAt
+	require.True(t, exp == exp.Round(0), "expiresAt must be wall-clock only, got monotonic reading: %v", exp)
+}
+
+// invalidate() drops the cached token so the next token() call refetches, even
+// though the cached one has not expired.
+func TestTokenManager_InvalidateForcesRefetch(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = w.Write([]byte(`{"access_token":"abc","expires_in":3600,"token_type":"Bearer"}`))
+	}))
+	defer srv.Close()
+
+	tm := newTestTokenManager(t, srv)
+	_, err := tm.token(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int32(1), atomic.LoadInt32(&calls))
+
+	tm.invalidate()
+
+	_, err = tm.token(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int32(2), atomic.LoadInt32(&calls))
+}

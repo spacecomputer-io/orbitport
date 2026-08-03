@@ -186,22 +186,56 @@ pub async fn start(
 pub fn jwks_route(
     client: IssuerPluginClient<Channel>,
 ) -> impl Filter<Extract = (Response,), Error = Rejection> + Clone {
+    let cache: JwksCache = Arc::new(tokio::sync::Mutex::new(None));
     warp::get()
         .and(warp::path!(".well-known" / "jwks.json"))
         .and(warp::any().map(move || client.clone()))
+        .and(warp::any().map(move || cache.clone()))
         .and_then(handle_jwks)
 }
 
-async fn handle_jwks(mut client: IssuerPluginClient<Channel>) -> Result<Response, Rejection> {
-    match client.get_jwks(GetJwksRequest {}).await {
-        Ok(resp) => {
+/// Last JWKS body served, with the instant it was fetched.
+type JwksCache = Arc<tokio::sync::Mutex<Option<(String, std::time::Instant)>>>;
+
+/// Server-side JWKS cache lifetime. This route is public and unauthenticated,
+/// so without it every anonymous request fans straight through to the issuer
+/// plugin. Strictly tighter than the `max-age=300` we advertise to clients.
+const JWKS_CACHE_TTL: Duration = Duration::from_secs(60);
+const JWKS_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
+
+fn jwks_reply(jwks: String) -> Response {
+    let reply = warp::reply::with_header(jwks, "content-type", "application/json");
+    let reply = warp::reply::with_header(reply, "cache-control", "max-age=300");
+    warp::reply::Reply::into_response(reply)
+}
+
+async fn handle_jwks(
+    mut client: IssuerPluginClient<Channel>,
+    cache: JwksCache,
+) -> Result<Response, Rejection> {
+    // Read the cache and drop the lock before any network call, so a hung
+    // issuer plugin never serializes readers behind it.
+    if let Some((body, fetched_at)) = cache.lock().await.clone()
+        && fetched_at.elapsed() < JWKS_CACHE_TTL
+    {
+        return Ok(jwks_reply(body));
+    }
+
+    match timeout(JWKS_FETCH_TIMEOUT, client.get_jwks(GetJwksRequest {})).await {
+        Ok(Ok(resp)) => {
             let jwks = resp.into_inner().jwks_json;
-            let reply = warp::reply::with_header(jwks, "content-type", "application/json");
-            let reply = warp::reply::with_header(reply, "cache-control", "max-age=300");
-            Ok(warp::reply::Reply::into_response(reply))
+            *cache.lock().await = Some((jwks.clone(), std::time::Instant::now()));
+            Ok(jwks_reply(jwks))
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             tracing::error!("Issuer plugin GetJwks failed: {}", e);
+            Ok(json_status(
+                &serde_json::json!({"error": "issuer_plugin_unavailable"}),
+                StatusCode::SERVICE_UNAVAILABLE,
+            ))
+        }
+        Err(_) => {
+            tracing::error!("Issuer plugin GetJwks timed out");
             Ok(json_status(
                 &serde_json::json!({"error": "issuer_plugin_unavailable"}),
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -248,6 +282,8 @@ async fn handle_pat_issue(
         .as_deref()
         .is_some_and(|header| constant_time_eq(header, &expected));
     if !authorized {
+        // The only signal a brute-force or a misconfigured dashboard leaves.
+        tracing::warn!("Rejected /internal/pat/issue: bad or missing shared secret");
         return Ok(json_status(
             &serde_json::json!({"error": "unauthorized"}),
             StatusCode::UNAUTHORIZED,

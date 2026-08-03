@@ -38,6 +38,7 @@ type dashboardClient struct {
 // Lets tests inject a static token without standing up an Auth0 mock.
 type tokenProvider interface {
 	token(ctx context.Context) (string, error)
+	invalidate()
 }
 
 type holdRequestBody struct {
@@ -78,6 +79,34 @@ func newDashboardClient(cfg *accountConfig, tokens tokenProvider) *dashboardClie
 	}
 }
 
+// do sends a dashboard request and reads the full response. A 401 means the
+// cached M2M token was rejected — something token expiry alone cannot predict —
+// so the token is dropped and the request retried exactly once with a fresh one.
+func (d *dashboardClient) do(ctx context.Context, method, path string, body []byte) (int, []byte, error) {
+	status, rawBody, err := d.send(ctx, method, path, body)
+	if err != nil || status != http.StatusUnauthorized {
+		return status, rawBody, err
+	}
+
+	d.logger.Warn("dashboard rejected the M2M token (401); refreshing and retrying once")
+	d.tokens.invalidate()
+	return d.send(ctx, method, path, body)
+}
+
+func (d *dashboardClient) send(ctx context.Context, method, path string, body []byte) (int, []byte, error) {
+	req, err := d.newRequest(ctx, method, path, body)
+	if err != nil {
+		return 0, nil, err
+	}
+	resp, err := d.httpClient.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	rawBody, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, rawBody, nil
+}
+
 // Hold posts to /service/credits/hold. Returns ErrInsufficientCredits on 422,
 // or a wrapped transport error on any other non-2xx.
 func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint32, operation, jti string) (string, int64, error) {
@@ -86,20 +115,12 @@ func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint3
 		return "", 0, fmt.Errorf("marshal hold request: %w", err)
 	}
 
-	req, err := d.newRequest(ctx, http.MethodPost, "/service/credits/hold", body)
-	if err != nil {
-		return "", 0, err
-	}
-
-	resp, err := d.httpClient.Do(req)
+	status, rawBody, err := d.do(ctx, http.MethodPost, "/service/credits/hold", body)
 	if err != nil {
 		return "", 0, fmt.Errorf("dashboard hold transport error: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	rawBody, _ := io.ReadAll(resp.Body)
-
-	switch resp.StatusCode {
+	switch status {
 	case http.StatusOK, http.StatusCreated:
 		var parsed holdResponseBody
 		if err := json.Unmarshal(rawBody, &parsed); err != nil {
@@ -119,7 +140,7 @@ func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint3
 	case http.StatusNotFound:
 		return "", 0, ErrUnknownCredential
 	default:
-		return "", 0, fmt.Errorf("dashboard hold returned %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+		return "", 0, fmt.Errorf("dashboard hold returned %d: %s", status, strings.TrimSpace(string(rawBody)))
 	}
 }
 
@@ -130,21 +151,13 @@ func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint3
 // idempotent on the backend.
 func (d *dashboardClient) Settle(ctx context.Context, ledgerID string) (int64, error) {
 	path := "/service/credits/hold/" + ledgerID + "/settle"
-	req, err := d.newRequest(ctx, http.MethodPost, path, nil)
-	if err != nil {
-		return 0, err
-	}
-
-	resp, err := d.httpClient.Do(req)
+	status, rawBody, err := d.do(ctx, http.MethodPost, path, nil)
 	if err != nil {
 		return 0, fmt.Errorf("dashboard settle transport error: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	rawBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return 0, fmt.Errorf("dashboard settle returned %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+	if status != http.StatusOK && status != http.StatusCreated {
+		return 0, fmt.Errorf("dashboard settle returned %d: %s", status, strings.TrimSpace(string(rawBody)))
 	}
 
 	var parsed settleResponseBody
@@ -159,21 +172,13 @@ func (d *dashboardClient) Settle(ctx context.Context, ledgerID string) (int64, e
 // The endpoint is idempotent on the backend.
 func (d *dashboardClient) Release(ctx context.Context, ledgerID string) (int64, error) {
 	path := "/service/credits/hold/" + ledgerID + "/release"
-	req, err := d.newRequest(ctx, http.MethodPost, path, nil)
-	if err != nil {
-		return 0, err
-	}
-
-	resp, err := d.httpClient.Do(req)
+	status, rawBody, err := d.do(ctx, http.MethodPost, path, nil)
 	if err != nil {
 		return 0, fmt.Errorf("dashboard release transport error: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	rawBody, _ := io.ReadAll(resp.Body)
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return 0, fmt.Errorf("dashboard release returned %d: %s", resp.StatusCode, strings.TrimSpace(string(rawBody)))
+	if status != http.StatusOK && status != http.StatusCreated {
+		return 0, fmt.Errorf("dashboard release returned %d: %s", status, strings.TrimSpace(string(rawBody)))
 	}
 
 	var parsed releaseResponseBody

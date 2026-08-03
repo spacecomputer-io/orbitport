@@ -53,7 +53,7 @@ func NewPlugin() (*Plugin, error) {
 	return &Plugin{cfg: cfg, signer: s, logger: logger}, nil
 }
 
-func (p *Plugin) IssueToken(_ context.Context, req *proto.IssueTokenRequest) (*proto.IssueTokenResponse, error) {
+func (p *Plugin) IssueToken(ctx context.Context, req *proto.IssueTokenRequest) (*proto.IssueTokenResponse, error) {
 	if req.GetJti() == "" {
 		return nil, status.Error(codes.InvalidArgument, "jti is required")
 	}
@@ -84,7 +84,7 @@ func (p *Plugin) IssueToken(_ context.Context, req *proto.IssueTokenRequest) (*p
 		claims["kms_tenant"] = req.GetKmsTenant()
 	}
 
-	token, err := p.signer.Mint(claims)
+	token, err := p.signer.Mint(ctx, claims)
 	if err != nil {
 		p.logger.Errorf("signing PAT jti=%s failed: %v", req.GetJti(), err)
 		return nil, status.Error(codes.Internal, "signing failed")
@@ -95,8 +95,8 @@ func (p *Plugin) IssueToken(_ context.Context, req *proto.IssueTokenRequest) (*p
 	return &proto.IssueTokenResponse{Ok: true, Token: token}, nil
 }
 
-func (p *Plugin) GetJwks(_ context.Context, _ *proto.GetJwksRequest) (*proto.GetJwksResponse, error) {
-	jwks, err := p.signer.JWKS()
+func (p *Plugin) GetJwks(ctx context.Context, _ *proto.GetJwksRequest) (*proto.GetJwksResponse, error) {
+	jwks, err := p.signer.JWKS(ctx)
 	if err != nil {
 		p.logger.Errorf("building JWKS failed: %v", err)
 		return nil, status.Error(codes.Internal, "building JWKS failed")

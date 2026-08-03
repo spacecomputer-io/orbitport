@@ -18,6 +18,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
@@ -181,6 +183,9 @@ func TestValidateToken_UnknownKidRefetches(t *testing.T) {
 
 	// Rotate: mock now serves only the new key; a token signed with it has
 	// an unknown kid, which must trigger exactly one refetch and then verify.
+	// The refetch throttle is disabled here so rotation pickup is tested on its
+	// own; TestValidateToken_UnknownKidRefetchIsThrottled covers the throttle.
+	p.patKeys.minRefresh = 0
 	mock.setJWKS(jwksJSON("kid-new", &newKey.PublicKey))
 	resp, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
 		Token: mintES256(t, newKey, "kid-new", patClaims()),
@@ -202,9 +207,13 @@ func TestValidateToken_ExpiredPATRejected(t *testing.T) {
 
 	_, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{Token: token})
 	require.Error(t, err)
-	require.ErrorIs(t, err, jwt.ErrTokenExpired)
-	// Gateway contract: expired PATs are distinguishable by this prefix.
-	require.True(t, strings.HasPrefix(err.Error(), "pat_expired:"), "got: %v", err)
+	// Gateway contract: an expired PAT is typed Unauthenticated and carries the
+	// legacy "pat_expired:" message prefix. Both halves are load-bearing — the
+	// gateway matches either.
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expired PAT must carry a gRPC status, got: %v", err)
+	require.Equal(t, codes.Unauthenticated, st.Code())
+	require.True(t, strings.Contains(st.Message(), "pat_expired:"), "got: %v", st.Message())
 }
 
 func TestValidateToken_AlgConfusionRejected(t *testing.T) {
@@ -252,4 +261,66 @@ func TestNewPlugin_PartialPatConfigFailsStartup(t *testing.T) {
 	_, err := NewPlugin()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ORBITPORT_AUTH_ISSUER_PLUGIN")
+}
+
+// The JWT library runs the keyfunc before verifying any signature, so a token
+// with a bogus kid costs an attacker nothing. Without a throttle each one buys
+// a JWKS refetch, turning unsigned garbage into load on the issuer plugin.
+func TestValidateToken_UnknownKidRefetchIsThrottled(t *testing.T) {
+	key := newP256Key(t)
+	mock := &mockIssuer{jwks: jwksJSON("kid-1", &key.PublicKey)}
+	p := newTestPlugin(t, startMockIssuer(t, mock))
+
+	// Prime the cache.
+	_, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintES256(t, key, "kid-1", patClaims()),
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, mock.callCount())
+
+	// A flood of unsigned tokens naming made-up kids must not reach the issuer.
+	for i := 0; i < 25; i++ {
+		_, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+			Token: mintES256(t, key, fmt.Sprintf("bogus-kid-%d", i), patClaims()),
+		})
+		require.Error(t, err)
+	}
+	require.Equal(t, 1, mock.callCount(), "bogus kids must not trigger JWKS refetches")
+
+	// A genuinely valid kid still verifies from cache throughout.
+	resp, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintES256(t, key, "kid-1", patClaims()),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Ok)
+	require.Equal(t, 1, mock.callCount())
+}
+
+// An unreachable issuer plugin is an outage, not a bad token. It must surface
+// as Unavailable so the gateway answers 503 — a 401 would tell a user with a
+// perfectly valid PAT that their token is invalid.
+func TestValidateToken_IssuerOutageIsUnavailable(t *testing.T) {
+	key := newP256Key(t)
+	mock := &mockIssuer{jwks: jwksJSON("kid-1", &key.PublicKey)}
+	addr := startMockIssuer(t, mock)
+	p := newTestPlugin(t, addr)
+
+	// Prime the cache, then age it past the TTL so the next call must refetch.
+	_, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintES256(t, key, "kid-1", patClaims()),
+	})
+	require.NoError(t, err)
+
+	// Point the cache at a dead address to simulate the issuer going away.
+	dead, err := newJWKSCache("127.0.0.1:1")
+	require.NoError(t, err)
+	p.patKeys = dead
+
+	_, err = p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintES256(t, key, "kid-1", patClaims()),
+	})
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok, "issuer outage must carry a gRPC status, got: %v", err)
+	require.Equal(t, codes.Unavailable, st.Code(), "got: %v", st.Message())
 }

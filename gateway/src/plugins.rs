@@ -156,17 +156,21 @@ impl PluginCatalog {
         }
     }
 
+    /// Returns a lazy channel: it connects on first use and reconnects on its
+    /// own afterwards. Eager `.connect()` here would bind a configured plugin's
+    /// availability to one instant at startup — a blip would leave the caller
+    /// holding `None` for the process lifetime, silently disabling whatever
+    /// that plugin gates (credit holds and PAT revocation, for the account
+    /// plugin). Startup health is already gated by `wait_for`.
     pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {
         let url = self
             .urls
             .get(plugin_name)
             .ok_or_else(|| PluginError::PluginNotFound(plugin_name.to_string()))?;
 
-        Channel::from_shared(url.to_string())
+        Ok(Channel::from_shared(url.to_string())
             .map_err(|e| PluginError::ConnectionError(format!("Failed to create channel: {e}")))?
-            .connect()
-            .await
-            .map_err(|_e| PluginError::ConnectionError(plugin_name.to_string()))
+            .connect_lazy())
     }
 
     pub async fn get_auth_client(&self) -> Result<AuthPluginClient<Channel>, PluginError> {
