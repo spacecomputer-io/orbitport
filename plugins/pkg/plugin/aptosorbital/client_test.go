@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/testutils"
@@ -178,4 +180,50 @@ func TestGetTrueRandomnessSeedWithMockResponses(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "context canceled")
 	})
+}
+
+func TestGetTrueRandomnessSeedNoDataAvailable(t *testing.T) {
+	mockAuth := testutils.NewMockServer(true, `{"access_token": "11111111111111", "expires_in": 3600, "token_type": "Bearer"}`)
+	defer mockAuth.Close()
+
+	mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"code": "NO_DATA_AVAILABLE", "message": "No randomness available. All data has been consumed."}`))
+	}))
+	defer mockAPI.Close()
+
+	client, err := NewClient(
+		WithClientID("client_id"),
+		WithClientSecret("client_secret"),
+		WithAuthURL(mockAuth.URL),
+		WithApiURL(mockAPI.URL),
+		WithRateLimit(1, 2),
+	)
+	require.NoError(t, err)
+
+	_, err = client.GetTrueRandomnessSeed(context.Background(), true, 1)
+	require.ErrorIs(t, err, ErrNoDataAvailable)
+}
+
+func TestGetTrueRandomnessSeedNoDataAvailableWithDifferentStatus(t *testing.T) {
+	mockAuth := testutils.NewMockServer(true, `{"access_token": "11111111111111", "expires_in": 3600, "token_type": "Bearer"}`)
+	defer mockAuth.Close()
+
+	mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"code": "NO_DATA_AVAILABLE", "message": "No randomness available. All data has been consumed."}`))
+	}))
+	defer mockAPI.Close()
+
+	client, err := NewClient(
+		WithClientID("client_id"),
+		WithClientSecret("client_secret"),
+		WithAuthURL(mockAuth.URL),
+		WithApiURL(mockAPI.URL),
+		WithRateLimit(1, 2),
+	)
+	require.NoError(t, err)
+
+	_, err = client.GetTrueRandomnessSeed(context.Background(), true, 1)
+	require.ErrorIs(t, err, ErrNoDataAvailable)
 }
