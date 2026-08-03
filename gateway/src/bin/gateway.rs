@@ -88,11 +88,15 @@ fn validate_pat_revocation_gating(
         );
         return Ok(());
     }
+    // Deliberately does not name the override. This message is read by
+    // operators during a failed prod rollout, where reaching for the bypass
+    // would silently disable both revocation and billing; the local-dev
+    // escape hatch is documented in CONTEXT.md and preset in the compose
+    // overlay that needs it, which is where devs actually look.
     Err(
         "ORBITPORT_ISSUER_PLUGIN is set but ORBITPORT_ACCOUNT_PLUGIN is not: PATs would be \
          mintable but never revocable (revocation is enforced on the account plugin's Hold \
-         path). Set ORBITPORT_ACCOUNT_PLUGIN, or ORBITPORT_ALLOW_UNGATED_PATS=true for local \
-         dev only."
+         path). Set ORBITPORT_ACCOUNT_PLUGIN."
             .to_string(),
     )
 }
