@@ -14,6 +14,8 @@ use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 use crate::proto::plugins::issuer::issuer_plugin_client::IssuerPluginClient;
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
+use crate::proto::plugins::threshold::threshold_plugin_client::ThresholdPluginClient;
+use crate::services::threshold::ThresholdGroupRegistry;
 
 use thiserror::Error;
 
@@ -118,6 +120,8 @@ pub async fn wait_for(
 
 pub struct PluginCatalog {
     urls: Arc<HashMap<String, String>>,
+    threshold_enabled: bool,
+    threshold_groups: ThresholdGroupRegistry,
 }
 
 impl PluginCatalog {
@@ -127,6 +131,9 @@ impl PluginCatalog {
         kms_url: &str,
         account_url: Option<&str>,
         issuer_url: Option<&str>,
+        threshold_enabled: bool,
+        threshold_url: &str,
+        threshold_groups: ThresholdGroupRegistry,
     ) -> Self {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
@@ -138,9 +145,14 @@ impl PluginCatalog {
         if let Some(url) = issuer_url {
             urls.insert("issuer".to_string(), url.to_string());
         }
+        if threshold_enabled {
+            urls.insert("threshold".to_string(), threshold_url.to_string());
+        }
 
         PluginCatalog {
             urls: Arc::new(urls),
+            threshold_enabled,
+            threshold_groups,
         }
     }
 
@@ -182,5 +194,23 @@ impl PluginCatalog {
     pub async fn get_issuer_client(&self) -> Result<IssuerPluginClient<Channel>, PluginError> {
         let channel = self.get_client("issuer").await?;
         Ok(IssuerPluginClient::new(channel))
+    }
+
+    pub async fn get_threshold_client(
+        &self,
+    ) -> Result<ThresholdPluginClient<Channel>, PluginError> {
+        if !self.threshold_enabled {
+            return Err(PluginError::PluginNotFound("threshold".to_string()));
+        }
+        let channel = self.get_client("threshold").await?;
+        Ok(ThresholdPluginClient::new(channel))
+    }
+
+    pub fn threshold_enabled(&self) -> bool {
+        self.threshold_enabled
+    }
+
+    pub fn threshold_groups(&self) -> ThresholdGroupRegistry {
+        self.threshold_groups.clone()
     }
 }

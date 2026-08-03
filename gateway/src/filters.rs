@@ -281,9 +281,19 @@ pub async fn account_settle(account_client: Option<AccountPluginClient<Channel>>
 
     let settle = tokio::time::timeout(Duration::from_secs(2), client.settle(req)).await;
     match settle {
-        Ok(Ok(_)) => {
-            metrics::record_account_settle("ok");
-            tracing::debug!("Account settle succeeded for ledger_id={}", ledger_id);
+        Ok(Ok(resp)) => {
+            let body = resp.into_inner();
+            if body.ok {
+                metrics::record_account_settle("ok");
+                tracing::debug!("Account settle succeeded for ledger_id={}", ledger_id);
+            } else {
+                metrics::record_account_settle("plugin_error");
+                tracing::warn!(
+                    "Account settle returned ok=false for ledger_id={}: {}. Sweeper will refund the orphan.",
+                    ledger_id,
+                    body.error
+                );
+            }
         }
         Ok(Err(e)) => {
             metrics::record_account_settle("plugin_error");

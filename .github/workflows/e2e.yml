@@ -11,11 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Install Docker using Docker's official script
-        run: |
-          curl -fsSL https://get.docker.com -o get-docker.sh
-          sudo sh get-docker.sh
-        continue-on-error: false
+
       - name: Install Docker Compose
         run: |
             sudo curl -L "https://github.com/docker/compose/releases/download/v2.34.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
@@ -34,11 +30,19 @@ jobs:
       - name: Checkout OpenBao Ethereum plugin
         uses: actions/checkout@v4
         with:
-          repository: spacecomputer-io/openbao-eth-plugin-poc
+          repository: spacecomputer-io/openbao-eth-plugin
           ref: main
-          path: openbao-eth-plugin-poc
+          path: openbao-eth-plugin
           fetch-depth: 1
           token: ${{ secrets.OPENBAO_ETH_PLUGIN_PAT }}
+      - name: Checkout OpenBao Threshold plugin
+        uses: actions/checkout@v4
+        with:
+          repository: spacecomputer-io/openbao-threshold-plugin
+          ref: main
+          path: openbao-threshold-plugin
+          fetch-depth: 1
+          token: ${{ secrets.OPENBAO_THRESHOLD_PLUGIN_PAT }}
       - name: Build docker images
         run: |
           make docker-build

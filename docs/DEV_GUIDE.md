@@ -53,7 +53,7 @@ This will start the gateway and all plugins in docker containers, as well as moc
   - `orbitport-kv` (KV v2)
   - `ethereum-secrets-plugin` at `ethereum`
 
-The dev stack expects a plugin repo to exist at `../openbao-eth-plugin-poc` by default. If your checkout lives elsewhere, set:
+The dev stack expects a plugin repo to exist at `../openbao-eth-plugin` by default. If your checkout lives elsewhere, set:
 
 ```bash
 ORBITPORT_OPENBAO_ETH_PLUGIN_DIR=/absolute/path/to/openbao-eth-plugin

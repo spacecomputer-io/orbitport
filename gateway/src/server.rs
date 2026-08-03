@@ -398,7 +398,7 @@ async fn handle_rpc(
         tracing::error!("RPC validation error [id={}]: {}", req_id, e);
         account_release(account_client.clone(), &ledger_id).await;
         let res: JsonRpcResponse<()> =
-            JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {}", e));
+            JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {e}"));
         return Ok(warp::reply::json(&res));
     }
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -420,7 +420,9 @@ async fn handle_rpc(
     {
         Ok(Ok(result)) => {
             tracing::debug!("RPC executed successfully [id={}]", req_id);
-            account_settle(account_client, &ledger_id).await;
+            tokio::spawn(async move {
+                account_settle(account_client, &ledger_id).await;
+            });
             Ok(warp::reply::json(&result))
         }
         Ok(Err(e)) => {
@@ -468,8 +470,7 @@ async fn handle_get(
             metrics::record_validation("GET", "bulk_limit_exceeded");
             account_release(account_client.clone(), &ledger_id).await;
             return Err(warp::reject::custom(GatewayError::BadRequest(format!(
-                "Bulk size {} exceeds maximum {}",
-                b, bulk_max
+                "Bulk size {b} exceeds maximum {bulk_max}"
             ))));
         } else {
             tracing::debug!("[req={}] Bulk size: {}", req_id, b);
@@ -526,8 +527,7 @@ async fn handle_post(
             metrics::record_validation("POST", "bulk_limit_exceeded");
             account_release(account_client.clone(), &ledger_id).await;
             return Err(warp::reject::custom(GatewayError::BadRequest(format!(
-                "Bulk size {} exceeds maximum {}",
-                b, bulk_max
+                "Bulk size {b} exceeds maximum {bulk_max}"
             ))));
         } else {
             tracing::debug!("[req={}] Bulk size: {}", req_id, b);
@@ -594,7 +594,11 @@ async fn handle_service_req(
                     .inc();
                 metrics::record_request(&svc_name, "ok", duration);
                 tracing::debug!("[req={}] Got service result", req_id);
-                account_settle(account_client.clone(), &ledger_id).await;
+                let account_client = account_client.clone();
+                let ledger_id = ledger_id.clone();
+                tokio::spawn(async move {
+                    account_settle(account_client, &ledger_id).await;
+                });
                 Ok(warp::reply::json(&result))
             }
             Err(e) => {

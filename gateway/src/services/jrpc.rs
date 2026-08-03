@@ -6,9 +6,11 @@ use crate::proto::services::kms::{
     CreateKeyRequest, DecryptRequest, EncryptRequest, GenerateDataKeyRequest,
     GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
 };
+use crate::proto::services::threshold::DkgRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{KmsRpcCall, KmsService};
+use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
 #[derive(Serialize)]
 pub struct JsonRpcError {
@@ -88,6 +90,8 @@ pub enum RpcCall {
     RotateKey(RotateKeyRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
+    #[serde(rename = "kms_threshold.CoordinateDKG")]
+    CoordinateDKG(DkgRequest),
 }
 
 impl RpcCall {
@@ -111,6 +115,9 @@ impl RpcCall {
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
+            RpcCall::CoordinateDKG(req) => {
+                ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
+            }
         }
         Ok(())
     }
@@ -175,6 +182,15 @@ impl RpcCall {
                 )
                 .await
             }
+            RpcCall::CoordinateDKG(req) => {
+                execute_threshold(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    ThresholdRpcCall::CoordinateDkg(req),
+                )
+                .await
+            }
         }
     }
 }
@@ -185,7 +201,7 @@ fn serialize_success_response<T: Serialize>(
 ) -> Result<serde_json::Value, tonic::Status> {
     let res = JsonRpcResponse::success(req_id, result);
     serde_json::to_value(res)
-        .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {}", e)))
+        .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {e}")))
 }
 
 async fn execute_kms(
@@ -199,6 +215,25 @@ async fn execute_kms(
         .await
         .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
     let mut svc = KmsService::new(grpc_client);
+    let results = svc.execute(client_id, req_id, call).await?;
+    serialize_success_response(req_id, results)
+}
+
+async fn execute_threshold(
+    req_id: u64,
+    client_id: &str,
+    plugin_catalog: &PluginCatalog,
+    call: ThresholdRpcCall,
+) -> Result<serde_json::Value, tonic::Status> {
+    if !plugin_catalog.threshold_enabled() {
+        return Err(tonic::Status::unavailable("Threshold feature disabled"));
+    }
+
+    let grpc_client = plugin_catalog
+        .get_threshold_client()
+        .await
+        .map_err(|_| tonic::Status::unavailable("Threshold plugin unavailable"))?;
+    let mut svc = ThresholdService::new(grpc_client, plugin_catalog.threshold_groups());
     let results = svc.execute(client_id, req_id, call).await?;
     serialize_success_response(req_id, results)
 }
@@ -248,5 +283,59 @@ mod test {
             RpcCall::GetCapabilities(_) => {}
             _ => panic!("expected kms.GetCapabilities"),
         }
+    }
+
+    #[test]
+    fn test_deserialize_threshold_coordinate_dkg_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "kms_threshold.CoordinateDKG",
+            "params": {
+                "Alias": "key-1",
+                "GroupName": "team-a",
+                "SessionId": "dkg-1"
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::CoordinateDKG(params) => {
+                assert_eq!(params.alias, "key-1");
+                assert_eq!(params.group_name, "team-a");
+                assert_eq!(params.session_id, "dkg-1");
+            }
+            _ => panic!("expected kms_threshold.CoordinateDKG"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_threshold_coordinate_dkg_disabled() {
+        let plugin_catalog = PluginCatalog::new(
+            "http://auth:50000",
+            "http://masterseed:50003",
+            "http://kms:50004",
+            None,
+            None,
+            false,
+            "",
+            crate::services::threshold::ThresholdGroupRegistry::default(),
+        );
+
+        let err = execute_threshold(
+            9,
+            "client-1",
+            &plugin_catalog,
+            ThresholdRpcCall::CoordinateDkg(DkgRequest {
+                alias: "key-1".to_string(),
+                group_name: "team-a".to_string(),
+                session_id: "dkg-1".to_string(),
+            }),
+        )
+        .await
+        .expect_err("threshold feature should be disabled");
+
+        assert_eq!(err.code(), tonic::Code::Unavailable);
+        assert_eq!(err.message(), "Threshold feature disabled");
     }
 }
