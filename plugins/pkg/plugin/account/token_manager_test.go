@@ -203,6 +203,10 @@ func TestTokenManager_ExpiryHasNoMonotonicReading(t *testing.T) {
 	require.NoError(t, tm.refresh(context.Background()))
 
 	exp := tm.cache.Get().expiresAt
+	// `==` is deliberate and Equal() would break this test: `==` compares the
+	// monotonic reading, Equal() ignores it. Since Round(0) strips exactly that
+	// reading, Equal() would return true whether or not the bug is present.
+	//nolint:staticcheck // QF1009: comparing the monotonic reading is the point
 	require.True(t, exp == exp.Round(0), "expiresAt must be wall-clock only, got monotonic reading: %v", exp)
 }
 
