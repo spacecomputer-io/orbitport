@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"google.golang.org/grpc/codes"
@@ -232,8 +233,8 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 		logger.Warnf("CreateKey rejected duplicate alias=%q", alias)
 		return nil, status.Error(codes.AlreadyExists, "Alias already exists for this tenant")
 	} else {
-		var statusErr *openBaoStatusError
-		if !errors.As(err, &statusErr) || statusErr.statusCode != http.StatusNotFound {
+		var statusErr *openbao.StatusError
+		if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusNotFound {
 			logger.Warnf("CreateKey failed to verify key availability alias=%q", alias)
 			return nil, status.Error(codes.Internal, err.Error())
 		}
@@ -334,8 +335,8 @@ func (p *Plugin) metadataProvider(ctx context.Context, clientID, keyID string) (
 
 	metadata, err := p.client.getMetadata(ctx, clientID, resolvedKeyID)
 	if err != nil {
-		var statusErr *openBaoStatusError
-		if errors.As(err, &statusErr) && statusErr.statusCode == http.StatusNotFound {
+		var statusErr *openbao.StatusError
+		if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound {
 			logger.Warnf("denied access to key_id=%s for requesting client", resolvedKeyID)
 			return nil, nil, status.Error(codes.PermissionDenied, "key does not belong to the authenticated client")
 		}

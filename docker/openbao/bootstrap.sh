@@ -9,6 +9,8 @@ OPENBAO_ETH_PLUGIN_NAME="${OPENBAO_ETH_PLUGIN_NAME:-ethereum-secrets-plugin}"
 OPENBAO_ETH_MOUNT="${OPENBAO_ETH_MOUNT:-ethereum}"
 OPENBAO_PQC_PLUGIN_NAME="${OPENBAO_PQC_PLUGIN_NAME:-openbao-pqc-plugin}"
 OPENBAO_PQC_MOUNT="${OPENBAO_PQC_MOUNT:-pqc}"
+OPENBAO_THRESHOLD_PLUGIN_NAME="${OPENBAO_THRESHOLD_PLUGIN_NAME:-openbao-threshold-plugin}"
+OPENBAO_THRESHOLD_MOUNTS="${OPENBAO_THRESHOLD_MOUNTS:-threshold}"
 OPENBAO_TRANSIT_MOUNT="${OPENBAO_TRANSIT_MOUNT:-transit}"
 OPENBAO_KV_MOUNT="${OPENBAO_KV_MOUNT:-orbitport-kv}"
 
@@ -17,6 +19,7 @@ export BAO_TOKEN="${OPENBAO_TOKEN}"
 
 eth_plugin_path="${OPENBAO_PLUGIN_DIR}/${OPENBAO_ETH_PLUGIN_NAME}"
 pqc_plugin_path="${OPENBAO_PLUGIN_DIR}/${OPENBAO_PQC_PLUGIN_NAME}"
+threshold_plugin_path="${OPENBAO_PLUGIN_DIR}/${OPENBAO_THRESHOLD_PLUGIN_NAME}"
 
 echo "waiting for OpenBao at ${BAO_ADDR}"
 until bao status >/dev/null 2>&1; do
@@ -49,6 +52,16 @@ if [ -f "${pqc_plugin_path}" ]; then
     enable_mount_if_missing "${OPENBAO_PQC_MOUNT}" "${OPENBAO_PQC_PLUGIN_NAME}"
 else
     echo "PQC plugin binary not found at ${pqc_plugin_path}; skipping PQC mount"
+fi
+
+if [ -f "${threshold_plugin_path}" ]; then
+    plugin_sha="$(sha256sum "${threshold_plugin_path}" | cut -d' ' -f1)"
+    bao plugin register -sha256="${plugin_sha}" secret "${OPENBAO_THRESHOLD_PLUGIN_NAME}"
+    for mount in ${OPENBAO_THRESHOLD_MOUNTS}; do
+        enable_mount_if_missing "${mount}" "${OPENBAO_THRESHOLD_PLUGIN_NAME}"
+    done
+else
+    echo "threshold plugin binary not found at ${threshold_plugin_path}; skipping threshold mounts"
 fi
 
 echo "OpenBao bootstrap complete"

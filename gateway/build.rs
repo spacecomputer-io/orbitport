@@ -28,9 +28,12 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.SchemeCapability",
 ];
 
-fn apply_kms_service_attributes(config: tonic_prost_build::Builder) -> tonic_prost_build::Builder {
+const THRESHOLD_PASCAL_CASE_TYPES: &[&str] = &["threshold.DkgRequest", "threshold.DkgResponse"];
+
+fn apply_service_attributes(config: tonic_prost_build::Builder) -> tonic_prost_build::Builder {
     KMS_PASCAL_CASE_TYPES
         .iter()
+        .chain(THRESHOLD_PASCAL_CASE_TYPES.iter())
         .fold(config, |config, ty| config.type_attribute(*ty, PASCAL_CASE))
 }
 
@@ -53,7 +56,7 @@ fn build_plugins(proto_dir: &str) -> Result<()> {
 fn build_services(proto_dir: &str) -> Result<()> {
     let (_, service_protos) = protos_in_dir(proto_dir)?;
 
-    let config = apply_kms_service_attributes(
+    let config = apply_service_attributes(
         tonic_prost_build::configure()
             .build_server(false)
             .protoc_arg("--experimental_allow_proto3_optional")
@@ -88,7 +91,7 @@ fn protos_in_dir(dir: &str) -> Result<(String, Vec<String>)> {
     if !std::path::Path::new(dir).exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Directory {} not found", dir),
+            format!("Directory {dir} not found"),
         ));
     }
 
