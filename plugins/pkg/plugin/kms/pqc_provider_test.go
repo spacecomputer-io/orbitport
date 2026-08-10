@@ -285,7 +285,6 @@ func TestMLKEMEncapsulateDecapsulateRoundTrip(t *testing.T) {
 		t.Fatalf("GenerateKey768() error = %v", err)
 	}
 	publicKey := base64.StdEncoding.EncodeToString(decapsulationKey.EncapsulationKey().Bytes())
-	var decapsulatedSharedKeyB64 string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -303,7 +302,6 @@ func TestMLKEMEncapsulateDecapsulateRoundTrip(t *testing.T) {
 				t.Fatalf("Decapsulate() error = %v", decapErr)
 			}
 			sharedKeyB64 := base64.StdEncoding.EncodeToString(sharedKey)
-			decapsulatedSharedKeyB64 = sharedKeyB64
 			_, _ = w.Write([]byte(`{"data":{"name":"` + providerKey + `","variant":"ml-kem-768","shared_key":"` + sharedKeyB64 + `"}}`))
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -350,7 +348,7 @@ func TestMLKEMEncapsulateDecapsulateRoundTrip(t *testing.T) {
 	if decapResp.KeyAgreementAlgorithm != keyAgreementAlgorithmMLKEM {
 		t.Fatalf("unexpected decapsulate response: %+v", decapResp)
 	}
-	if decapsulatedSharedKeyB64 != encapResp.SharedKey {
+	if decapResp.SharedKey != encapResp.SharedKey {
 		t.Fatal("encapsulate and decapsulate shared keys differ")
 	}
 }

@@ -715,6 +715,7 @@ impl KmsService {
         Ok(DecapsulateResponse {
             key_id: response.key_id,
             key_agreement_algorithm: response.key_agreement_algorithm,
+            shared_key: response.shared_key,
         })
     }
 

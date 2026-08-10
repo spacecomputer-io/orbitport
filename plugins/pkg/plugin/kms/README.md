@@ -28,7 +28,9 @@ Implements `KmsPlugin` (`proto/plugins/kms.proto`) with eight RPCs:
   caller-side base64 shared key.
 - `Decapsulate(key_id, ciphertext)` — ML-KEM key
   agreement. Asks OpenBao to recover the server-side shared key with the stored
-  PQC ML-KEM private key without returning that secret to the caller.
+  PQC ML-KEM private key and returns the base64 shared key to the authenticated
+  caller. The shared key is sensitive and must not be logged or persisted
+  unprotected.
 - `GenerateDataKey(key_id, data_key_spec | number_of_bytes)` — returns a
   fresh data key as `{plaintext, ciphertext_blob}` so callers can do
   envelope encryption (Transit only).

@@ -100,6 +100,7 @@ message DecapsulateRequest {
 message DecapsulateResponse {
   string key_id = 1;
   string key_agreement_algorithm = 2;
+  string shared_key = 3;
 }
 
 message CreateKeyRequest {

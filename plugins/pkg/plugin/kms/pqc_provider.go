@@ -195,6 +195,7 @@ func (p *pqcProvider) Decapsulate(ctx context.Context, metadata *keyMetadataReco
 	return &proto.DecapsulateResponse{
 		KeyId:                 metadata.KeyID,
 		KeyAgreementAlgorithm: keyAgreementAlgorithmMLKEM,
+		SharedKey:             decapResp.SharedKey,
 	}, nil
 }
 

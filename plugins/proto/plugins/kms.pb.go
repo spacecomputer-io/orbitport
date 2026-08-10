@@ -786,6 +786,7 @@ type DecapsulateResponse struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	KeyId                 string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	KeyAgreementAlgorithm string                 `protobuf:"bytes,2,opt,name=key_agreement_algorithm,json=keyAgreementAlgorithm,proto3" json:"key_agreement_algorithm,omitempty"`
+	SharedKey             string                 `protobuf:"bytes,3,opt,name=shared_key,json=sharedKey,proto3" json:"shared_key,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
 }
@@ -830,6 +831,13 @@ func (x *DecapsulateResponse) GetKeyId() string {
 func (x *DecapsulateResponse) GetKeyAgreementAlgorithm() string {
 	if x != nil {
 		return x.KeyAgreementAlgorithm
+	}
+	return ""
+}
+
+func (x *DecapsulateResponse) GetSharedKey() string {
+	if x != nil {
+		return x.SharedKey
 	}
 	return ""
 }
@@ -1268,10 +1276,12 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\n" +
 	"ciphertext\x18\x02 \x01(\tR\n" +
 	"ciphertext\x12\x1b\n" +
-	"\tclient_id\x18\x03 \x01(\tR\bclientId\"d\n" +
+	"\tclient_id\x18\x03 \x01(\tR\bclientId\"\x83\x01\n" +
 	"\x13DecapsulateResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x126\n" +
-	"\x17key_agreement_algorithm\x18\x02 \x01(\tR\x15keyAgreementAlgorithm\"\xe8\x01\n" +
+	"\x17key_agreement_algorithm\x18\x02 \x01(\tR\x15keyAgreementAlgorithm\x12\x1d\n" +
+	"\n" +
+	"shared_key\x18\x03 \x01(\tR\tsharedKey\"\xe8\x01\n" +
 	"\x10CreateKeyRequest\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x19\n" +
 	"\bkey_spec\x18\x02 \x01(\tR\akeySpec\x12\x1b\n" +
