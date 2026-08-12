@@ -13,6 +13,8 @@ service KmsService {
   rpc Encrypt(EncryptRequest) returns (EncryptResponse);
   rpc Decrypt(DecryptRequest) returns (DecryptResponse);
   rpc Sign(SignRequest) returns (SignResponse);
+  rpc Encapsulate(EncapsulateRequest) returns (EncapsulateResponse);
+  rpc Decapsulate(DecapsulateRequest) returns (DecapsulateResponse);
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
@@ -76,6 +78,28 @@ message SignResponse {
   string signing_algorithm = 3;
 }
 
+message EncapsulateRequest {
+  string key_id = 1;
+}
+
+message EncapsulateResponse {
+  string key_id = 1;
+  string ciphertext = 2;
+  string shared_key = 3;
+  string key_agreement_algorithm = 4;
+}
+
+message DecapsulateRequest {
+  string key_id = 1;
+  string ciphertext = 2;
+}
+
+message DecapsulateResponse {
+  string key_id = 1;
+  string key_agreement_algorithm = 2;
+  string shared_key = 3;
+}
+
 message CreateKeyRequest {
   string description = 1;
   string key_spec = 2;
@@ -116,6 +140,10 @@ message SigningCapability {
   repeated string message_types = 2;
 }
 
+message KeyAgreementCapability {
+  string key_agreement_algorithm = 1;
+}
+
 message SchemeCapability {
   string scheme = 1;
   repeated string key_specs = 2;
@@ -127,6 +155,9 @@ message SchemeCapability {
   bool supports_decrypt = 8;
   bool supports_generate_data_key = 9;
   bool supports_rotate_key = 10;
+  repeated KeyAgreementCapability key_agreement_capabilities = 11;
+  bool supports_encapsulate = 12;
+  bool supports_decapsulate = 13;
 }
 
 message GetCapabilitiesResponse {

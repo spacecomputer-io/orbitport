@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::proto::services::ctrng::CTrngRequest;
 use crate::proto::services::kms::{
-    CreateKeyRequest, DecryptRequest, EncryptRequest, GenerateDataKeyRequest,
-    GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
+    CreateKeyRequest, DecapsulateRequest, DecryptRequest, EncapsulateRequest, EncryptRequest,
+    GenerateDataKeyRequest, GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
 };
 use crate::proto::services::threshold::DkgRequest;
 
@@ -90,6 +90,10 @@ pub enum RpcCall {
     RotateKey(RotateKeyRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
+    #[serde(rename = "kms.Encapsulate")]
+    Encapsulate(EncapsulateRequest),
+    #[serde(rename = "kms.Decapsulate")]
+    Decapsulate(DecapsulateRequest),
     #[serde(rename = "kms_threshold.CoordinateDKG")]
     CoordinateDKG(DkgRequest),
 }
@@ -112,6 +116,8 @@ impl RpcCall {
             RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
             RpcCall::Decrypt(req) => KmsService::validate_decrypt(req)?,
             RpcCall::Sign(req) => KmsService::validate_sign(req)?,
+            RpcCall::Encapsulate(req) => KmsService::validate_encapsulate(req)?,
+            RpcCall::Decapsulate(req) => KmsService::validate_decapsulate(req)?,
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
@@ -154,6 +160,24 @@ impl RpcCall {
             }
             RpcCall::Sign(req) => {
                 execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Sign(req)).await
+            }
+            RpcCall::Encapsulate(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::Encapsulate(req),
+                )
+                .await
+            }
+            RpcCall::Decapsulate(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::Decapsulate(req),
+                )
+                .await
             }
             RpcCall::CreateKey(req) => {
                 execute_kms(
@@ -282,6 +306,28 @@ mod test {
         match req.call {
             RpcCall::GetCapabilities(_) => {}
             _ => panic!("expected kms.GetCapabilities"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_decapsulate_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "kms.Decapsulate",
+            "params": {
+                "KeyId": "kms:abc",
+                "Ciphertext": "Y3Q="
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::Decapsulate(params) => {
+                assert_eq!(params.key_id, "kms:abc");
+                assert_eq!(params.ciphertext, "Y3Q=");
+            }
+            _ => panic!("expected kms.Decapsulate"),
         }
     }
 

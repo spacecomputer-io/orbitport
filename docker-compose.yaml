@@ -31,11 +31,31 @@ services:
       - -ec
       - apk add --no-cache build-base linux-headers >/dev/null && /bin/sh /orbitport/docker/openbao/build-eth-plugin.sh /src /out
 
+  openbao-pqc-plugin-builder:
+    container_name: openbao-pqc-plugin-builder
+    image: golang:1.25-alpine
+    working_dir: /src
+    environment:
+      - PQC_BACKEND=${ORBITPORT_OPENBAO_PQC_BACKEND:-openssl}
+    volumes:
+      - ${ORBITPORT_OPENBAO_PQC_PLUGIN_DIR:-../openbao-pqc-plugin}:/src:ro
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+      - openbao-plugins:/out
+      - openbao-pqc-cache:/cache
+      - openbao-pqc-go-pkg:/go/pkg/mod
+      - openbao-pqc-go-build:/root/.cache/go-build
+    command:
+      - /bin/sh
+      - -ec
+      - apk add --no-cache autoconf automake build-base curl libtool linux-headers perl >/dev/null && /bin/sh /orbitport/docker/openbao/build-pqc-plugin.sh /src /out
+
   openbao:
     container_name: openbao
     image: openbao/openbao:latest
     depends_on:
       openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
         condition: service_completed_successfully
     command:
       - server
@@ -64,6 +84,8 @@ services:
         condition: service_healthy
       openbao-eth-plugin-builder:
         condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
+        condition: service_completed_successfully
     restart: "no"
     environment:
       - OPENBAO_ADDR=http://openbao:8200
@@ -71,6 +93,8 @@ services:
       - OPENBAO_PLUGIN_DIR=/openbao/plugins
       - OPENBAO_ETH_PLUGIN_NAME=ethereum-secrets-plugin
       - OPENBAO_ETH_MOUNT=ethereum
+      - OPENBAO_PQC_PLUGIN_NAME=openbao-pqc-plugin
+      - OPENBAO_PQC_MOUNT=pqc
       - OPENBAO_TRANSIT_MOUNT=transit
       - OPENBAO_KV_MOUNT=orbitport-kv
     volumes:
@@ -148,6 +172,7 @@ services:
       - ORBITPORT_KMS_TRANSIT_MOUNT=transit
       - ORBITPORT_KMS_KV_MOUNT=orbitport-kv
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
+      - ORBITPORT_KMS_PQC_MOUNT=pqc
     depends_on:
       openbao-bootstrap:
         condition: service_completed_successfully
@@ -243,4 +268,7 @@ services:
 volumes:
   openbao-eth-go-pkg:
   openbao-eth-go-build:
+  openbao-pqc-cache:
+  openbao-pqc-go-pkg:
+  openbao-pqc-go-build:
   openbao-plugins:

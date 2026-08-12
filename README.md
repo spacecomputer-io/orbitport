@@ -15,7 +15,7 @@ Orbitport is a unified gateway to space-based orbital services operated by Space
 
 - **cTRNG** — cosmic true random numbers, served by the `masterseed` plugin from a rolling pool of satellite-harvested entropy.
 - **Randomness Beacon** — a background service that pins a continuously updated beacon record to IPFS and republishes it under a stable IPNS name. Public registry: [`beacons.yaml`](beacons.yaml).
-- **KMS** — multi-tenant Key Management Service backed by OpenBao. Encrypt/decrypt with Transit (`AES_256_GCM96`), sign with Transit (ECDSA, Ed25519, RSA) or with the Ethereum engine (secp256k1, including EIP-191). See the [`kms`](plugins/pkg/plugin/kms/README.md) plugin.
+- **KMS** — multi-tenant Key Management Service backed by OpenBao. Encrypt/decrypt with Transit (`AES_256_GCM96`), sign with Transit (ECDSA, Ed25519, RSA), Ethereum (secp256k1, including EIP-191), or PQC ML-DSA, and use PQC ML-KEM key agreement. See the [`kms`](plugins/pkg/plugin/kms/README.md) plugin.
 - **spaceTEE** — Space Trusted Execution Environment. Planned.
 
 ## Architecture

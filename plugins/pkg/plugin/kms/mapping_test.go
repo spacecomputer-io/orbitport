@@ -41,6 +41,7 @@ func TestNormalizeScheme(t *testing.T) {
 		"":             schemeTransit,
 		schemeTransit:  schemeTransit,
 		schemeEthereum: schemeEthereum,
+		schemePQC:      schemePQC,
 	}
 
 	for input, expected := range tests {
@@ -51,5 +52,45 @@ func TestNormalizeScheme(t *testing.T) {
 		if actual != expected {
 			t.Fatalf("normalizeScheme(%q) = %q, want %q", input, actual, expected)
 		}
+	}
+}
+
+func TestPQCVariant(t *testing.T) {
+	dsaTests := map[string]string{
+		keySpecMLDSA44: "ml-dsa-44",
+		keySpecMLDSA65: "ml-dsa-65",
+		keySpecMLDSA87: "ml-dsa-87",
+	}
+
+	for input, expected := range dsaTests {
+		actual, err := pqcMLDSAVariant(input)
+		if err != nil {
+			t.Fatalf("pqcMLDSAVariant(%q): %v", input, err)
+		}
+		if actual != expected {
+			t.Fatalf("pqcMLDSAVariant(%q) = %q, want %q", input, actual, expected)
+		}
+	}
+
+	kemTests := map[string]string{
+		keySpecMLKEM768:  "ml-kem-768",
+		keySpecMLKEM1024: "ml-kem-1024",
+	}
+
+	for input, expected := range kemTests {
+		actual, err := pqcMLKEMVariant(input)
+		if err != nil {
+			t.Fatalf("pqcMLKEMVariant(%q): %v", input, err)
+		}
+		if actual != expected {
+			t.Fatalf("pqcMLKEMVariant(%q) = %q, want %q", input, actual, expected)
+		}
+	}
+
+	if _, err := pqcMLDSAVariant(keySpecECDSAP256); err == nil {
+		t.Fatal("expected unsupported PQC ML-DSA KeySpec error")
+	}
+	if _, err := pqcMLKEMVariant(keySpecECDSAP256); err == nil {
+		t.Fatal("expected unsupported PQC ML-KEM KeySpec error")
 	}
 }

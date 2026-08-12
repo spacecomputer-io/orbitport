@@ -20,6 +20,11 @@ type signProvider interface {
 	Sign(context.Context, *keyMetadataRecord, *proto.SignRequest) (*proto.SignResponse, error)
 }
 
+type keyAgreementProvider interface {
+	Encapsulate(context.Context, *keyMetadataRecord, *proto.EncapsulateRequest) (*proto.EncapsulateResponse, error)
+	Decapsulate(context.Context, *keyMetadataRecord, *proto.DecapsulateRequest) (*proto.DecapsulateResponse, error)
+}
+
 type dataKeyProvider interface {
 	GenerateDataKey(context.Context, *keyMetadataRecord, *proto.GenerateDataKeyRequest) (*proto.GenerateDataKeyResponse, error)
 }
