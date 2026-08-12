@@ -450,6 +450,30 @@ services:
       - plugin-threshold
       - plugin-masterseed
 
+  tlsproxy:
+    container_name: tlsproxy
+    image: op-tlsproxy:latest
+    build:
+      context: ./tlsproxy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    environment:
+      - ORBITPORT_TLS_PROXY_LISTEN_ADDR=0.0.0.0:9443
+      - ORBITPORT_TLS_PROXY_TARGET_URL=http://gateway:8080
+    ports:
+      - "9443:9443"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--insecure", "https://127.0.0.1:9443/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    depends_on:
+      - gateway
+
   plugin-beacon:
     <<: *plugin-base
     container_name: plugin-beacon

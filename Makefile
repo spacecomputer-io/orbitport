@@ -9,18 +9,22 @@ protoc:
 test:
 	@cd plugins && make test
 	@cd gateway && make test
+	@cd tlsproxy && make test
 
 lint:
 	@cd plugins && make lint
 	@cd gateway && make lint
+	@cd tlsproxy && make lint
 
 fmt:
 	@cd plugins && make fmt
 	@cd gateway && make fmt
+	@cd tlsproxy && make fmt
 
 build: protoc
 	@cd plugins && make build
 	@cd gateway && make build
+	@cd tlsproxy && make build
 
 e2e:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_${E2E_PROFILE} --features localtest
@@ -30,6 +34,9 @@ e2e-lazy:
 
 e2e-all:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_*
+
+e2e-tlsproxy:
+	@cd tlsproxy && make e2e
 
 go-e2e:
 	@cd plugins && E2E_PROFILE=happy go test ./test -run 'TestBeacon' -timeout 10m -tags e2e -v
@@ -51,6 +58,7 @@ devenv-down:
 docker-build:
 	@cd plugins && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
 	@cd gateway && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
+	@cd tlsproxy && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
 
 help:
 	@echo ""
@@ -64,6 +72,7 @@ help:
 	@echo "  e2e             Run end-to-end tests including setup"
 	@echo "  e2e-lazy        Run end-to-end tests without setup"
 	@echo "  e2e-all         Run all end-to-end tests"
+	@echo "  e2e-tlsproxy    Run a real Orbitport RPC through the TLS proxy"
 	@echo "  devenv          Start development environment"
 	@echo "  devenv-up       Build & start development environment (forced)"
 	@echo "  devenv-down     Stop development environment"
