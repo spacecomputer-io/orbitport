@@ -1,4 +1,4 @@
-# Local credit-loop override (UNTRACKED — do not commit).
+# Local credit-loop override.
 #
 # Turns the dev stack into a real credit-charging gateway:
 #   - swaps the noop auth plugin for the real Auth0 auth plugin

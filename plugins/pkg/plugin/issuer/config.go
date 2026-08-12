@@ -20,8 +20,8 @@ type issuerConfig struct {
 	// Audience is the aud claim (same role as AUTH0_AUDIENCE today).
 	Audience string
 	// Signer selects key custody: "local" (in-process EC P-256 key, dev
-	// and pre-OpenBao environments) or "transit" (OpenBao Transit —
-	// not implemented yet).
+	// and pre-OpenBao environments) or "transit" (the key is generated
+	// inside OpenBao/Vault and signing happens there, so it never leaves).
 	Signer string
 	// LocalKeyPEM is a PKCS#8 or SEC1 PEM-encoded EC P-256 private key
 	// for the local signer. Empty = generate an ephemeral key at startup

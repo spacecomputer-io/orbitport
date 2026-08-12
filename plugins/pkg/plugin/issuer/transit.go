@@ -64,7 +64,10 @@ func (s *transitSigner) Mint(ctx context.Context, claims jwt.MapClaims) (string,
 		return "", err
 	}
 
-	header := map[string]string{"alg": alg, "kid": strconv.Itoa(info.LatestVersion)}
+	// typ matches what the local signer emits via jwt.NewWithClaims, so both
+	// signers produce identically shaped tokens and a verifier that checks it
+	// cannot pass in dev and fail in prod.
+	header := map[string]string{"alg": alg, "typ": "JWT", "kid": strconv.Itoa(info.LatestVersion)}
 	headerJSON, err := json.Marshal(header)
 	if err != nil {
 		return "", err

@@ -153,7 +153,9 @@ pub async fn start(
         .boxed();
 
     // Issuer-backed routes are mounted only when the issuer plugin is
-    // configured and reachable at startup (same pattern as account_client).
+    // configured (same pattern as account_client). The channel is lazy, so
+    // reachability is not checked here — a plugin that is down at startup
+    // still gets its routes mounted and reconnects on its own.
     if let Some(client) = issuer_client {
         routes = routes.or(jwks_route(client.clone())).unify().boxed();
 
