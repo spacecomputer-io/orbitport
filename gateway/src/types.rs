@@ -106,3 +106,20 @@ pub struct ServiceResponse {
     pub req_id: u64,
     pub result: Result<ServiceResult, GatewayError>,
 }
+
+/// A config value that must never reach the logs. `Args` is dumped with `{:?}`
+/// at startup, so anything secret needs a `Debug` that redacts itself.
+#[derive(Clone)]
+pub struct Secret(pub String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("[redacted]")
+    }
+}
+
+impl From<&str> for Secret {
+    fn from(s: &str) -> Self {
+        Secret(s.to_string())
+    }
+}

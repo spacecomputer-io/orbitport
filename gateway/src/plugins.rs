@@ -125,9 +125,6 @@ pub struct PluginCatalog {
 }
 
 impl PluginCatalog {
-    // One argument per plugin URL plus the threshold trio. Adding the issuer
-    // pushed this to 8; they are all independent config values with no natural
-    // grouping, so a params struct would only move the same list elsewhere.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_url: &str,

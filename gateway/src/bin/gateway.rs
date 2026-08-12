@@ -2,24 +2,10 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use gateway::{logging, plugins, server, service_manager, types::GatewayError};
-
-/// A config value that must never reach the logs. `Args` is dumped with `{:?}`
-/// at startup, so anything secret needs a `Debug` that redacts itself.
-#[derive(Clone)]
-struct Secret(String);
-
-impl std::fmt::Debug for Secret {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("[redacted]")
-    }
-}
-
-impl From<&str> for Secret {
-    fn from(s: &str) -> Self {
-        Secret(s.to_string())
-    }
-}
+use gateway::{
+    logging, plugins, server, service_manager,
+    types::{GatewayError, Secret},
+};
 
 #[derive(Parser, Debug)]
 struct Args {

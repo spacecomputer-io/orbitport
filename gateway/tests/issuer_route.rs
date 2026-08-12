@@ -17,12 +17,12 @@ use tonic::transport::{Channel, Server};
 use tonic::{Request, Response, Status};
 use warp::http::StatusCode;
 
+use gateway::auth::pat_issue_route;
 use gateway::proto::plugins::issuer::{
     GetJwksRequest, GetJwksResponse, IssueTokenRequest, IssueTokenResponse,
     issuer_plugin_client::IssuerPluginClient,
     issuer_plugin_server::{IssuerPlugin, IssuerPluginServer},
 };
-use gateway::server::pat_issue_route;
 
 #[derive(Default)]
 struct MockIssuerPlugin {
