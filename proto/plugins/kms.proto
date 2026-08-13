@@ -12,6 +12,8 @@ service KmsPlugin {
   rpc Encrypt(EncryptRequest) returns (EncryptResponse);
   rpc Decrypt(DecryptRequest) returns (DecryptResponse);
   rpc Sign(SignRequest) returns (SignResponse);
+  rpc Encapsulate(EncapsulateRequest) returns (EncapsulateResponse);
+  rpc Decapsulate(DecapsulateRequest) returns (DecapsulateResponse);
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
@@ -75,6 +77,30 @@ message SignResponse {
   string key_id = 1;
   string signature = 2;
   string signing_algorithm = 3;
+}
+
+message EncapsulateRequest {
+  string key_id = 1;
+  string client_id = 2;
+}
+
+message EncapsulateResponse {
+  string key_id = 1;
+  string ciphertext = 2;
+  string shared_key = 3;
+  string key_agreement_algorithm = 4;
+}
+
+message DecapsulateRequest {
+  string key_id = 1;
+  string ciphertext = 2;
+  string client_id = 3;
+}
+
+message DecapsulateResponse {
+  string key_id = 1;
+  string key_agreement_algorithm = 2;
+  string shared_key = 3;
 }
 
 message CreateKeyRequest {

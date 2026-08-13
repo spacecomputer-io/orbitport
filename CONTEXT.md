@@ -141,6 +141,7 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | `ORBITPORT_KMS_OPENBAO_PROXY_URL` | — | HTTP base URL of the OpenBao proxy (required) |
 | `ORBITPORT_KMS_TRANSIT_MOUNT` | `transit` | Mount path of OpenBao's Transit Secrets Engine |
 | `ORBITPORT_KMS_ETHEREUM_MOUNT` | `ethereum` | Mount path of the Ethereum Secrets Engine |
+| `ORBITPORT_KMS_PQC_MOUNT` | `pqc` | Mount path of the PQC Secrets Engine |
 | `ORBITPORT_KMS_KV_MOUNT` | `secret` | KV v2 mount used to persist key metadata |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 

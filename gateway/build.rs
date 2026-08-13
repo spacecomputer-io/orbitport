@@ -11,6 +11,10 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.DecryptResponse",
     "kms.SignRequest",
     "kms.SignResponse",
+    "kms.EncapsulateRequest",
+    "kms.EncapsulateResponse",
+    "kms.DecapsulateRequest",
+    "kms.DecapsulateResponse",
     "kms.CreateKeyRequest",
     "kms.CreateKeyResponse",
     "kms.GenerateDataKeyRequest",
@@ -20,6 +24,7 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.GetCapabilitiesRequest",
     "kms.GetCapabilitiesResponse",
     "kms.SigningCapability",
+    "kms.KeyAgreementCapability",
     "kms.SchemeCapability",
 ];
 

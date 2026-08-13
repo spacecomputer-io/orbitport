@@ -17,6 +17,7 @@ type openBaoClient struct {
 	baseURL       string
 	ethereumMount string
 	kvMount       string
+	pqcMount      string
 	transitMount  string
 }
 
@@ -63,13 +64,34 @@ type ethereumSignInfo struct {
 	Address   string `json:"address"`
 }
 
+type pqcKeyInfo struct {
+	Name      string `json:"name"`
+	Version   uint32 `json:"version"`
+	Variant   string `json:"variant"`
+	PublicKey string `json:"public_key"`
+	CreatedAt string `json:"created_at"`
+}
+
+type pqcSignInfo struct {
+	Name      string `json:"name"`
+	Variant   string `json:"variant"`
+	Signature string `json:"signature"`
+}
+
+type pqcDecapsulateInfo struct {
+	Name      string `json:"name"`
+	Variant   string `json:"variant"`
+	SharedKey string `json:"shared_key"`
+}
+
 func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 	logger.Infof(
-		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s ethereum_mount=%s timeout_secs=%d",
+		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
 		strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		cfg.TransitMount,
 		cfg.KVMount,
 		cfg.EthereumMount,
+		cfg.PQCMount,
 		cfg.TimeoutSecs,
 	)
 	return &openBaoClient{
@@ -79,6 +101,7 @@ func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 		baseURL:       strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		ethereumMount: cfg.EthereumMount,
 		kvMount:       cfg.KVMount,
+		pqcMount:      cfg.PQCMount,
 		transitMount:  cfg.TransitMount,
 	}
 }
@@ -218,6 +241,46 @@ func (c *openBaoClient) signEthereum(ctx context.Context, keyName string, body m
 	return &resp.Data, nil
 }
 
+func (c *openBaoClient) createPQCKey(ctx context.Context, name, variant string) (*pqcKeyInfo, error) {
+	var resp struct {
+		Data pqcKeyInfo `json:"data"`
+	}
+	if err := c.Post(ctx, c.pqcPath("mldsa", "keys", name), map[string]any{"variant": variant}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *openBaoClient) createPQCKEMKey(ctx context.Context, name, variant string) (*pqcKeyInfo, error) {
+	var resp struct {
+		Data pqcKeyInfo `json:"data"`
+	}
+	if err := c.Post(ctx, c.pqcPath("mlkem", "keys", name), map[string]any{"variant": variant}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *openBaoClient) signPQC(ctx context.Context, keyName, message string) (*pqcSignInfo, error) {
+	var resp struct {
+		Data pqcSignInfo `json:"data"`
+	}
+	if err := c.Post(ctx, c.pqcPath("mldsa", "sign", keyName), map[string]any{"message": message}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *openBaoClient) decapsulatePQC(ctx context.Context, keyName, ciphertext string) (*pqcDecapsulateInfo, error) {
+	var resp struct {
+		Data pqcDecapsulateInfo `json:"data"`
+	}
+	if err := c.Post(ctx, c.pqcPath("mlkem", "decapsulate", keyName), map[string]any{"ciphertext": ciphertext}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
 func (c *openBaoClient) putMetadata(ctx context.Context, clientID, keyID string, metadata *keyMetadataRecord) error {
 	return c.Post(ctx, c.metadataPath(clientID, keyID), map[string]any{
 		"data": metadata,
@@ -257,6 +320,11 @@ func (c *openBaoClient) transitPath(parts ...string) string {
 
 func (c *openBaoClient) ethereumPath(parts ...string) string {
 	all := append([]string{"v1", c.ethereumMount}, parts...)
+	return c.joinPath(all...)
+}
+
+func (c *openBaoClient) pqcPath(parts ...string) string {
+	all := append([]string{"v1", c.pqcMount}, parts...)
 	return c.joinPath(all...)
 }
 

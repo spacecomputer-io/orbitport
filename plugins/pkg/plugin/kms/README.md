@@ -2,12 +2,12 @@
 
 Multi-tenant Key Management Service. Wraps an OpenBao backend behind a small,
 provider-agnostic gRPC contract so the gateway can offer encrypt / decrypt /
-sign / data-key / key-rotation operations to clients without leaking the
-underlying engine.
+sign / key-agreement / data-key / key-rotation operations to clients without
+leaking the underlying engine.
 
 ## Overview
 
-Implements `KmsPlugin` (`proto/plugins/kms.proto`) with six RPCs:
+Implements `KmsPlugin` (`proto/plugins/kms.proto`) with eight RPCs:
 
 - `CreateKey(alias, scheme, key_spec, key_usage, …)` — provisions a new key
   in the chosen provider and persists its metadata. Returns a stable
@@ -21,7 +21,16 @@ Implements `KmsPlugin` (`proto/plugins/kms.proto`) with six RPCs:
 - `Sign(key_id, message, signing_algorithm, message_type)` — asymmetric
   signing. Transit handles the standard suites (ECDSA P-256/P-384, Ed25519,
   RSA-4096); the Ethereum provider handles secp256k1 with `RAW`, `DIGEST`,
-  and `EIP191` message types.
+  and `EIP191` message types; the PQC provider handles ML-DSA with `RAW`
+  base64-encoded messages.
+- `Encapsulate(key_id)` — ML-KEM key agreement. Computes locally from the
+  stored PQC ML-KEM public key and returns a base64 ciphertext plus the
+  caller-side base64 shared key.
+- `Decapsulate(key_id, ciphertext)` — ML-KEM key
+  agreement. Asks OpenBao to recover the server-side shared key with the stored
+  PQC ML-KEM private key and returns the base64 shared key to the authenticated
+  caller. The shared key is sensitive and must not be logged or persisted
+  unprotected.
 - `GenerateDataKey(key_id, data_key_spec | number_of_bytes)` — returns a
   fresh data key as `{plaintext, ciphertext_blob}` so callers can do
   envelope encryption (Transit only).
@@ -33,7 +42,7 @@ plugin round-trip — it advertises the static capability matrix below.
 
 ## Providers
 
-The plugin selects a provider per request based on the key's `scheme`. Both
+The plugin selects a provider per request based on the key's `scheme`. All
 providers talk to the same OpenBao instance over HTTP.
 
 ### Transit
@@ -67,6 +76,22 @@ Wraps a custom OpenBao Ethereum Secrets Engine mounted at
 - Encrypt / Decrypt / GenerateDataKey / RotateKey are intentionally rejected
   with `FailedPrecondition` — Ethereum keys are sign-only.
 
+### PQC
+
+Wraps the OpenBao PQC Secrets Engine mounted at `ORBITPORT_KMS_PQC_MOUNT`
+(default `pqc`).
+
+- Key specs: `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87`.
+- Key agreement specs: `ML_KEM_768`, `ML_KEM_1024`.
+- Signing algorithm: `ML_DSA`.
+- Key agreement algorithm: `ML_KEM`.
+- Message type: `RAW` only. Messages must be base64-encoded bytes.
+- `CreateKey` returns the ML-DSA public key or ML-KEM encapsulation key as
+  base64 in `KeyMetadata.public_key`. ML-KEM encapsulation uses that public
+  key locally; ML-KEM decapsulation is delegated to OpenBao.
+- Encrypt / Decrypt / GenerateDataKey / RotateKey are intentionally rejected
+  with `FailedPrecondition` — PQC keys are sign/key-agreement only.
+
 ## Multi-tenancy and key naming
 
 Every gateway request carries a `client_id` that the plugin uses to scope
@@ -88,21 +113,27 @@ always `kms:<alias>`; both forms resolve to the same backend key.
 
 `GetCapabilities` (gateway-side) advertises the supported scheme matrix:
 
-| Scheme | Key specs | Signing | Encrypt / Decrypt | Data keys | Rotate |
-| --- | --- | --- | --- | --- | --- |
-| `TRANSIT` | `AES_256_GCM96`, `ECDSA_P256`, `ECDSA_P384`, `ED25519`, `RSA_4096` | ECDSA SHA-256/384, Ed25519, RSASSA PKCS1v15 / PSS SHA-256 (`RAW`, `DIGEST`) | yes | `AES_128`, `AES_256` | yes |
-| `ETHEREUM` | `ECC_SECG_P256K1` | `ETHEREUM_SECP256K1` (`RAW`, `DIGEST`, `EIP191`) | no | no | no |
+| Scheme | Key specs | Signing | Key agreement | Encrypt / Decrypt | Data keys | Rotate |
+| --- | --- | --- | --- | --- | --- | --- |
+| `TRANSIT` | `AES_256_GCM96`, `ECDSA_P256`, `ECDSA_P384`, `ED25519`, `RSA_4096` | ECDSA SHA-256/384, Ed25519, RSASSA PKCS1v15 / PSS SHA-256 (`RAW`, `DIGEST`) | no | yes | `AES_128`, `AES_256` | yes |
+| `ETHEREUM` | `ECC_SECG_P256K1` | `ETHEREUM_SECP256K1` (`RAW`, `DIGEST`, `EIP191`) | no | no | no | no |
+| `PQC` | `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87`, `ML_KEM_768`, `ML_KEM_1024` | `ML_DSA` (`RAW`) | `ML_KEM` | no | no | no |
 
 Clients should call this once at startup to discover what they can ask for.
 
 ## Dependencies
 
 This plugin requires a reachable OpenBao instance with the Transit, KV v2,
-and Ethereum mounts already provisioned. Both compose stacks
-(`docker-compose.yaml`, `dev.docker-compose.yaml`) ship the full stack:
+Ethereum, and PQC mounts already provisioned for the schemes you use. Both
+compose stacks (`docker-compose.yaml`, `dev.docker-compose.yaml`) ship the full stack:
 `openbao` (dev mode), `openbao-bootstrap` (one-shot init of mounts and
 tokens), `openbao-proxy` (handles auth headers in front of OpenBao), and
-this plugin as `plugin-kms`. The plugin waits for `openbao-bootstrap` to
-complete and `openbao-proxy` to report healthy before it starts.
+this plugin as `plugin-kms`. The compose stacks build the Ethereum plugin and
+the PQC plugin from sibling repos, then the bootstrap registers both plugin
+mounts when their binaries are available in the OpenBao plugin directory. The
+PQC builder uses the OpenSSL backend by default; set
+`ORBITPORT_OPENBAO_PQC_BACKEND=wolfssl` to switch the OpenBao PQC plugin
+binary. The KMS plugin waits for `openbao-bootstrap` to complete and
+`openbao-proxy` to report healthy before it starts.
 
 Configuration: see [CONTEXT.md → Plugin: `kms`](../../../../CONTEXT.md#plugin-kms).

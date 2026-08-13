@@ -34,11 +34,12 @@ func NewPlugin() (*Plugin, error) {
 		return nil, fmt.Errorf("ORBITPORT_KMS_OPENBAO_PROXY_URL is required")
 	}
 	logger.Infof(
-		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, ethereum mount=%s",
+		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, ethereum mount=%s, pqc mount=%s",
 		cfg.OpenBaoProxyURL,
 		cfg.TransitMount,
 		cfg.KVMount,
 		cfg.EthereumMount,
+		cfg.PQCMount,
 	)
 	return newPlugin(cfg, newOpenBaoClient(cfg)), nil
 }
@@ -51,6 +52,7 @@ func newPlugin(cfg *kmsConfig, client *openBaoClient) *Plugin {
 		providers: map[string]kmsProvider{
 			schemeTransit:  newTransitProvider(client),
 			schemeEthereum: newEthereumProvider(client),
+			schemePQC:      newPQCProvider(client),
 		},
 	}
 }
@@ -148,6 +150,54 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 		return nil, err
 	}
 	logger.Debugf("Sign completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	return resp, nil
+}
+
+func (p *Plugin) Encapsulate(ctx context.Context, req *proto.EncapsulateRequest) (*proto.EncapsulateResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
+	logger.Debugf("Encapsulate request received for key_id=%s", req.KeyId)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	if err != nil {
+		logger.Warnf("Encapsulate failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	keyAgreement, err := requireKeyAgreementProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("Encapsulate rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	resp, err := keyAgreement.Encapsulate(ctx, metadata, req)
+	if err != nil {
+		logger.Warnf("Encapsulate failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	logger.Debugf("Encapsulate completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	return resp, nil
+}
+
+func (p *Plugin) Decapsulate(ctx context.Context, req *proto.DecapsulateRequest) (*proto.DecapsulateResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
+	logger.Debugf("Decapsulate request received for key_id=%s", req.KeyId)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	if err != nil {
+		logger.Warnf("Decapsulate failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	keyAgreement, err := requireKeyAgreementProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("Decapsulate rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	resp, err := keyAgreement.Decapsulate(ctx, metadata, req)
+	if err != nil {
+		logger.Warnf("Decapsulate failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
+	}
+	logger.Debugf("Decapsulate completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 	return resp, nil
 }
 

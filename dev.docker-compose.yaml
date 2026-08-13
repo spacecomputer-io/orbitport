@@ -36,6 +36,24 @@ services:
       - -ec
       - apk add --no-cache build-base linux-headers >/dev/null && /bin/sh /orbitport/docker/openbao/build-eth-plugin.sh /src /out
 
+  openbao-pqc-plugin-builder:
+    container_name: openbao-pqc-plugin-builder
+    image: golang:1.25-alpine
+    working_dir: /src
+    environment:
+      - PQC_BACKEND=${ORBITPORT_OPENBAO_PQC_BACKEND:-openssl}
+    volumes:
+      - ${ORBITPORT_OPENBAO_PQC_PLUGIN_DIR:-../openbao-pqc-plugin}:/src:ro
+      - ./docker/openbao:/orbitport/docker/openbao:ro
+      - openbao-plugins:/out
+      - openbao-pqc-cache:/cache
+      - openbao-pqc-go-pkg:/go/pkg/mod
+      - openbao-pqc-go-build:/root/.cache/go-build
+    command:
+      - /bin/sh
+      - -ec
+      - apk add --no-cache autoconf automake build-base curl libtool linux-headers perl >/dev/null && /bin/sh /orbitport/docker/openbao/build-pqc-plugin.sh /src /out
+
   openbao-threshold-plugin-builder:
     container_name: openbao-threshold-plugin-builder
     image: golang:1.26-alpine
@@ -56,6 +74,8 @@ services:
     image: openbao/openbao:latest
     depends_on:
       openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
         condition: service_completed_successfully
       openbao-threshold-plugin-builder:
         condition: service_completed_successfully
@@ -84,6 +104,8 @@ services:
     depends_on:
       openbao-eth-plugin-builder:
         condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
+        condition: service_completed_successfully
       openbao-threshold-plugin-builder:
         condition: service_completed_successfully
     command:
@@ -110,6 +132,8 @@ services:
     image: openbao/openbao:latest
     depends_on:
       openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
         condition: service_completed_successfully
       openbao-threshold-plugin-builder:
         condition: service_completed_successfully
@@ -140,6 +164,8 @@ services:
         condition: service_healthy
       openbao-eth-plugin-builder:
         condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
+        condition: service_completed_successfully
       openbao-threshold-plugin-builder:
         condition: service_completed_successfully
     restart: "no"
@@ -158,6 +184,8 @@ services:
         condition: service_healthy
       openbao-eth-plugin-builder:
         condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
+        condition: service_completed_successfully
       openbao-threshold-plugin-builder:
         condition: service_completed_successfully
     restart: "no"
@@ -175,6 +203,8 @@ services:
       openbao-2:
         condition: service_healthy
       openbao-eth-plugin-builder:
+        condition: service_completed_successfully
+      openbao-pqc-plugin-builder:
         condition: service_completed_successfully
       openbao-threshold-plugin-builder:
         condition: service_completed_successfully
@@ -333,6 +363,7 @@ services:
       - ORBITPORT_KMS_TRANSIT_MOUNT=transit
       - ORBITPORT_KMS_KV_MOUNT=orbitport-kv
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
+      - ORBITPORT_KMS_PQC_MOUNT=pqc
     ports:
       - 9004:9000
     depends_on:
@@ -471,5 +502,8 @@ volumes:
   openbao-plugins:
   openbao-eth-go-pkg:
   openbao-eth-go-build:
+  openbao-pqc-cache:
+  openbao-pqc-go-pkg:
+  openbao-pqc-go-build:
   openbao-threshold-go-pkg:
   openbao-threshold-go-build:
