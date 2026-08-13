@@ -124,10 +124,8 @@ func TestTransitRejectsUnvettedKeyType(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestTransitRejectsWrongLengthSignature proves a signature that isn't
-// exactly 64 bytes (raw ES256 R||S) is rejected at mint time instead of
-// silently producing a structurally invalid token — the scenario if
-// OpenBao ever ignored marshaling_algorithm=jws and returned ASN.1 DER.
+// A signature that isn't exactly 64 bytes must be rejected at mint time —
+// the scenario if OpenBao ignored marshaling_algorithm=jws and returned DER.
 func TestTransitRejectsWrongLengthSignature(t *testing.T) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -169,10 +167,8 @@ func TestTransitRejectsWrongLengthSignature(t *testing.T) {
 	require.Contains(t, err.Error(), "wrong length")
 }
 
-// TestTransitTimeoutIsPerCall proves the key-read and sign round trips each
-// get their own fresh timeout budget off the caller's ctx rather than
-// splitting one shared deadline. Two round trips that individually fit
-// within the configured timeout but together exceed it must still succeed.
+// Two round trips that individually fit within the configured timeout but
+// together exceed it must still succeed.
 func TestTransitTimeoutIsPerCall(t *testing.T) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -215,9 +211,8 @@ func TestTransitTimeoutIsPerCall(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	// Constructed directly (rather than via newTransitSigner) so the
-	// timeout can be sub-second; TimeoutSecs on issuerConfig is whole
-	// seconds only.
+	// Constructed directly so the timeout can be sub-second; TimeoutSecs is
+	// whole seconds only.
 	ts := &transitSigner{
 		client:  &http.Client{Timeout: budget},
 		baseURL: srv.URL,

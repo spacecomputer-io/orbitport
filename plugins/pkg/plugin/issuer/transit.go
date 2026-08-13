@@ -20,11 +20,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// transitSigner signs via OpenBao Transit through the OpenBao proxy. The
-// proxy owns authentication (it injects the vault token), so this code
-// sends no credentials — the same contract the KMS plugin relies on.
-// kid = the Transit key version used for the signature; rotation just
-// bumps the version and the JWKS publishes every live version.
+// transitSigner signs via OpenBao Transit through the OpenBao proxy, which
+// injects the vault token — this code holds no OpenBao credentials.
 type transitSigner struct {
 	client  *http.Client
 	baseURL string
@@ -41,7 +38,6 @@ func newTransitSigner(cfg *issuerConfig) *transitSigner {
 	}
 }
 
-// keyInfo is the subset of GET /v1/<mount>/keys/<key> we consume.
 type keyInfo struct {
 	Type          string
 	LatestVersion int
@@ -49,9 +45,22 @@ type keyInfo struct {
 	PublicKeys map[int]string
 }
 
+type jwsHeader struct {
+	Alg string `json:"alg"`
+	Typ string `json:"typ"`
+	Kid string `json:"kid"`
+}
+
+type transitSignRequest struct {
+	Input               string `json:"input"`
+	Prehashed           bool   `json:"prehashed"`
+	MarshalingAlgorithm string `json:"marshaling_algorithm"`
+	KeyVersion          int    `json:"key_version"`
+}
+
 func (s *transitSigner) Mint(ctx context.Context, claims jwt.MapClaims) (string, error) {
-	// Each round trip gets its own fresh budget off the caller's ctx so a
-	// slow key read can't starve the sign call (and vice versa).
+	// Each round trip gets its own budget so a slow key read can't starve
+	// the sign call.
 	readCtx, readCancel := context.WithTimeout(ctx, s.client.Timeout)
 	defer readCancel()
 
@@ -65,10 +74,12 @@ func (s *transitSigner) Mint(ctx context.Context, claims jwt.MapClaims) (string,
 	}
 
 	// typ matches what the local signer emits via jwt.NewWithClaims, so both
-	// signers produce identically shaped tokens and a verifier that checks it
-	// cannot pass in dev and fail in prod.
-	header := map[string]string{"alg": alg, "typ": "JWT", "kid": strconv.Itoa(info.LatestVersion)}
-	headerJSON, err := json.Marshal(header)
+	// signers produce identically shaped tokens.
+	headerJSON, err := json.Marshal(jwsHeader{
+		Alg: alg,
+		Typ: "JWT",
+		Kid: strconv.Itoa(info.LatestVersion),
+	})
 	if err != nil {
 		return "", err
 	}
@@ -79,14 +90,13 @@ func (s *transitSigner) Mint(ctx context.Context, claims jwt.MapClaims) (string,
 	signingString := base64.RawURLEncoding.EncodeToString(headerJSON) +
 		"." + base64.RawURLEncoding.EncodeToString(payloadJSON)
 
-	// Hash-then-sign inside Transit (prehashed=false + /sha2-256), JWS
-	// marshaling for raw R||S. key_version is pinned to the version the
-	// kid header names so a concurrent rotation can't cause a mismatch.
-	body, err := json.Marshal(map[string]any{
-		"input":                base64.StdEncoding.EncodeToString([]byte(signingString)),
-		"prehashed":            false,
-		"marshaling_algorithm": "jws",
-		"key_version":          info.LatestVersion,
+	// key_version is pinned to the version the kid header names so a
+	// concurrent rotation can't cause a mismatch.
+	body, err := json.Marshal(transitSignRequest{
+		Input:               base64.StdEncoding.EncodeToString([]byte(signingString)),
+		Prehashed:           false,
+		MarshalingAlgorithm: "jws",
+		KeyVersion:          info.LatestVersion,
 	})
 	if err != nil {
 		return "", err
@@ -115,10 +125,8 @@ func (s *transitSigner) Mint(ctx context.Context, claims jwt.MapClaims) (string,
 	if err != nil {
 		return "", err
 	}
-	// ES256 is the only vetted alg (see jwsAlg), and it requires exactly
-	// 32+32 raw R||S bytes. This only holds if OpenBao honors
-	// marshaling_algorithm=jws; if it ever returned ASN.1 DER instead,
-	// this catches it here instead of minting a structurally invalid PAT.
+	// Catches OpenBao returning ASN.1 DER instead of honoring
+	// marshaling_algorithm=jws, rather than minting an invalid PAT.
 	sigBytes, err := base64.RawURLEncoding.DecodeString(sig)
 	if err != nil {
 		return "", fmt.Errorf("transit signature is not valid base64url: %w", err)
@@ -192,8 +200,6 @@ func (s *transitSigner) readKey(ctx context.Context) (*keyInfo, error) {
 		return nil, fmt.Errorf("transit key read: %w", err)
 	}
 
-	// Each version's value is an object for asymmetric keys; only
-	// public_key matters here.
 	var rawKeys map[string]struct {
 		PublicKey string `json:"public_key"`
 	}
@@ -236,8 +242,7 @@ func (s *transitSigner) do(req *http.Request, out any) error {
 	return json.Unmarshal(body, out)
 }
 
-// jwsAlg maps a Transit key type to its JWS alg — the signing side of the
-// PQC agreement: the algorithm derives from the key, never a constant.
+// jwsAlg derives the JWS alg from the Transit key type, never a constant.
 func jwsAlg(keyType string) (string, error) {
 	switch keyType {
 	case "ecdsa-p256":
@@ -248,7 +253,7 @@ func jwsAlg(keyType string) (string, error) {
 }
 
 // stripVaultEnvelope turns "vault:vN:<sig>" into base64url-unpadded JWS
-// signature bytes, normalizing whatever base64 flavor OpenBao emitted.
+// signature bytes.
 func stripVaultEnvelope(signature string) (string, error) {
 	parts := strings.SplitN(signature, ":", 3)
 	if len(parts) != 3 || parts[0] != "vault" {
