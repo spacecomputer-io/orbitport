@@ -1,6 +1,5 @@
 //! Issuer-backed routes: the public JWKS endpoint and the internal PAT
-//! issuance endpoint. Both are mounted only when the issuer plugin is
-//! configured.
+//! issuance endpoint.
 
 use serde::Deserialize;
 use std::sync::Arc;
@@ -12,10 +11,8 @@ use crate::proto::plugins::issuer::{
 };
 use tonic::transport::Channel;
 
-/// PUBLIC `GET /.well-known/jwks.json` — like `health_route`, it bypasses
-/// `with_auth`/`with_account_hold`: verifiers must be able to fetch the key
-/// set anonymously. Proxies the issuer plugin's GetJwks and serves the raw
-/// JWKS JSON with a 5-minute cache hint.
+/// PUBLIC `GET /.well-known/jwks.json` — bypasses `with_auth`, since
+/// verifiers must be able to fetch the key set anonymously.
 pub fn jwks_route(
     client: IssuerPluginClient<Channel>,
 ) -> impl Filter<Extract = (Response,), Error = Rejection> + Clone {
@@ -30,9 +27,8 @@ pub fn jwks_route(
 /// Last JWKS body served, with the instant it was fetched.
 type JwksCache = Arc<tokio::sync::Mutex<Option<(String, std::time::Instant)>>>;
 
-/// Server-side JWKS cache lifetime. This route is public and unauthenticated,
-/// so without it every anonymous request fans straight through to the issuer
-/// plugin. Strictly tighter than the `max-age=300` we advertise to clients.
+/// The route is public, so without this every anonymous request fans through
+/// to the issuer plugin. Strictly tighter than the advertised `max-age=300`.
 const JWKS_CACHE_TTL: Duration = Duration::from_secs(60);
 const JWKS_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -46,8 +42,8 @@ async fn handle_jwks(
     mut client: IssuerPluginClient<Channel>,
     cache: JwksCache,
 ) -> Result<Response, Rejection> {
-    // Read the cache and drop the lock before any network call, so a hung
-    // issuer plugin never serializes readers behind it.
+    // Drop the lock before any network call, so a hung issuer plugin never
+    // serializes readers behind it.
     if let Some((body, fetched_at)) = cache.lock().await.clone()
         && fetched_at.elapsed() < JWKS_CACHE_TTL
     {
@@ -88,8 +84,8 @@ struct PatIssueBody {
 }
 
 /// INTERNAL `POST /internal/pat/issue` — deliberately NOT wrapped in
-/// `with_auth`/`with_account_hold`: the caller is the dashboard backend, not
-/// an end user. Guarded by a constant-time shared-secret bearer check.
+/// `with_auth`: the caller is the dashboard backend, not an end user.
+/// Guarded by a constant-time shared-secret bearer check.
 pub fn pat_issue_route(
     client: IssuerPluginClient<Channel>,
     shared_secret: String,
@@ -115,7 +111,6 @@ async fn handle_pat_issue(
         .as_deref()
         .is_some_and(|header| constant_time_eq(header, &expected));
     if !authorized {
-        // The only signal a brute-force or a misconfigured dashboard leaves.
         tracing::warn!("Rejected /internal/pat/issue: bad or missing shared secret");
         return Ok(json_status(
             &serde_json::json!({"error": "unauthorized"}),
@@ -153,8 +148,7 @@ fn json_status(body: &serde_json::Value, status: StatusCode) -> Response {
 }
 
 /// Constant-time string equality via SHA-256 digests: hashing first makes
-/// the comparison length-independent, and the digest fold never
-/// short-circuits.
+/// the comparison length-independent.
 fn constant_time_eq(a: &str, b: &str) -> bool {
     use sha2::{Digest, Sha256};
     let a = Sha256::digest(a.as_bytes());

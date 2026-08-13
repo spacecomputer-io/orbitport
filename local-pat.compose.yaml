@@ -1,10 +1,8 @@
-# PAT local-dev overlay — mint and verify Personal Access Tokens with NO
-# OpenBao: the issuer plugin signs with an ephemeral in-process ES256 key
-# (every restart invalidates outstanding PATs).
+# PAT local-dev overlay. Signs with an ephemeral in-process ES256 key by
+# default, so every restart invalidates outstanding PATs.
 #
-# MUST be stacked with the account overlay. PAT revocation is enforced on the
-# account plugin's Hold path, so the gateway refuses to start with an issuer
-# and no account plugin (FR-O6) — and there is no override:
+# MUST be stacked with the account overlay: the gateway refuses to start with
+# an issuer and no account plugin, since revocation is enforced on Hold.
 #
 #   docker compose --env-file=.dev.env -f dev.docker-compose.yaml \
 #     -f local-pat.compose.yaml -f local-account.compose.yaml up -d --build
@@ -12,15 +10,10 @@
 # What it changes vs the dev stack:
 #   - adds plugin-issuer (mints PATs, serves JWKS)
 #   - swaps authnoop for the real auth plugin with the PAT path enabled
-#     (legacy Auth0 tokens still validate against the real tenant)
-#   - gateway mounts POST /internal/pat/issue (shared secret) and
-#     GET /.well-known/jwks.json
-#
-# The account overlay supplies the rest: account plugin, dashboard URL, and
-# the Auth0 M2M credentials it needs to call the dashboard.
+#   - gateway mounts POST /internal/pat/issue and GET /.well-known/jwks.json
 #
 # The dashboard backend pairs with this via:
-#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8080   (or localhost:8080 on the host)
+#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8080
 #   ORBITPORT_ISSUER_SHARED_SECRET=<the same secret you exported for this stack>
 
 services:
@@ -46,21 +39,18 @@ services:
       - ORBITPORT_GRPC_PORT=50006
       - ORBITPORT_ISSUER_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
       - ORBITPORT_ISSUER_AUD=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
-      # local (default): ephemeral in-process key, dev only.
-      # transit: real OpenBao signing via the dev proxy (which injects the
-      # token) — the pat-signing key is created by openbao-bootstrap. Run:
+      # transit signs against the dev OpenBao; the pat-signing key is created
+      # by openbao-bootstrap. Run:
       #   ORBITPORT_ISSUER_SIGNER=transit docker compose ... up -d
       - ORBITPORT_ISSUER_SIGNER=${ORBITPORT_ISSUER_SIGNER:-local}
       - ORBITPORT_ISSUER_OPENBAO_PROXY_URL=http://openbao-proxy:8200
-      # No ORBITPORT_ISSUER_LOCAL_KEY_PEM on purpose: ephemeral key, dev only.
     depends_on:
       openbao-bootstrap:
         condition: service_completed_successfully
       openbao-proxy:
         condition: service_healthy
 
-  # Real auth plugin (not authnoop) so the ES256/JWKS verification path is
-  # genuinely exercised. Auth0 vars serve the legacy-token path only.
+  # Auth0 vars serve the legacy-token path only.
   plugin-auth:
     environment:
       - ORBITPORT_PLUGIN=auth
@@ -75,9 +65,8 @@ services:
   gateway:
     environment:
       - ORBITPORT_ISSUER_PLUGIN=http://plugin-issuer:50006
-      # No default on purpose: this secret is the only thing standing between a
-      # caller and minting a PAT for any account. Compose fails the run if it is
-      # unset rather than falling back to a value published in this repo.
+      # No default on purpose: this secret is all that stands between a caller
+      # and minting a PAT for any account.
       - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:?set it, e.g. export ORBITPORT_ISSUER_SHARED_SECRET=$(openssl rand -hex 16)}
     depends_on:
       - plugin-issuer

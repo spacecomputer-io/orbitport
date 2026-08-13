@@ -282,10 +282,8 @@ async fn handle_rpc(
         return Ok(warp::reply::json(&res));
     }
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-    // D9: KMS tenancy comes from the verified kms_tenant (PATs carry it as a
-    // claim, legacy Auth0 tokens echo their raw sub). Empty — auth plugin
-    // predating the field or a pre-backfill PAT — falls back to client_id,
-    // the exact value this path forwarded before.
+    // Falling back to client_id keeps the exact value this path forwarded
+    // before kms_tenant existed.
     let client_id = if ctx.auth.kms_tenant.is_empty() {
         ctx.auth.client_id
     } else {

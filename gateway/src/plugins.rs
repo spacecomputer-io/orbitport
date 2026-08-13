@@ -157,12 +157,9 @@ impl PluginCatalog {
         }
     }
 
-    /// Returns a lazy channel: it connects on first use and reconnects on its
-    /// own afterwards. Eager `.connect()` here would bind a configured plugin's
-    /// availability to one instant at startup — a blip would leave the caller
-    /// holding `None` for the process lifetime, silently disabling whatever
-    /// that plugin gates (credit holds and PAT revocation, for the account
-    /// plugin). Startup health is already gated by `wait_for`.
+    /// Returns a lazy channel. An eager `.connect()` would let a startup blip
+    /// leave the caller holding `None` for the process lifetime, silently
+    /// disabling whatever that plugin gates.
     pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {
         let url = self
             .urls

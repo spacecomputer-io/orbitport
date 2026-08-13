@@ -15,8 +15,7 @@ import (
 type staticTokens struct {
 	value string
 	err   error
-	// rotated, when set, becomes the token served after invalidate() — lets a
-	// test tell the retry's token apart from the original.
+	// The token served after invalidate(), so a test can tell the retry apart.
 	rotated      string
 	invalidCalls int
 }
@@ -210,9 +209,8 @@ func TestDashboardClient_NoToken_Errors(t *testing.T) {
 	require.Error(t, err)
 }
 
-// A 401 means the cached M2M token was rejected regardless of what its expiry
-// claimed — the client must drop it and retry once with a fresh one. Without
-// this, a stale token wedges every call until the process restarts.
+// A 401 means the cached M2M token was rejected regardless of its claimed
+// expiry, so the client must drop it and retry once with a fresh one.
 func TestDashboardClient_Hold_RetriesOnceAfter401(t *testing.T) {
 	var seenAuth []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -254,8 +252,8 @@ func TestDashboardClient_Hold_401RetryHappensOnce(t *testing.T) {
 	require.Equal(t, 2, calls)
 }
 
-// 404 is the PAT revocation path: unknown or revoked credential. It must be a
-// distinguishable client error, never folded into a generic transport failure.
+// 404 is the PAT revocation path and must stay a distinguishable client error,
+// never folded into a generic transport failure.
 func TestDashboardClient_Hold_404IsUnknownCredential(t *testing.T) {
 	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)

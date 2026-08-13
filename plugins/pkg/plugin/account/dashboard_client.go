@@ -18,10 +18,9 @@ import (
 // dashboard responds with HTTP 422 + code=INSUFFICIENT_CREDITS.
 var ErrInsufficientCredits = errors.New("insufficient_credits")
 
-// ErrUnknownCredential is returned by dashboardClient.Hold when the
-// dashboard cannot resolve the identity (404): unknown, revoked, or
-// expired credential/token. Under PATs this is the revocation path —
-// an auth failure, never a plugin outage.
+// ErrUnknownCredential is returned by dashboardClient.Hold on a 404: an
+// unknown, revoked, or expired credential. This is the PAT revocation path,
+// an auth failure and never a plugin outage.
 var ErrUnknownCredential = errors.New("unknown_or_revoked_credential")
 
 // dashboardClient is a typed HTTP wrapper around the dashboard backend's
@@ -45,8 +44,7 @@ type holdRequestBody struct {
 	ClientID  string `json:"clientId"`
 	Units     uint32 `json:"units"`
 	Operation string `json:"operation,omitempty"`
-	// Non-empty jti = the request was authenticated with a PAT
-	// (dual-validation discriminator); empty = legacy Auth0 M2M.
+	// Non-empty = the request was authenticated with a PAT.
 	Jti string `json:"jti,omitempty"`
 }
 
@@ -79,9 +77,8 @@ func newDashboardClient(cfg *accountConfig, tokens tokenProvider) *dashboardClie
 	}
 }
 
-// do sends a dashboard request and reads the full response. A 401 means the
-// cached M2M token was rejected — something token expiry alone cannot predict —
-// so the token is dropped and the request retried exactly once with a fresh one.
+// do sends a dashboard request and reads the full response. On a 401 the
+// cached M2M token is dropped and the request retried once with a fresh one.
 func (d *dashboardClient) do(ctx context.Context, method, path string, body []byte) (int, []byte, error) {
 	status, rawBody, err := d.send(ctx, method, path, body)
 	if err != nil || status != http.StatusUnauthorized {

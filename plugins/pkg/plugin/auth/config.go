@@ -13,14 +13,11 @@ type authConfig struct {
 	Auth0Domain string
 	// Auth0Audience is the audience of the Auth0 instance.
 	Auth0Audience string
-	// PatIss is the expected iss claim of PATs. Setting it (together with
-	// PatIssuerPlugin) enables the PAT dual-validation path.
+	// PatIss is the expected iss claim of PATs.
 	PatIss string
-	// PatAudience is the expected aud claim of PATs. Defaults to
-	// Auth0Audience when unset.
+	// PatAudience is the expected aud claim of PATs, defaulting to Auth0Audience.
 	PatAudience string
-	// PatIssuerPlugin is the gRPC URL of the issuer plugin, used to fetch
-	// the JWKS PATs are verified against.
+	// PatIssuerPlugin is the gRPC URL of the issuer plugin.
 	PatIssuerPlugin string
 }
 
@@ -49,8 +46,7 @@ func (c *authConfig) patEnabled() bool {
 	return c.PatIss != "" || c.PatAudience != "" || c.PatIssuerPlugin != ""
 }
 
-// validatePat refuses startup when the PAT config is partial. Fail-closed:
-// either all required PAT vars are set, or none are.
+// validatePat refuses startup when the PAT config is partial.
 func (c *authConfig) validatePat() error {
 	if !c.patEnabled() {
 		return nil

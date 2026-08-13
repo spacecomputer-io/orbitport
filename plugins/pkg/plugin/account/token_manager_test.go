@@ -187,12 +187,8 @@ func TestTokenManager_RefreshCount(t *testing.T) {
 	require.Equal(t, int32(2), atomic.LoadInt32(&calls))
 }
 
-// Regression: expiresAt must carry no monotonic clock reading. Monotonic time
-// does not advance while the host is suspended, so a monotonic expiry makes a
-// long-expired token still look fresh after the machine wakes — the plugin then
-// never refreshes and every dashboard call 401s until it restarts.
-// time.Time's == compares the monotonic reading too, so a stripped value equals
-// its own Round(0).
+// Regression: expiresAt must carry no monotonic clock reading, which does not
+// advance while the host is suspended and leaves an expired token looking fresh.
 func TestTokenManager_ExpiryHasNoMonotonicReading(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"access_token":"abc","expires_in":3600,"token_type":"Bearer"}`))
@@ -203,15 +199,13 @@ func TestTokenManager_ExpiryHasNoMonotonicReading(t *testing.T) {
 	require.NoError(t, tm.refresh(context.Background()))
 
 	exp := tm.cache.Get().expiresAt
-	// `==` is deliberate and Equal() would break this test: `==` compares the
-	// monotonic reading, Equal() ignores it. Since Round(0) strips exactly that
-	// reading, Equal() would return true whether or not the bug is present.
+	// `==` is deliberate: Equal() ignores the monotonic reading, so it would
+	// pass whether or not the bug is present.
 	//nolint:staticcheck // QF1009: comparing the monotonic reading is the point
 	require.True(t, exp == exp.Round(0), "expiresAt must be wall-clock only, got monotonic reading: %v", exp)
 }
 
-// invalidate() drops the cached token so the next token() call refetches, even
-// though the cached one has not expired.
+// invalidate() drops an unexpired cached token so the next call refetches.
 func TestTokenManager_InvalidateForcesRefetch(t *testing.T) {
 	var calls int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

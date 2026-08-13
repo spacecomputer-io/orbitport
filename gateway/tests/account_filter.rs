@@ -1,15 +1,6 @@
-//! Warp-route-level tests for the account-plugin credit-gating filter.
-//!
-//! These drive HTTP requests through `with_account_hold` and assert the
-//! status code + release-call behavior. The auth filter is short-circuited
-//! with a synthetic `AuthContext` so we exercise the account-plugin
-//! filter wiring in isolation.
-//!
-//! Coverage:
-//! - (a) insufficient credits → 402
-//! - (b) plugin unreachable → 503 (fail-closed)
-//! - (c) no-op when account client is None (handler runs, no release call)
-//! - (d) release fires when the handler errors after a successful hold
+//! Route-level tests for the account-plugin credit-gating filter. The auth
+//! filter is short-circuited with a synthetic `AuthContext` so these exercise
+//! `with_account_hold` in isolation.
 
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -42,8 +33,7 @@ enum HoldBehavior {
 struct MockAccountPlugin {
     hold_calls: Arc<AtomicU32>,
     release_calls: Arc<AtomicU32>,
-    /// (client_id, jti) of the last Hold, so tests can assert what the filter
-    /// forwarded to the account plugin.
+    /// (client_id, jti) of the last Hold.
     last_hold: Arc<Mutex<(String, String)>>,
     behavior: HoldBehavior,
 }
@@ -138,15 +128,12 @@ async fn connect(addr: SocketAddr) -> AccountPluginClient<Channel> {
         .unwrap()
 }
 
-/// Stand-in auth filter that produces a fixed AuthContext, bypassing JWT
-/// validation. Lets us exercise `with_account_hold` without standing up the
-/// real auth plugin.
+/// Stand-in auth filter producing a fixed AuthContext, bypassing JWT validation.
 fn synthetic_auth() -> impl Filter<Extract = (AuthContext,), Error = Rejection> + Clone {
     synthetic_auth_as("client-warp", "")
 }
 
-/// Same, with a caller-chosen client_id/jti so tests can drive the PAT branch
-/// (non-empty jti) and the legacy Auth0 branch (empty jti).
+/// Same, with a caller-chosen client_id/jti to drive the PAT and Auth0 branches.
 fn synthetic_auth_as(
     client_id: &str,
     jti: &str,
@@ -174,8 +161,7 @@ async fn ok_handler(_ctx: AuthContextWithHold) -> Result<impl Reply, Rejection> 
     ))
 }
 
-/// Mirrors the production rejection mapping so tests assert the same status
-/// codes the gateway returns.
+/// Mirrors the production rejection mapping.
 async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
     if let Some(gw) = err.find::<GatewayError>() {
         let status = match gw {
@@ -209,15 +195,12 @@ async fn filter_insufficient_credits_returns_402() {
 
     assert_eq!(resp.status(), StatusCode::PAYMENT_REQUIRED);
     assert_eq!(hold_calls.load(Ordering::SeqCst), 1);
-    // No release: the hold failed, so there's no ledger to release.
     assert_eq!(release_calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]
 async fn filter_plugin_unreachable_returns_503() {
-    // Lazily-connected channel to an unreachable port — every Hold RPC fails
-    // with Unavailable, which the filter maps to GatewayError::AccountPluginUnavailable
-    // (fail-closed).
+    // Unreachable port: every Hold RPC fails with Unavailable.
     let channel = tonic::transport::Channel::from_static("http://127.0.0.1:1").connect_lazy();
     let client = AccountPluginClient::new(channel);
 
@@ -233,9 +216,8 @@ async fn filter_plugin_unreachable_returns_503() {
 
 #[tokio::test]
 async fn filter_no_client_passes_through_and_does_not_release() {
-    // When the account plugin URL is unset, the gateway constructs
-    // `with_account_hold(..., None, ...)` and the handler must run normally
-    // with an empty ledger_id.
+    // With the account plugin unset the handler must still run, with an
+    // empty ledger_id.
     let route = warp::path("test")
         .and(with_account_hold(synthetic_auth(), None, 1, "trng"))
         .and_then(|ctx: AuthContextWithHold| async move {
@@ -254,8 +236,6 @@ async fn filter_no_client_passes_through_and_does_not_release() {
     let resp = warp::test::request().path("/test").reply(&route).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
-    // account_release with no client is a no-op (covered by grpc tests too,
-    // but assert here that the End-to-end path doesn't panic).
     account_release(None, "").await;
 }
 
@@ -265,8 +245,7 @@ async fn filter_release_fires_when_handler_errors_after_hold() {
     let client = connect(addr).await;
     let release_client = connect(addr).await;
 
-    // Handler that always errors — mirrors what server.rs does on service
-    // failure: call account_release with the ledger_id from the hold.
+    // Mirrors what server.rs does on service failure.
     let release_client_filter = warp::any().map(move || release_client.clone());
     let route = warp::path("test")
         .and(with_account_hold(synthetic_auth(), Some(client), 1, "trng"))
@@ -288,8 +267,8 @@ async fn filter_release_fires_when_handler_errors_after_hold() {
     assert_eq!(release_calls.load(Ordering::SeqCst), 1);
 }
 
-/// PAT revocation: the dashboard's 404 arrives as PermissionDenied and must
-/// become a 401, not a 503. A revoked token is a client error, not an outage.
+/// The dashboard's 404 arrives as PermissionDenied and must become a 401,
+/// not a 503.
 #[tokio::test]
 async fn filter_revoked_credential_returns_401() {
     let (addr, hold_calls, release_calls, _) =
@@ -310,12 +289,11 @@ async fn filter_revoked_credential_returns_401() {
 
     assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(hold_calls.load(Ordering::SeqCst), 1);
-    // Nothing was held, so there is nothing to release.
     assert_eq!(release_calls.load(Ordering::SeqCst), 0);
 }
 
 /// A PAT carries the account id in `sub` and must reach the dashboard
-/// unstripped, with its jti. Stripping it here would look up the wrong account.
+/// unstripped, with its jti.
 #[tokio::test]
 async fn filter_pat_forwards_client_id_unstripped_with_jti() {
     let (addr, _, _, last_hold) = start_mock_plugin_capturing(HoldBehavior::Ok).await;

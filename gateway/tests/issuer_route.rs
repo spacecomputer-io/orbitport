@@ -1,10 +1,6 @@
-//! Route-level tests for the internal PAT issuance endpoint.
-//!
-//! Spins up an in-process tonic server that impersonates the issuer plugin
-//! (mirroring `account_plugin_grpc.rs`) and drives HTTP requests through the
-//! same `pat_issue_route` filter the gateway mounts, asserting the
-//! shared-secret guard: wrong secret → 401 (issuer never called), correct
-//! secret → 200 with the minted token.
+//! Route-level tests for the internal PAT issuance endpoint, driving HTTP
+//! requests through `pat_issue_route` against an in-process mock issuer to
+//! assert the shared-secret guard.
 
 use std::net::SocketAddr;
 use std::sync::Arc;

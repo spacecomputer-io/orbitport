@@ -31,12 +31,10 @@ struct Args {
     #[clap(long, env = "ORBITPORT_ACCOUNT_PLUGIN")]
     account_plugin: Option<String>,
     /// Optional issuer plugin gRPC URL. When set, the gateway serves the
-    /// public JWKS route and (with the shared secret) the internal PAT
-    /// issuance route.
+    /// public JWKS route and the internal PAT issuance route.
     #[clap(long, env = "ORBITPORT_ISSUER_PLUGIN")]
     issuer_plugin: Option<String>,
-    /// Shared secret guarding POST /internal/pat/issue. Required for that
-    /// route to be mounted when the issuer plugin is configured.
+    /// Shared secret guarding POST /internal/pat/issue.
     #[clap(long, env = "ORBITPORT_ISSUER_SHARED_SECRET")]
     issuer_shared_secret: Option<Secret>,
     /// Rate limit per access token, 4 requests per second
@@ -57,11 +55,8 @@ impl Args {
     }
 }
 
-/// FR-O6: PAT revocation is only enforced on the account plugin's Hold path.
-/// An issuer plugin without an account plugin mints tokens that can never be
-/// revoked — fail closed. There is deliberately no override: the only state it
-/// unlocked was a local stack that minted PATs without charging for them, which
-/// the account compose overlay covers properly.
+/// PAT revocation is only enforced on the account plugin's Hold path, so an
+/// issuer without an account plugin mints tokens that can never be revoked.
 fn validate_pat_revocation_gating(
     issuer_configured: bool,
     account_configured: bool,

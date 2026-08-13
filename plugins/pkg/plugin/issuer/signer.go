@@ -16,10 +16,8 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// signer is the key-custody seam: localSigner today, an OpenBao Transit
-// implementation when the infra lands (same JWS output, remote signing).
-// ctx carries caller cancellation/deadline through to remote signers;
-// localSigner ignores it since it's pure in-process crypto.
+// signer is the key-custody seam, selected by ORBITPORT_ISSUER_SIGNER:
+// localSigner for dev, transitSigner for deployed environments.
 type signer interface {
 	// Mint signs the claims and returns a compact JWS with a kid header.
 	Mint(ctx context.Context, claims jwt.MapClaims) (string, error)
@@ -28,8 +26,7 @@ type signer interface {
 }
 
 // localSigner holds an EC P-256 key in process memory. Key custody is the
-// ONLY difference from the production design — tokens and JWKS are real
-// ES256, so verifiers exercise their production code path against it.
+// only difference from transitSigner — tokens and JWKS are real ES256.
 type localSigner struct {
 	key *ecdsa.PrivateKey
 	kid string
@@ -98,7 +95,7 @@ func (s *localSigner) JWKS(_ context.Context) (string, error) {
 }
 
 // keyID derives a stable kid from the public key so restarts with the same
-// key keep the same kid (Transit will use its key version instead).
+// key keep the same kid.
 func keyID(pub *ecdsa.PublicKey) (string, error) {
 	der, err := x509.MarshalPKIXPublicKey(pub)
 	if err != nil {

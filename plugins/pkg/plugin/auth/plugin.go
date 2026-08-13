@@ -21,8 +21,7 @@ type Plugin struct {
 	jwtValidator    *validator.Validator
 	cachingProvider *jwks.CachingProvider
 
-	// PAT dual-validation path. patKeys is nil when PAT validation is not
-	// configured, in which case the plugin behaves exactly as before.
+	// patKeys is nil when PAT validation is not configured.
 	patIss      string
 	patAudience string
 	patKeys     *jwksCache
@@ -94,10 +93,8 @@ func newAuthPlugin(auth0Domain, auth0Audience string) (*Plugin, error) {
 	return plugin, nil
 }
 
-// ValidateToken handles the ValidateToken RPC call.
-// PATs (unverified iss == the configured PAT iss) are verified against the
-// issuer plugin's JWKS and return a non-empty Jti; everything else takes the
-// legacy Auth0 path unchanged and returns Jti="".
+// ValidateToken handles the ValidateToken RPC call. PATs return a non-empty
+// Jti; the legacy Auth0 path returns Jti="".
 func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRequest) (*proto.TokenValidationResponse, error) {
 	logger := utils.GetLogger("orbitport:auth")
 	logger.Debug("Validating token")
@@ -126,8 +123,8 @@ func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRe
 	return &proto.TokenValidationResponse{
 		Ok:       true,
 		ClientId: clientID,
-		// D9: legacy KMS tenancy is the RAW sub (including any @clients
-		// suffix) — byte-identical to what the gateway used before.
+		// Legacy KMS tenancy is the raw sub, @clients suffix included —
+		// byte-identical to what the gateway used before.
 		KmsTenant: clientID,
 	}, nil
 }

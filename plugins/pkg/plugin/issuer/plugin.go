@@ -12,9 +12,8 @@ import (
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
-// Plugin mints Personal Access Tokens (Model B). The dashboard owns the
-// PAT metadata row (jti) and the charge flow; this plugin owns claims
-// assembly and signing, and serves the public JWKS verifiers cache.
+// Plugin mints Personal Access Tokens and serves the public JWKS. The
+// dashboard owns the PAT metadata row (jti) and the charge flow.
 type Plugin struct {
 	proto.UnimplementedIssuerPluginServer
 
@@ -78,8 +77,6 @@ func (p *Plugin) IssueToken(ctx context.Context, req *proto.IssueTokenRequest) (
 		"iat": now.Unix(),
 		"exp": exp.Unix(),
 	}
-	// Immutable per account (D9) — omitted entirely until the backfill
-	// lands rather than stamping an empty claim.
 	if req.GetKmsTenant() != "" {
 		claims["kms_tenant"] = req.GetKmsTenant()
 	}

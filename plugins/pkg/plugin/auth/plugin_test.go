@@ -108,10 +108,8 @@ func mintES256(t *testing.T, key *ecdsa.PrivateKey, kid string, claims jwt.MapCl
 	return signed
 }
 
-// newTestPlugin builds the plugin via NewPlugin with the PAT path pointed at
-// the in-process issuer mock. The Auth0 domain is a dead hostname: the legacy
-// path only dials it when a non-PAT token comes in, and then errors — which
-// is exactly what the fall-through test asserts.
+// newTestPlugin points the PAT path at the in-process issuer mock. The Auth0
+// domain is a dead hostname, which is what the fall-through test asserts on.
 func newTestPlugin(t *testing.T, issuerAddr string) *Plugin {
 	t.Helper()
 	viper.Reset()
@@ -181,10 +179,8 @@ func TestValidateToken_UnknownKidRefetches(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, mock.callCount())
 
-	// Rotate: mock now serves only the new key; a token signed with it has
-	// an unknown kid, which must trigger exactly one refetch and then verify.
-	// The refetch throttle is disabled here so rotation pickup is tested on its
-	// own; TestValidateToken_UnknownKidRefetchIsThrottled covers the throttle.
+	// The throttle is disabled here so rotation pickup is tested on its own;
+	// TestValidateToken_UnknownKidRefetchIsThrottled covers the throttle.
 	p.patKeys.minRefresh = 0
 	mock.setJWKS(jwksJSON("kid-new", &newKey.PublicKey))
 	resp, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
@@ -207,9 +203,7 @@ func TestValidateToken_ExpiredPATRejected(t *testing.T) {
 
 	_, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{Token: token})
 	require.Error(t, err)
-	// Gateway contract: an expired PAT is typed Unauthenticated and carries the
-	// legacy "pat_expired:" message prefix. Both halves are load-bearing — the
-	// gateway matches either.
+	// Both halves are load-bearing: the gateway matches either.
 	st, ok := status.FromError(err)
 	require.True(t, ok, "expired PAT must carry a gRPC status, got: %v", err)
 	require.Equal(t, codes.Unauthenticated, st.Code())
@@ -263,9 +257,8 @@ func TestNewPlugin_PartialPatConfigFailsStartup(t *testing.T) {
 	require.Contains(t, err.Error(), "ORBITPORT_AUTH_ISSUER_PLUGIN")
 }
 
-// The JWT library runs the keyfunc before verifying any signature, so a token
-// with a bogus kid costs an attacker nothing. Without a throttle each one buys
-// a JWKS refetch, turning unsigned garbage into load on the issuer plugin.
+// The keyfunc runs before signature verification, so without a throttle each
+// bogus kid buys a JWKS refetch — unsigned garbage becomes issuer load.
 func TestValidateToken_UnknownKidRefetchIsThrottled(t *testing.T) {
 	key := newP256Key(t)
 	mock := &mockIssuer{jwks: jwksJSON("kid-1", &key.PublicKey)}
@@ -296,9 +289,8 @@ func TestValidateToken_UnknownKidRefetchIsThrottled(t *testing.T) {
 	require.Equal(t, 1, mock.callCount())
 }
 
-// An unreachable issuer plugin is an outage, not a bad token. It must surface
-// as Unavailable so the gateway answers 503 — a 401 would tell a user with a
-// perfectly valid PAT that their token is invalid.
+// An unreachable issuer plugin is an outage, not a bad token: it must surface
+// as Unavailable so the gateway answers 503 rather than 401.
 func TestValidateToken_IssuerOutageIsUnavailable(t *testing.T) {
 	key := newP256Key(t)
 	mock := &mockIssuer{jwks: jwksJSON("kid-1", &key.PublicKey)}
