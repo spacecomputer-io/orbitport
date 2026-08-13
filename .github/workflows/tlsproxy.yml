@@ -1,0 +1,38 @@
+name: Test & Build TLS Proxy
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["*"]
+
+jobs:
+  build-go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Format
+        working-directory: ./tlsproxy
+        run: make fmt-check
+
+      - name: Build
+        working-directory: ./tlsproxy
+        run: make build
+
+      - name: Test
+        working-directory: ./tlsproxy
+        run: make test
+
+      - name: Vet
+        working-directory: ./tlsproxy
+        run: make lint
+
+      - name: Build container image
+        working-directory: ./tlsproxy
+        run: make DOCKER_TAG=test docker-build
