@@ -40,6 +40,9 @@ pub struct AuthContext {
 pub struct AuthContextWithHold {
     pub auth: AuthContext,
     pub ledger_id: String,
+    /// KMS tenancy to route this request under, resolved by the dashboard
+    /// from the Account row during Hold. Never the token's own claim.
+    pub kms_tenant: String,
 }
 
 /// Rate limit structure
@@ -201,15 +204,40 @@ pub fn with_account_hold(
         .and_then(account_hold)
 }
 
+/// Legacy Auth0 tenancy: the raw sub the auth plugin validated. Falling back
+/// to client_id keeps the exact value this path used before kms_tenant existed.
+fn legacy_tenant(auth: &AuthContext) -> String {
+    if auth.kms_tenant.is_empty() {
+        auth.client_id.clone()
+    } else {
+        auth.kms_tenant.clone()
+    }
+}
+
 async fn account_hold(
     auth: AuthContext,
     account_client: Option<AccountPluginClient<Channel>>,
     (units, operation): (u32, &'static str),
 ) -> Result<AuthContextWithHold, warp::Rejection> {
     let Some(mut client) = account_client else {
+        // No Hold means no authoritative tenancy, and a PAT's own claim is
+        // not a substitute.
+        if !auth.jti.is_empty() {
+            metrics::record_account_hold("pat_without_account_plugin");
+            tracing::error!(
+                "PAT presented but ORBITPORT_ACCOUNT_PLUGIN is unset: cannot resolve KMS tenancy"
+            );
+            return Err(warp::reject::custom(
+                GatewayError::AccountPluginUnavailable(
+                    "account plugin required to resolve tenancy".to_string(),
+                ),
+            ));
+        }
+        let kms_tenant = legacy_tenant(&auth);
         return Ok(AuthContextWithHold {
             auth,
             ledger_id: String::new(),
+            kms_tenant,
         });
     };
 
@@ -246,10 +274,27 @@ async fn account_hold(
                     GatewayError::AccountPluginUnavailable(body.error),
                 ));
             }
+            let kms_tenant = match body.kms_tenant.trim() {
+                "" if auth.jti.is_empty() => legacy_tenant(&auth),
+                // A PAT's tenancy must come from the Account row. Falling back
+                // to the claim would re-trust a value the token asserts about
+                // itself and keeps for up to a year.
+                "" => {
+                    metrics::record_account_hold("missing_tenant");
+                    tracing::error!("Account plugin Hold returned no kms_tenant for a PAT");
+                    return Err(warp::reject::custom(
+                        GatewayError::AccountPluginUnavailable(
+                            "hold response missing kms_tenant".to_string(),
+                        ),
+                    ));
+                }
+                t => t.to_string(),
+            };
             metrics::record_account_hold("ok");
             Ok(AuthContextWithHold {
                 auth,
                 ledger_id: body.ledger_id,
+                kms_tenant,
             })
         }
         Err(e) => match e.code() {

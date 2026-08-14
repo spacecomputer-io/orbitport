@@ -51,14 +51,15 @@ func TestDashboardClient_Hold_Success(t *testing.T) {
 		_ = json.Unmarshal(body, &capturedBody)
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ledgerId":"ledger-abc","balance":42}`))
+		_, _ = w.Write([]byte(`{"ledgerId":"ledger-abc","balance":42,"kmsTenant":"acct-1"}`))
 	}))
 	defer srv.Close()
 
-	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 2, "trng", "pat-jti-1")
+	held, err := client.Hold(context.Background(), "client-x", 2, "trng", "pat-jti-1")
 	require.NoError(t, err)
-	require.Equal(t, "ledger-abc", ledgerID)
-	require.Equal(t, int64(42), balance)
+	require.Equal(t, "ledger-abc", held.LedgerID)
+	require.Equal(t, int64(42), held.Balance)
+	require.Equal(t, "acct-1", held.KmsTenant)
 	require.Equal(t, "Bearer test-token", capturedAuth)
 	require.Equal(t, "/service/credits/hold", capturedPath)
 	require.Equal(t, "client-x", capturedBody.ClientID)
@@ -74,10 +75,10 @@ func TestDashboardClient_Hold_Accepts201(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	held, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.NoError(t, err)
-	require.Equal(t, "ledger-201", ledgerID)
-	require.Equal(t, int64(7), balance)
+	require.Equal(t, "ledger-201", held.LedgerID)
+	require.Equal(t, int64(7), held.Balance)
 }
 
 func TestDashboardClient_Release_Accepts201(t *testing.T) {
@@ -99,7 +100,7 @@ func TestDashboardClient_Hold_InsufficientCredits(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.ErrorIs(t, err, ErrInsufficientCredits)
 }
 
@@ -122,7 +123,7 @@ func TestDashboardClient_Hold_OtherErrors(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+			_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 			require.Error(t, err)
 			require.False(t, errors.Is(err, ErrInsufficientCredits))
 		})
@@ -205,7 +206,7 @@ func TestDashboardClient_NoToken_Errors(t *testing.T) {
 	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
 	client := newDashboardClient(cfg, &staticTokens{err: errors.New("no token")})
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.Error(t, err)
 }
 
@@ -229,10 +230,10 @@ func TestDashboardClient_Hold_RetriesOnceAfter401(t *testing.T) {
 	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
 	client := newDashboardClient(cfg, tokens)
 
-	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 1, "trng", "jti-1")
+	held, err := client.Hold(context.Background(), "client-x", 1, "trng", "jti-1")
 	require.NoError(t, err)
-	require.Equal(t, "ledger-retry", ledgerID)
-	require.Equal(t, int64(7), balance)
+	require.Equal(t, "ledger-retry", held.LedgerID)
+	require.Equal(t, int64(7), held.Balance)
 	require.Equal(t, 1, tokens.invalidCalls)
 	require.Equal(t, []string{"Bearer stale-token", "Bearer fresh-token"}, seenAuth)
 }
@@ -247,7 +248,7 @@ func TestDashboardClient_Hold_401RetryHappensOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.Error(t, err)
 	require.Equal(t, 2, calls)
 }
@@ -261,6 +262,6 @@ func TestDashboardClient_Hold_404IsUnknownCredential(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng", "revoked-jti")
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "revoked-jti")
 	require.ErrorIs(t, err, ErrUnknownCredential)
 }

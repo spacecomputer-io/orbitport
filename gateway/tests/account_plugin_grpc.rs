@@ -44,6 +44,7 @@ impl AccountPlugin for MockAccountPlugin {
                 ledger_id: "ledger-1".to_string(),
                 balance_after: 42,
                 error: String::new(),
+                kms_tenant: "tenant-1".to_string(),
             })),
             HoldBehavior::Insufficient => Err(Status::failed_precondition("insufficient_credits")),
             HoldBehavior::Unavailable => Err(Status::unavailable("dashboard down")),

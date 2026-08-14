@@ -51,6 +51,8 @@ type holdRequestBody struct {
 type holdResponseBody struct {
 	LedgerID string `json:"ledgerId"`
 	Balance  int64  `json:"balance"`
+	// Empty from a dashboard predating this field; the gateway handles that.
+	KmsTenant string `json:"kmsTenant"`
 }
 
 type settleResponseBody struct {
@@ -106,38 +108,39 @@ func (d *dashboardClient) send(ctx context.Context, method, path string, body []
 
 // Hold posts to /service/credits/hold. Returns ErrInsufficientCredits on 422,
 // or a wrapped transport error on any other non-2xx.
-func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint32, operation, jti string) (string, int64, error) {
+func (d *dashboardClient) Hold(ctx context.Context, clientID string, units uint32, operation, jti string) (holdResponseBody, error) {
+	var empty holdResponseBody
 	body, err := json.Marshal(holdRequestBody{ClientID: clientID, Units: units, Operation: operation, Jti: jti})
 	if err != nil {
-		return "", 0, fmt.Errorf("marshal hold request: %w", err)
+		return empty, fmt.Errorf("marshal hold request: %w", err)
 	}
 
 	status, rawBody, err := d.do(ctx, http.MethodPost, "/service/credits/hold", body)
 	if err != nil {
-		return "", 0, fmt.Errorf("dashboard hold transport error: %w", err)
+		return empty, fmt.Errorf("dashboard hold transport error: %w", err)
 	}
 
 	switch status {
 	case http.StatusOK, http.StatusCreated:
 		var parsed holdResponseBody
 		if err := json.Unmarshal(rawBody, &parsed); err != nil {
-			return "", 0, fmt.Errorf("decode hold response: %w", err)
+			return empty, fmt.Errorf("decode hold response: %w", err)
 		}
 		if parsed.LedgerID == "" {
-			return "", 0, fmt.Errorf("dashboard hold response missing ledgerId")
+			return empty, fmt.Errorf("dashboard hold response missing ledgerId")
 		}
-		return parsed.LedgerID, parsed.Balance, nil
+		return parsed, nil
 	case http.StatusUnprocessableEntity:
 		var parsed dashboardErrorBody
 		_ = json.Unmarshal(rawBody, &parsed)
 		if parsed.Code == "INSUFFICIENT_CREDITS" {
-			return "", 0, ErrInsufficientCredits
+			return empty, ErrInsufficientCredits
 		}
-		return "", 0, fmt.Errorf("dashboard hold rejected (422): %s", strings.TrimSpace(string(rawBody)))
+		return empty, fmt.Errorf("dashboard hold rejected (422): %s", strings.TrimSpace(string(rawBody)))
 	case http.StatusNotFound:
-		return "", 0, ErrUnknownCredential
+		return empty, ErrUnknownCredential
 	default:
-		return "", 0, fmt.Errorf("dashboard hold returned %d: %s", status, strings.TrimSpace(string(rawBody)))
+		return empty, fmt.Errorf("dashboard hold returned %d: %s", status, strings.TrimSpace(string(rawBody)))
 	}
 }
 

@@ -52,6 +52,7 @@ impl AccountPlugin for MockAccountPlugin {
                 ledger_id: "ledger-warp".to_string(),
                 balance_after: 99,
                 error: String::new(),
+                kms_tenant: "tenant-from-db".to_string(),
             })),
             HoldBehavior::Insufficient => Err(Status::failed_precondition("insufficient_credits")),
             HoldBehavior::Revoked => {
