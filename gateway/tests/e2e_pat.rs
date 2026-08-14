@@ -76,7 +76,7 @@ fn b64url_json(part: &str) -> serde_json::Value {
 /// The endpoint that mints year-long tokens must not answer on the port the
 /// load balancer fronts, whatever the caller presents.
 #[tokio::test]
-async fn issue_is_not_served_on_the_public_port() {
+async fn test_e2e_pat_issue_is_not_served_on_the_public_port() {
     let resp = reqwest::Client::new()
         .post(format!("{}/internal/pat/issue", public_url()))
         .bearer_auth(shared_secret())
@@ -98,7 +98,7 @@ async fn issue_is_not_served_on_the_public_port() {
 }
 
 #[tokio::test]
-async fn internal_listener_requires_the_shared_secret() {
+async fn test_e2e_pat_internal_listener_requires_the_shared_secret() {
     let client = reqwest::Client::new();
     let url = format!("{}/internal/pat/issue", internal_url());
 
@@ -125,7 +125,7 @@ async fn internal_listener_requires_the_shared_secret() {
 /// check one against the other. A kid mismatch or a bad public-key export would
 /// break every downstream verifier while minting kept working.
 #[tokio::test]
-async fn minted_pat_verifies_against_the_published_jwks() {
+async fn test_e2e_pat_minted_pat_verifies_against_the_published_jwks() {
     use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 
     let token = mint("e2e-jwks", "").await;
@@ -176,7 +176,7 @@ async fn minted_pat_verifies_against_the_published_jwks() {
 /// The issuer caps how far ahead a token may expire, so a caller that reaches
 /// the mint endpoint still cannot ask for an unbounded one.
 #[tokio::test]
-async fn expiry_beyond_the_ceiling_is_refused() {
+async fn test_e2e_pat_expiry_beyond_the_ceiling_is_refused() {
     let ten_years = 10 * 365 * 24 * 60 * 60;
     let resp = reqwest::Client::new()
         .post(format!("{}/internal/pat/issue", internal_url()))
@@ -202,7 +202,7 @@ async fn expiry_beyond_the_ceiling_is_refused() {
 /// plugin reporting one tenant for everyone — the property under test is that
 /// the gateway took tenancy from the hold at all.
 #[tokio::test]
-async fn kms_tenancy_follows_the_hold_not_the_caller() {
+async fn test_e2e_pat_kms_tenancy_follows_the_hold_not_the_caller() {
     let base_url = public_url();
     let alias = format!("e2e-tenancy-{}", std::process::id());
 
