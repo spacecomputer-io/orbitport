@@ -28,6 +28,9 @@ enum HoldBehavior {
     Insufficient,
     /// Dashboard 404 — unknown or revoked credential. The PAT revocation path.
     Revoked,
+    /// Hold succeeds but resolves no tenancy, e.g. a dashboard predating the
+    /// field.
+    OkNoTenant,
 }
 
 struct MockAccountPlugin {
@@ -53,6 +56,13 @@ impl AccountPlugin for MockAccountPlugin {
                 balance_after: 99,
                 error: String::new(),
                 kms_tenant: "tenant-from-db".to_string(),
+            })),
+            HoldBehavior::OkNoTenant => Ok(Response::new(HoldResponse {
+                ok: true,
+                ledger_id: "ledger-warp".to_string(),
+                balance_after: 99,
+                error: String::new(),
+                kms_tenant: String::new(),
             })),
             HoldBehavior::Insufficient => Err(Status::failed_precondition("insufficient_credits")),
             HoldBehavior::Revoked => {
@@ -139,20 +149,40 @@ fn synthetic_auth_as(
     client_id: &str,
     jti: &str,
 ) -> impl Filter<Extract = (AuthContext,), Error = Rejection> + Clone {
+    synthetic_auth_claiming(client_id, jti, "")
+}
+
+/// Same again, but with a kms_tenant claim on the token, so a test can tell
+/// whether the filter honoured the claim or the Hold response.
+fn synthetic_auth_claiming(
+    client_id: &str,
+    jti: &str,
+    kms_tenant: &str,
+) -> impl Filter<Extract = (AuthContext,), Error = Rejection> + Clone {
     let client_id = client_id.to_string();
     let jti = jti.to_string();
+    let kms_tenant = kms_tenant.to_string();
     warp::any().and_then(move || {
         let client_id = client_id.clone();
         let jti = jti.clone();
+        let kms_tenant = kms_tenant.clone();
         async move {
             Ok::<_, Rejection>(AuthContext {
                 jwt: "test-jwt".to_string(),
                 client_id,
                 jti,
-                kms_tenant: String::new(),
+                kms_tenant,
             })
         }
     })
+}
+
+/// Echoes the tenancy the filter resolved, so tests can assert its source.
+async fn tenant_handler(ctx: AuthContextWithHold) -> Result<impl Reply, Rejection> {
+    Ok(warp::reply::with_status(
+        warp::reply::json(&serde_json::json!({"kms_tenant": ctx.kms_tenant})),
+        StatusCode::OK,
+    ))
 }
 
 async fn ok_handler(_ctx: AuthContextWithHold) -> Result<impl Reply, Rejection> {
@@ -343,4 +373,88 @@ async fn filter_legacy_m2m_strips_clients_suffix() {
     let (client_id, jti) = last_hold.lock().unwrap().clone();
     assert_eq!(client_id, "cid-123");
     assert!(jti.is_empty());
+}
+
+/// The whole point of reading tenancy from Hold: a PAT that claims one tenant
+/// must be routed under the one the dashboard resolved, not its own claim.
+#[tokio::test]
+async fn filter_pat_ignores_token_tenant_and_uses_hold() {
+    let (addr, _, _, _) = start_mock_plugin_capturing(HoldBehavior::Ok).await;
+    let client = connect(addr).await;
+
+    let route = warp::path("test")
+        .and(with_account_hold(
+            synthetic_auth_claiming("acct-1", "pat-jti-1", "attacker-chosen-tenant"),
+            Some(client),
+            1,
+            "trng",
+        ))
+        .and_then(tenant_handler)
+        .recover(handle_rejection);
+
+    let resp = warp::test::request().path("/test").reply(&route).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+    assert_eq!(body["kms_tenant"], "tenant-from-db");
+}
+
+/// A PAT whose Hold resolved no tenancy is refused, never served under the
+/// claim as a fallback.
+#[tokio::test]
+async fn filter_pat_without_hold_tenant_returns_503() {
+    let (addr, _, _, _) = start_mock_plugin_capturing(HoldBehavior::OkNoTenant).await;
+    let client = connect(addr).await;
+
+    let route = warp::path("test")
+        .and(with_account_hold(
+            synthetic_auth_claiming("acct-1", "pat-jti-1", "attacker-chosen-tenant"),
+            Some(client),
+            1,
+            "trng",
+        ))
+        .and_then(tenant_handler)
+        .recover(handle_rejection);
+
+    let resp = warp::test::request().path("/test").reply(&route).await;
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+/// No account plugin means no Hold, so a PAT has no trustworthy tenancy and is
+/// refused. Such a PAT is already unrevocable.
+#[tokio::test]
+async fn filter_pat_without_account_plugin_returns_503() {
+    let route = warp::path("test")
+        .and(with_account_hold(
+            synthetic_auth_claiming("acct-1", "pat-jti-1", "attacker-chosen-tenant"),
+            None,
+            1,
+            "trng",
+        ))
+        .and_then(tenant_handler)
+        .recover(handle_rejection);
+
+    let resp = warp::test::request().path("/test").reply(&route).await;
+    assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+/// Legacy Auth0 tokens are unaffected: with no account plugin they keep routing
+/// under the sub the auth plugin validated.
+#[tokio::test]
+async fn filter_legacy_without_account_plugin_keeps_token_tenant() {
+    let route = warp::path("test")
+        .and(with_account_hold(
+            synthetic_auth_claiming("cid-123@clients", "", "cid-123@clients"),
+            None,
+            1,
+            "trng",
+        ))
+        .and_then(tenant_handler)
+        .recover(handle_rejection);
+
+    let resp = warp::test::request().path("/test").reply(&route).await;
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+    assert_eq!(body["kms_tenant"], "cid-123@clients");
 }

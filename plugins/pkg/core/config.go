@@ -15,6 +15,7 @@ type GrpcPluginConfig struct {
 	// - "aptosorbital" (default)
 	// - "auth"
 	// - "authnoop" (development only)
+	// - "accountnoop" (development only)
 	Plugin string
 	// GrpcPort is the port the grpc server listens on.
 	GrpcPort uint16

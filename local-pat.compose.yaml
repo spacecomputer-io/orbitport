@@ -11,10 +11,11 @@
 #   - adds plugin-issuer (mints PATs, serves JWKS)
 #   - swaps authnoop for the real auth plugin with the PAT path enabled
 #   - gateway serves GET /.well-known/jwks.json on 8080 and
-#     POST /internal/pat/issue on its own listener, 8081
+#     POST /internal/pat/issue on its own listener, container 8081,
+#     published on host 8090
 #
 # The dashboard backend pairs with this via:
-#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8081
+#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8090
 #   ORBITPORT_ISSUER_SHARED_SECRET=<the same secret you exported for this stack>
 
 services:
@@ -72,7 +73,8 @@ services:
       - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:?set it, e.g. export ORBITPORT_ISSUER_SHARED_SECRET=$(openssl rand -hex 16)}
     # Published only because the dashboard runs on the host in local dev. In
     # k8s this port stays off the Service the Ingress routes to.
+    # Host 8090, not 8081: ipfs-node already publishes 8081.
     ports:
-      - 8081:8081
+      - 8090:8081
     depends_on:
       - plugin-issuer

@@ -1,0 +1,71 @@
+# Dashboard-free credit loop, for exercising the PAT path end to end.
+#
+# Stands in for local-account.compose.yaml. The real account plugin needs the
+# dashboard backend AND an Auth0 M2M client to mint a token for it, which makes
+# the PAT path awkward to test in isolation. This grants every hold instead, so
+# the parts worth testing — Vault/OpenBao transit signing, JWKS publication,
+# PAT verification, tenancy resolution — run without either dependency.
+#
+# Grants every hold and revokes nothing. Local only.
+#
+# Full loop, with transit signing against the dev OpenBao:
+#
+#   export ORBITPORT_ISSUER_SHARED_SECRET=$(openssl rand -hex 16)
+#   ORBITPORT_ISSUER_SIGNER=transit docker compose --env-file=.dev.env \
+#     -f dev.docker-compose.yaml -f local-pat.compose.yaml \
+#     -f local-accountnoop.compose.yaml up -d --build
+#
+#   # 1. mint — on the internal listener, never the public port
+#   TOKEN=$(curl -s -X POST http://localhost:8090/internal/pat/issue \
+#     -H "authorization: Bearer $ORBITPORT_ISSUER_SHARED_SECRET" \
+#     -H 'content-type: application/json' \
+#     -d '{"jti":"e2e-1","subject":"acct-e2e","kmsTenant":"ignored-by-design",
+#          "expiresAt":'$(($(date +%s) + 3600))'}' | jq -r .token)
+#
+#   # 2. the public port must NOT mint
+#   curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+#     http://localhost:8080/internal/pat/issue \
+#     -H "authorization: Bearer $ORBITPORT_ISSUER_SHARED_SECRET" \
+#     -H 'content-type: application/json' -d '{}'      # expect 404
+#
+#   # 3. verify the signature is real
+#   curl -s http://localhost:8080/.well-known/jwks.json | jq
+#
+#   # 4. spend it
+#   curl -s http://localhost:8080/api/v1/services/trng \
+#     -H "authorization: Bearer $TOKEN" | jq
+#
+# Step 1 deliberately sends a kmsTenant the gateway must ignore. KMS keys land
+# under ORBITPORT_ACCOUNTNOOP_KMS_TENANT, proving tenancy came from the hold
+# response and not from the token.
+
+services:
+  plugin-account:
+    container_name: plugin-account
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=accountnoop
+      - ORBITPORT_GRPC_PORT=50005
+      # Distinct from anything a test PAT would claim, so the tenancy the
+      # gateway actually used is visible in the KMS namespace.
+      - ORBITPORT_ACCOUNTNOOP_KMS_TENANT=${ORBITPORT_ACCOUNTNOOP_KMS_TENANT:-noop-tenant}
+
+  gateway:
+    environment:
+      - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
+    depends_on:
+      - plugin-account

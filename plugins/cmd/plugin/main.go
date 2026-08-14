@@ -10,6 +10,7 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/account"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/accountnoop"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/aptosorbital"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
@@ -62,6 +63,13 @@ func main() {
 		}
 		proto.RegisterAuthPluginServer(grpcServer, plugin)
 		logger.Info("Noop auth plugin ready")
+	case "accountnoop":
+		plugin, err := accountnoop.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterAccountPluginServer(grpcServer, plugin)
+		logger.Info("Noop account plugin ready")
 	case "ipfs":
 		plugin, err := ipfs.NewPlugin()
 		if err != nil {
