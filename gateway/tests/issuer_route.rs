@@ -118,6 +118,34 @@ async fn issue_route_rejects_wrong_secret() {
     assert_eq!(issue_calls.load(Ordering::SeqCst), 0);
 }
 
+/// The internal listener carries PAT issuance and nothing else, so a mistake
+/// binding it cannot expose the public API on an unguarded port.
+#[tokio::test]
+async fn internal_listener_serves_nothing_else() {
+    let (addr, _) = start_mock_issuer().await;
+    let routes = gateway::server::internal_routes(connect(addr).await, "top-secret".to_string());
+
+    for path in [
+        "/healthz",
+        "/api/v1/services/trng",
+        "/.well-known/jwks.json",
+    ] {
+        let resp = warp::test::request()
+            .method("GET")
+            .path(path)
+            .reply(&routes)
+            .await;
+        assert!(
+            matches!(
+                resp.status(),
+                StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
+            ),
+            "{path} must not be served, got {}",
+            resp.status()
+        );
+    }
+}
+
 #[tokio::test]
 async fn issue_route_accepts_correct_secret() {
     let (addr, issue_calls) = start_mock_issuer().await;

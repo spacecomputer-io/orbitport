@@ -53,8 +53,10 @@ struct PostBody {
 
 /// Starts the gateway server, returns a future that resolves when the server stops or fails
 /// It exposes the following enpoints:
+#[allow(clippy::too_many_arguments)]
 pub async fn start(
     http_port: u16,
+    internal_port: u16,
     service_manager: Arc<ServiceManager>,
     plugin_catalog: Arc<PluginCatalog>,
     limit: u32,
@@ -156,10 +158,9 @@ pub async fn start(
 
         match issuer_shared_secret.as_deref() {
             Some(secret) if !secret.is_empty() => {
-                routes = routes
-                    .or(pat_issue_route(client, secret.to_string()))
-                    .unify()
-                    .boxed();
+                let internal = internal_routes(client, secret.to_string());
+                tracing::info!("Starting internal http server on: 0.0.0.0:{internal_port}");
+                tokio::spawn(warp::serve(internal).run(([0, 0, 0, 0], internal_port)));
             }
             _ => {
                 tracing::warn!(
@@ -174,6 +175,15 @@ pub async fn start(
     tracing::info!("Starting http server on: 0.0.0.0:{}", http_port);
 
     warp::serve(routes).run(([0, 0, 0, 0], http_port)).await;
+}
+
+/// Everything served on the internal listener. PAT issuance lives here and
+/// nowhere else, so no configuration can expose it on the public port.
+pub fn internal_routes(
+    client: IssuerPluginClient<Channel>,
+    shared_secret: String,
+) -> impl Filter<Extract = (impl Reply,), Error = Infallible> + Clone {
+    pat_issue_route(client, shared_secret).recover(handle_rejection)
 }
 
 /// Maps gateway-specific custom rejections to HTTP responses. Without this,
@@ -282,13 +292,7 @@ async fn handle_rpc(
         return Ok(warp::reply::json(&res));
     }
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-    // Falling back to client_id keeps the exact value this path forwarded
-    // before kms_tenant existed.
-    let client_id = if ctx.auth.kms_tenant.is_empty() {
-        ctx.auth.client_id
-    } else {
-        ctx.auth.kms_tenant
-    };
+    let client_id = ctx.kms_tenant;
 
     match timeout(
         REQUEST_TIMEOUT,

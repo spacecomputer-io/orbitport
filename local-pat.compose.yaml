@@ -10,10 +10,11 @@
 # What it changes vs the dev stack:
 #   - adds plugin-issuer (mints PATs, serves JWKS)
 #   - swaps authnoop for the real auth plugin with the PAT path enabled
-#   - gateway mounts POST /internal/pat/issue and GET /.well-known/jwks.json
+#   - gateway serves GET /.well-known/jwks.json on 8080 and
+#     POST /internal/pat/issue on its own listener, 8081
 #
 # The dashboard backend pairs with this via:
-#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8080
+#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8081
 #   ORBITPORT_ISSUER_SHARED_SECRET=<the same secret you exported for this stack>
 
 services:
@@ -65,8 +66,13 @@ services:
   gateway:
     environment:
       - ORBITPORT_ISSUER_PLUGIN=http://plugin-issuer:50006
+      - ORBITPORT_INTERNAL_PORT=8081
       # No default on purpose: this secret is all that stands between a caller
       # and minting a PAT for any account.
       - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:?set it, e.g. export ORBITPORT_ISSUER_SHARED_SECRET=$(openssl rand -hex 16)}
+    # Published only because the dashboard runs on the host in local dev. In
+    # k8s this port stays off the Service the Ingress routes to.
+    ports:
+      - 8081:8081
     depends_on:
       - plugin-issuer

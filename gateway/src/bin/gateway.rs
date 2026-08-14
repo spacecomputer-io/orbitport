@@ -11,6 +11,10 @@ use gateway::{
 struct Args {
     #[clap(short = 'p', long, env = "ORBITPORT_HTTP_PORT", default_value = "8080")]
     http_port: u16,
+    /// Port for internal-only routes (PAT issuance). Must not be published by
+    /// any load balancer or Ingress-backed Service.
+    #[clap(long, env = "ORBITPORT_INTERNAL_PORT", default_value = "8081")]
+    internal_port: u16,
     #[clap(long, env = "ORBITPORT_METRICS_PORT", default_value = "9100")]
     metric_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
@@ -158,6 +162,7 @@ async fn main() -> Result<(), GatewayError> {
 
     server::start(
         args.http_port,
+        args.internal_port,
         service_manager.clone(),
         plugin_catalog.clone(),
         args.rate_limit,
