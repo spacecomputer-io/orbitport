@@ -1,9 +1,14 @@
-# Local credit-loop override.
+# Real dashboard credit-loop override.
 #
-# Turns the dev stack into a real credit-charging gateway:
-#   - swaps the noop auth plugin for the real Auth0 auth plugin
-#   - enables the account plugin, pointed at the host-run dashboard backend
-#   - wires ORBITPORT_ACCOUNT_PLUGIN + real auth onto the gateway
+# The dev stack runs accountnoop, which grants every hold and charges nobody.
+# This replaces it with the real account plugin against a host-run dashboard,
+# so holds, settles, releases and PAT revocation hit an actual database. Stack
+# it when you are changing billing or revocation; the dev stack is enough for
+# everything else.
+#
+# It also swaps the noop auth plugin for the real Auth0 one, so the gateway
+# reads the customer's client_id from their JWT (the account plugin charges
+# that customer). Add local-pat.compose.yaml on top for PAT verification.
 #
 # Run (from the orbitport repo, with the dashboard already up on the host):
 #   export ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=...      # <-- pending from team

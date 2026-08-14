@@ -1,57 +1,29 @@
-# PAT local-dev overlay. Signs with an ephemeral in-process ES256 key by
-# default, so every restart invalidates outstanding PATs.
+# Full PAT verification overlay.
 #
-# MUST be stacked with the account overlay: the gateway refuses to start with
-# an issuer and no account plugin, since revocation is enforced on Hold.
+# The dev stack already runs plugin-issuer and mints real PATs, but its auth
+# plugin is authnoop, which accepts any string and never verifies a signature.
+# This swaps in the real auth plugin with the PAT path enabled, so presenting a
+# PAT actually checks its signature, issuer, audience and expiry against the
+# published JWKS.
+#
+# Stack it when you are changing PAT verification. The dev stack alone is
+# enough for minting, JWKS and tenancy.
 #
 #   docker compose --env-file=.dev.env -f dev.docker-compose.yaml \
-#     -f local-pat.compose.yaml -f local-account.compose.yaml up -d --build
+#     -f local-pat.compose.yaml up -d --build
 #
-# What it changes vs the dev stack:
-#   - adds plugin-issuer (mints PATs, serves JWKS)
-#   - swaps authnoop for the real auth plugin with the PAT path enabled
-#   - gateway serves GET /.well-known/jwks.json on 8080 and
-#     POST /internal/pat/issue on its own listener, container 8081,
-#     published on host 8090
+# Trade-off: with the real auth plugin the legacy e2e suites fail, since they
+# authenticate with the literal "test_access_token" that only authnoop accepts.
+#
+# Ports (unchanged by this overlay):
+#   8080  public API + GET /.well-known/jwks.json
+#   8090  internal listener -> container 8081, POST /internal/pat/issue
 #
 # The dashboard backend pairs with this via:
 #   ORBITPORT_ISSUER_URL=http://host.docker.internal:8090
-#   ORBITPORT_ISSUER_SHARED_SECRET=<the same secret you exported for this stack>
+#   ORBITPORT_ISSUER_SHARED_SECRET=<must match the gateway's>
 
 services:
-  plugin-issuer:
-    container_name: plugin-issuer
-    build:
-      context: ./plugins
-    image: op-plugin:latest
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 5s
-    environment:
-      - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=issuer
-      - ORBITPORT_GRPC_PORT=50006
-      - ORBITPORT_ISSUER_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
-      - ORBITPORT_ISSUER_AUD=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
-      # transit signs against the dev OpenBao; the pat-signing key is created
-      # by openbao-bootstrap. Run:
-      #   ORBITPORT_ISSUER_SIGNER=transit docker compose ... up -d
-      - ORBITPORT_ISSUER_SIGNER=${ORBITPORT_ISSUER_SIGNER:-local}
-      - ORBITPORT_ISSUER_OPENBAO_PROXY_URL=http://openbao-proxy:8200
-    depends_on:
-      openbao-bootstrap:
-        condition: service_completed_successfully
-      openbao-proxy:
-        condition: service_healthy
-
   # Auth0 vars serve the legacy-token path only.
   plugin-auth:
     environment:
@@ -61,20 +33,5 @@ services:
       - ORBITPORT_AUTH_PAT_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
       - ORBITPORT_AUTH_PAT_AUDIENCE=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
       - ORBITPORT_AUTH_ISSUER_PLUGIN=plugin-issuer:50006
-    depends_on:
-      - plugin-issuer
-
-  gateway:
-    environment:
-      - ORBITPORT_ISSUER_PLUGIN=http://plugin-issuer:50006
-      - ORBITPORT_INTERNAL_PORT=8081
-      # No default on purpose: this secret is all that stands between a caller
-      # and minting a PAT for any account.
-      - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:?set it, e.g. export ORBITPORT_ISSUER_SHARED_SECRET=$(openssl rand -hex 16)}
-    # Published only because the dashboard runs on the host in local dev. In
-    # k8s this port stays off the Service the Ingress routes to.
-    # Host 8090, not 8081: ipfs-node already publishes 8081.
-    ports:
-      - 8090:8081
     depends_on:
       - plugin-issuer
