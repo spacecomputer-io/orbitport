@@ -1,5 +1,10 @@
 //! End-to-end tests for the PAT surface against the running dev stack.
 //!
+//! Like every e2e_* suite here, these need the stack already up and fail with
+//! connection-refused otherwise:
+//!
+//!   make devenv && make e2e-all
+//!
 //! Two regressions these guard, both found in review of the issuer work:
 //!
 //!   1. PAT issuance was mounted on the public HTTP port, reachable from the
