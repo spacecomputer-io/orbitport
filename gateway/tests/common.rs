@@ -129,6 +129,29 @@ pub async fn rpc_threshold_coordinate_dkg(
     rpc_success_result(base_url, access_token, req_id, payload).await
 }
 
+#[allow(dead_code)]
+pub async fn rpc_threshold_sign(
+    base_url: &str,
+    access_token: &str,
+    req_id: u64,
+    key_id: &str,
+    message: &str,
+) -> Result<gateway::proto::services::threshold::ThresholdSignResponse, E2EError> {
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": req_id,
+        "method": "kms_threshold.Sign",
+        "params": {
+            "KeyId": key_id,
+            "GroupName": THRESHOLD_GROUP,
+            "SessionId": format!("sign-session-{req_id}"),
+            "Message": message
+        },
+    });
+
+    rpc_success_result(base_url, access_token, req_id, payload).await
+}
+
 struct ThresholdTestNode {
     node_id: &'static str,
     party_index: i32,
