@@ -87,7 +87,10 @@ func (p *Plugin) IssueToken(ctx context.Context, req *proto.IssueTokenRequest) (
 		return nil, status.Error(codes.Internal, "signing failed")
 	}
 
-	p.logger.Infof("issued PAT jti=%s sub=%s exp=%s", req.GetJti(), req.GetSubject(), exp.UTC().Format(time.RFC3339))
+	// No jti or sub. This line lands in pod logs, and the pair is enough to
+	// forge a usable PAT for a real account against the unauthenticated mint
+	// RPC. The dashboard owns the PAT row if you need to trace one.
+	p.logger.Infof("issued PAT exp=%s", exp.UTC().Format(time.RFC3339))
 
 	return &proto.IssueTokenResponse{Ok: true, Token: token}, nil
 }
