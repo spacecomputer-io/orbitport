@@ -11,6 +11,8 @@
 //!      internet behind nothing but a static shared secret.
 //!   2. KMS tenancy was read from the token's own `kms_tenant` claim, asserted
 //!      once at mint time and trusted for the life of the token.
+//!   3. The gateway republished the issuer's key set. That now belongs to the
+//!      jwks plugin, on its own listener.
 //!
 //! The dev stack authenticates with authnoop, so these do not exercise PAT
 //! *verification* at the gateway — that needs local-pat.compose.yaml, and the
@@ -30,6 +32,12 @@ fn public_url() -> String {
 /// the dev stack publishes it on 8090 because ipfs-node already takes 8081.
 fn internal_url() -> String {
     env::var("OPTEST_INTERNAL_URL").unwrap_or("http://localhost:8090".to_string())
+}
+
+/// The jwks plugin, which publishes the key set the gateway used to proxy.
+/// Container-side it is 8080; the dev stack publishes it on 8091.
+fn jwks_url() -> String {
+    env::var("OPTEST_JWKS_URL").unwrap_or("http://localhost:8091".to_string())
 }
 
 fn shared_secret() -> String {
@@ -97,6 +105,21 @@ async fn test_e2e_pat_issue_is_not_served_on_the_public_port() {
     );
 }
 
+/// The key set moved to the jwks plugin. The gateway routes and meters the
+/// API; it no longer republishes the issuer's keys.
+#[tokio::test]
+async fn test_e2e_pat_jwks_is_not_served_by_the_gateway() {
+    let resp = reqwest::get(format!("{}/.well-known/jwks.json", public_url()))
+        .await
+        .expect("gateway unreachable — is the dev stack up?");
+
+    assert_ne!(
+        resp.status(),
+        200,
+        "the gateway still serves JWKS; it belongs to the jwks plugin"
+    );
+}
+
 #[tokio::test]
 async fn test_e2e_pat_internal_listener_requires_the_shared_secret() {
     let client = reqwest::Client::new();
@@ -137,9 +160,9 @@ async fn test_e2e_pat_minted_pat_verifies_against_the_published_jwks() {
     assert_eq!(header["typ"], "JWT");
     let kid = header["kid"].as_str().expect("no kid header").to_string();
 
-    let jwks: serde_json::Value = reqwest::get(format!("{}/.well-known/jwks.json", public_url()))
+    let jwks: serde_json::Value = reqwest::get(format!("{}/.well-known/jwks.json", jwks_url()))
         .await
-        .expect("JWKS unreachable")
+        .expect("JWKS unreachable — is the dev stack up?")
         .json()
         .await
         .expect("JWKS is not JSON");
