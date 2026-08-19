@@ -131,9 +131,8 @@ func main() {
 		// health server registered below still backs the k8s probes.
 		go func() {
 			logger.Infof("Starting JWKS http server on port %d", plugin.HTTPPort())
-			// The pod's only job is publishing keys. Staying up while the
-			// listener is dead would keep it passing probes and serving
-			// nothing, so take the process down and let it restart.
+			// Staying up with a dead listener would keep passing probes while
+			// serving nothing, so take the process down and let it restart.
 			panic(plugin.ListenHTTP())
 		}()
 		logger.Info("JWKS plugin ready")

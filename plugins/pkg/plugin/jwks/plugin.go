@@ -27,8 +27,8 @@ import (
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
 
-// Advertised to clients. Deliberately looser than the server-side cache so a
-// key rotation reaches verifiers without every one of them polling us.
+// Looser than the server-side cache on purpose, so a key rotation reaches
+// verifiers without every one of them polling us.
 const browserCacheMaxAge = 300
 
 const unavailableBody = `{"error":"issuer_plugin_unavailable"}`
@@ -86,8 +86,6 @@ func (p *Plugin) HTTPPort() uint16 { return p.cfg.HTTPPort }
 // ListenHTTP serves the key set until the listener fails. It never returns nil.
 func (p *Plugin) ListenHTTP() error {
 	mux := http.NewServeMux()
-	// Method-scoped, so anything but GET on this path is a 405. No other path
-	// is served at all.
 	mux.HandleFunc("GET /.well-known/jwks.json", p.handleJWKS)
 
 	srv := &http.Server{
@@ -119,7 +117,6 @@ func (p *Plugin) handleJWKS(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte(body))
 }
 
-// jwks returns the cached key set, refreshing it when stale.
 func (p *Plugin) jwks() (string, error) {
 	if body, ok := p.fresh(); ok {
 		return body, nil

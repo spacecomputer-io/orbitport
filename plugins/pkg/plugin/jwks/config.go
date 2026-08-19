@@ -9,17 +9,14 @@ import (
 
 // jwksConfig is the configuration for the JWKS plugin.
 type jwksConfig struct {
-	// IssuerPlugin is the issuer plugin's gRPC address. Required. Without it
-	// there is nothing to publish, and serving an empty key set would make
-	// every verifier reject every PAT.
+	// Required. Without it there is nothing to publish, and an empty key set
+	// would make every verifier reject every PAT.
 	IssuerPlugin string
-	// HTTPPort serves the public key set. This is the only listener in the
-	// platform that is meant to be internet-reachable besides the gateway.
+	// The only listener here meant to be internet-reachable.
 	HTTPPort uint16
-	// CacheTTLSecs bounds how often an anonymous request reaches the issuer.
+	// Bounds how often an anonymous request reaches the issuer.
 	CacheTTLSecs int
-	// TimeoutSecs bounds a single GetJwks call.
-	TimeoutSecs int
+	TimeoutSecs  int
 }
 
 func readFromEnv() *jwksConfig {
