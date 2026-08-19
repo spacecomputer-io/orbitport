@@ -1,77 +1,11 @@
-//! Issuer-backed routes: the public JWKS endpoint and the internal PAT
-//! issuance endpoint.
+//! The internal PAT issuance endpoint. The public key set is published by the
+//! jwks plugin, which reads it from the issuer over gRPC.
 
 use serde::Deserialize;
-use std::sync::Arc;
-use tokio::time::{Duration, timeout};
 use warp::{Filter, Rejection, http::StatusCode, reply::Response};
 
-use crate::proto::plugins::issuer::{
-    GetJwksRequest, IssueTokenRequest, issuer_plugin_client::IssuerPluginClient,
-};
+use crate::proto::plugins::issuer::{IssueTokenRequest, issuer_plugin_client::IssuerPluginClient};
 use tonic::transport::Channel;
-
-/// PUBLIC `GET /.well-known/jwks.json` — bypasses `with_auth`, since
-/// verifiers must be able to fetch the key set anonymously.
-pub fn jwks_route(
-    client: IssuerPluginClient<Channel>,
-) -> impl Filter<Extract = (Response,), Error = Rejection> + Clone {
-    let cache: JwksCache = Arc::new(tokio::sync::Mutex::new(None));
-    warp::get()
-        .and(warp::path!(".well-known" / "jwks.json"))
-        .and(warp::any().map(move || client.clone()))
-        .and(warp::any().map(move || cache.clone()))
-        .and_then(handle_jwks)
-}
-
-/// Last JWKS body served, with the instant it was fetched.
-type JwksCache = Arc<tokio::sync::Mutex<Option<(String, std::time::Instant)>>>;
-
-/// The route is public, so without this every anonymous request fans through
-/// to the issuer plugin. Strictly tighter than the advertised `max-age=300`.
-const JWKS_CACHE_TTL: Duration = Duration::from_secs(60);
-const JWKS_FETCH_TIMEOUT: Duration = Duration::from_secs(5);
-
-fn jwks_reply(jwks: String) -> Response {
-    let reply = warp::reply::with_header(jwks, "content-type", "application/json");
-    let reply = warp::reply::with_header(reply, "cache-control", "max-age=300");
-    warp::reply::Reply::into_response(reply)
-}
-
-async fn handle_jwks(
-    mut client: IssuerPluginClient<Channel>,
-    cache: JwksCache,
-) -> Result<Response, Rejection> {
-    // Drop the lock before any network call, so a hung issuer plugin never
-    // serializes readers behind it.
-    if let Some((body, fetched_at)) = cache.lock().await.clone()
-        && fetched_at.elapsed() < JWKS_CACHE_TTL
-    {
-        return Ok(jwks_reply(body));
-    }
-
-    match timeout(JWKS_FETCH_TIMEOUT, client.get_jwks(GetJwksRequest {})).await {
-        Ok(Ok(resp)) => {
-            let jwks = resp.into_inner().jwks_json;
-            *cache.lock().await = Some((jwks.clone(), std::time::Instant::now()));
-            Ok(jwks_reply(jwks))
-        }
-        Ok(Err(e)) => {
-            tracing::error!("Issuer plugin GetJwks failed: {}", e);
-            Ok(json_status(
-                &serde_json::json!({"error": "issuer_plugin_unavailable"}),
-                StatusCode::SERVICE_UNAVAILABLE,
-            ))
-        }
-        Err(_) => {
-            tracing::error!("Issuer plugin GetJwks timed out");
-            Ok(json_status(
-                &serde_json::json!({"error": "issuer_plugin_unavailable"}),
-                StatusCode::SERVICE_UNAVAILABLE,
-            ))
-        }
-    }
-}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

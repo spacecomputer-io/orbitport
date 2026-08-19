@@ -8,7 +8,7 @@ use crate::metrics;
 use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
-use crate::auth::{jwks_route, pat_issue_route};
+use crate::auth::pat_issue_route;
 use crate::filters::{
     AuthContextWithHold, RateLimiter, account_release, account_settle, with_account_hold,
     with_auth, with_rate_limiter,
@@ -146,16 +146,17 @@ pub async fn start(
         }))
     });
 
-    let mut routes: BoxedFilter<(Response,)> = get_route
+    let routes: BoxedFilter<(Response,)> = get_route
         .or(post_route)
         .or(rpc_route)
         .or(health_route.with(warp::log("health_check")))
         .map(warp::reply::Reply::into_response)
         .boxed();
 
+    // The public key set is published by the jwks plugin, not here. The
+    // gateway routes and meters the API rather than republishing another
+    // service's keys.
     if let Some(client) = issuer_client {
-        routes = routes.or(jwks_route(client.clone())).unify().boxed();
-
         match issuer_shared_secret.as_deref() {
             Some(secret) if !secret.is_empty() => {
                 let internal = internal_routes(client, secret.to_string());
