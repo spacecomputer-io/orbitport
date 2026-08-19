@@ -2,6 +2,8 @@ package threshold
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -142,14 +144,19 @@ func (p *Plugin) dkgRequestFromProto(req *proto.DkgRequest) (DKGRequest, error) 
 		return DKGRequest{}, fmt.Errorf("request is required")
 	}
 
+	keyName := strings.TrimSpace(req.KeyName)
+	clientID := strings.TrimSpace(req.ClientId)
+	if keyName == "" {
+		return DKGRequest{}, fmt.Errorf("key_name is required")
+	}
+	if clientID == "" {
+		return DKGRequest{}, fmt.Errorf("client_id is required")
+	}
 	dkgRequest := DKGRequest{
-		KeyName:   strings.TrimSpace(req.KeyName),
+		KeyName:   tenantScopedKeyName(clientID, keyName),
 		GroupName: strings.TrimSpace(req.GroupName),
 		SessionID: strings.TrimSpace(req.SessionId),
 		Threshold: int(req.Threshold),
-	}
-	if dkgRequest.KeyName == "" {
-		return DKGRequest{}, fmt.Errorf("key_name is required")
 	}
 	if dkgRequest.GroupName == "" {
 		return DKGRequest{}, fmt.Errorf("group_name is required")
@@ -216,15 +223,20 @@ func (p *Plugin) signRequestFromProto(req *proto.ThresholdSignRequest) (SignRequ
 		return SignRequest{}, fmt.Errorf("request is required")
 	}
 
+	keyName := strings.TrimSpace(req.KeyName)
+	clientID := strings.TrimSpace(req.ClientId)
+	if keyName == "" {
+		return SignRequest{}, fmt.Errorf("key_name is required")
+	}
+	if clientID == "" {
+		return SignRequest{}, fmt.Errorf("client_id is required")
+	}
 	signRequest := SignRequest{
-		KeyName:   strings.TrimSpace(req.KeyName),
+		KeyName:   tenantScopedKeyName(clientID, keyName),
 		GroupName: strings.TrimSpace(req.GroupName),
 		SessionID: strings.TrimSpace(req.SessionId),
 		Message:   strings.TrimSpace(req.Message),
 		Threshold: int(req.Threshold),
-	}
-	if signRequest.KeyName == "" {
-		return SignRequest{}, fmt.Errorf("key_name is required")
 	}
 	if signRequest.GroupName == "" {
 		return SignRequest{}, fmt.Errorf("group_name is required")
@@ -287,4 +299,12 @@ func (p *Plugin) signRequestFromProto(req *proto.ThresholdSignRequest) (SignRequ
 		return signRequest.Participants[i].PartyIndex < signRequest.Participants[j].PartyIndex
 	})
 	return signRequest, nil
+}
+
+func tenantScopedKeyName(clientID, keyName string) string {
+	const tenantNamespacePrefix = "tenant_"
+	const tenantNamespaceBytes = 16
+
+	sum := sha256.Sum256([]byte(strings.TrimSpace(clientID)))
+	return tenantNamespacePrefix + hex.EncodeToString(sum[:tenantNamespaceBytes]) + "_" + keyName
 }

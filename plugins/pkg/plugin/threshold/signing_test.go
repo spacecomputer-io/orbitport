@@ -68,6 +68,8 @@ func TestCoordinatorCoordinatesThresholdSigning(t *testing.T) {
 }
 
 func TestPluginCoordinateSign(t *testing.T) {
+	const clientID = "client-a"
+	scopedKeyName := tenantScopedKeyName(clientID, "key-1")
 	nodeIDs := []string{"node-a", "node-b"}
 	clients := map[string]*fakeSignClient{
 		"node-a": newFakeSignClient("node-a", nodeIDs),
@@ -87,6 +89,7 @@ func TestPluginCoordinateSign(t *testing.T) {
 		SessionId: "sign-1",
 		Message:   "aGVsbG8=",
 		Threshold: 2,
+		ClientId:  clientID,
 		Participants: []*proto.GroupMember{
 			{NodeId: "node-b", PartyIndex: 1, OpenbaoUrl: "http://node-b"},
 			{NodeId: "node-a", PartyIndex: 0, OpenbaoUrl: "http://node-a"},
@@ -95,8 +98,16 @@ func TestPluginCoordinateSign(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CoordinateSign() error = %v", err)
 	}
-	if resp.KeyName != "key-1" || resp.GroupName != "team-a" || resp.SessionId != "sign-1" {
+	if resp.KeyName != scopedKeyName || resp.GroupName != "team-a" || resp.SessionId != "sign-1" {
 		t.Fatalf("unexpected response identity: %+v", resp)
+	}
+	for nodeID, client := range clients {
+		if client.start.KeyName != scopedKeyName {
+			t.Fatalf("node %s key name = %q, want %q", nodeID, client.start.KeyName, scopedKeyName)
+		}
+		if client.start.GroupName != "team-a" {
+			t.Fatalf("node %s group name = %q, want team-a", nodeID, client.start.GroupName)
+		}
 	}
 	if resp.Signature != "aggregate-signature" {
 		t.Fatalf("signature = %q, want aggregate-signature", resp.Signature)

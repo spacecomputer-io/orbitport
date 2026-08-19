@@ -205,10 +205,11 @@ func prepareFakeThresholdNodes(t *testing.T, nodes map[string]*fakeThresholdNode
 }
 
 type fakeThresholdNode struct {
-	nodeID string
-	peers  []string
-	client *OpenBaoClient
-	server *httptest.Server
+	nodeID  string
+	keyName string
+	peers   []string
+	client  *OpenBaoClient
+	server  *httptest.Server
 
 	mu                sync.Mutex
 	nodeConfigWritten bool
@@ -225,6 +226,7 @@ func newFakeThresholdNode(t *testing.T, nodeID string, allNodeIDs []string) *fak
 
 	node := &fakeThresholdNode{
 		nodeID:        nodeID,
+		keyName:       "key-1",
 		pairwiseSeeds: make(map[string]string),
 		failures:      make(map[string]int),
 	}
@@ -244,18 +246,19 @@ func newFakeThresholdNode(t *testing.T, nodeID string, allNodeIDs []string) *fak
 }
 
 func (n *fakeThresholdNode) handle(w http.ResponseWriter, r *http.Request) {
+	keyPath := "/v1/threshold/keys/" + n.keyName
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/threshold/config/node":
 		n.handleWriteNodeConfig(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/threshold/groups/"):
 		n.handleWriteGroup(w, r)
-	case r.Method == http.MethodPost && r.URL.Path == "/v1/threshold/keys/key-1/dkg/start":
+	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/dkg/start":
 		n.handleStart(w, r)
-	case r.Method == http.MethodPost && r.URL.Path == "/v1/threshold/keys/key-1/dkg/deliver":
+	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/dkg/deliver":
 		n.handleDeliver(w, r)
-	case r.Method == http.MethodPost && r.URL.Path == "/v1/threshold/keys/key-1/dkg/proceed":
+	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/dkg/proceed":
 		n.handleProceed(w, r)
-	case r.Method == http.MethodGet && r.URL.Path == "/v1/threshold/keys/key-1/dkg/status":
+	case r.Method == http.MethodGet && r.URL.Path == keyPath+"/dkg/status":
 		writeOpenBaoData(w, n.status(0, "", nil))
 	default:
 		http.Error(w, fmt.Sprintf("unexpected request %s %s", r.Method, r.URL.Path), http.StatusNotFound)
@@ -399,7 +402,7 @@ func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, r *http.Request
 			return
 		}
 		writeOpenBaoData(w, DKGStatus{
-			Name:      "key-1",
+			Name:      n.keyName,
 			Group:     "team-a",
 			SessionID: "dkg-1",
 			NodeID:    n.nodeID,
@@ -436,7 +439,7 @@ func (n *fakeThresholdNode) consumeFailure(w http.ResponseWriter, operation stri
 
 func (n *fakeThresholdNode) status(round int, broadcast string, unicasts map[string]string) DKGStatus {
 	return DKGStatus{
-		Name:      "key-1",
+		Name:      n.keyName,
 		Group:     "team-a",
 		SessionID: "dkg-1",
 		NodeID:    n.nodeID,

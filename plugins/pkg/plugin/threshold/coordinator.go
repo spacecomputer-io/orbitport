@@ -162,7 +162,13 @@ func (c *Coordinator) CoordinateSign(ctx context.Context, req SignRequest) (*Sig
 	if err != nil {
 		return nil, fmt.Errorf("aggregate signing on %q: %w", aggregator.NodeID, err)
 	}
-	if aggregated == nil || aggregated.Signature == "" {
+	if aggregated == nil {
+		return nil, fmt.Errorf("node %q returned an empty aggregate signing status", aggregator.NodeID)
+	}
+	if aggregated.Status != signStatusCompleted {
+		return nil, fmt.Errorf("node %q aggregated signing with status %q", aggregator.NodeID, aggregated.Status)
+	}
+	if aggregated.Signature == "" {
 		return nil, fmt.Errorf("node %q returned an empty aggregate signature", aggregator.NodeID)
 	}
 
@@ -330,6 +336,7 @@ func (c *Coordinator) startSign(ctx context.Context, req SignRequest, bootstrap 
 		status, err := c.callSignWithRetry(ctx, fmt.Sprintf("start signing on %q", participant.NodeID), func() (*SignStatus, error) {
 			return participant.Client.StartSign(ctx, StartSignRequest{
 				KeyName:       req.KeyName,
+				GroupName:     req.GroupName,
 				SessionID:     req.SessionID,
 				Message:       req.Message,
 				Participants:  participantNodeIDs,

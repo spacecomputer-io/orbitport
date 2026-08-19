@@ -69,6 +69,7 @@ type DeliverDKGRequest struct {
 
 type StartSignRequest struct {
 	KeyName       string
+	GroupName     string
 	SessionID     string
 	Message       string
 	Participants  []string

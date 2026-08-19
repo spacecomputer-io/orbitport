@@ -122,6 +122,7 @@ func (c *OpenBaoClient) StartSign(ctx context.Context, req StartSignRequest) (*S
 
 	var resp openBaoDataResponse[SignStatus]
 	if err := c.Post(ctx, c.thresholdPath("keys", req.KeyName, "sign", "start"), map[string]any{
+		"group":          req.GroupName,
 		"session_id":     req.SessionID,
 		"message":        req.Message,
 		"participants":   string(participants),
