@@ -17,6 +17,7 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/issuer"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/jwks"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/threshold"
@@ -121,6 +122,21 @@ func main() {
 		}
 		proto.RegisterIssuerPluginServer(grpcServer, plugin)
 		logger.Info("Issuer plugin ready")
+	case "jwks":
+		plugin, err := jwks.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		// Serves HTTP rather than gRPC, so it registers nothing here. The
+		// health server registered below still backs the k8s probes.
+		go func() {
+			logger.Infof("Starting JWKS http server on port %d", plugin.HTTPPort())
+			// The pod's only job is publishing keys. Staying up while the
+			// listener is dead would keep it passing probes and serving
+			// nothing, so take the process down and let it restart.
+			panic(plugin.ListenHTTP())
+		}()
+		logger.Info("JWKS plugin ready")
 	case "kms":
 		plugin, err := kms.NewPlugin()
 		if err != nil {

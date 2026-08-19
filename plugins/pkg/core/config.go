@@ -16,6 +16,7 @@ type GrpcPluginConfig struct {
 	// - "auth"
 	// - "authnoop" (development only)
 	// - "accountnoop" (development only)
+	// - "jwks" (serves HTTP, not gRPC)
 	Plugin string
 	// GrpcPort is the port the grpc server listens on.
 	GrpcPort uint16

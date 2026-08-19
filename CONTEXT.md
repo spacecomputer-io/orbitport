@@ -67,7 +67,7 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_TRNG_PLUGIN` | — | gRPC URL of the cTRNG plugin (`aptosorbital`) |
 | `ORBITPORT_KMS_PLUGIN` | — | gRPC URL of the KMS plugin |
 | `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving, settle on success, and release on downstream failure. |
-| `ORBITPORT_ISSUER_PLUGIN` | — | gRPC URL of the issuer plugin. When set, mounts `POST /internal/pat/issue` and `GET /.well-known/jwks.json` |
+| `ORBITPORT_ISSUER_PLUGIN` | — | gRPC URL of the issuer plugin. When set, mounts `POST /internal/pat/issue` on the internal listener. The key set is published by the jwks plugin |
 | `ORBITPORT_ISSUER_SHARED_SECRET` | — | Bearer secret guarding `/internal/pat/issue` (constant-time compare). Route is not mounted when empty |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
@@ -115,6 +115,19 @@ exactly as before:
 | `ORBITPORT_ISSUER_TRANSIT_MOUNT` | `transit` | Transit secrets engine mount path |
 | `ORBITPORT_ISSUER_TRANSIT_KEY` | `pat-signing` | Signing key name; `kid` = the Transit key version, rotation is a key-rotate away |
 | `ORBITPORT_ISSUER_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
+
+### Plugin: `jwks`
+
+Publishes the issuer's public keys at `GET /.well-known/jwks.json`. Serves HTTP
+rather than gRPC and holds no key material. See
+`plugins/pkg/plugin/jwks/README.md`.
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_JWKS_ISSUER_PLUGIN` | — | gRPC address of the issuer plugin (required; startup fails without it) |
+| `ORBITPORT_JWKS_HTTP_PORT` | `8080` | Public listener serving the key set |
+| `ORBITPORT_JWKS_CACHE_TTL_SECS` | `60` | Bounds how often an anonymous request reaches the issuer |
+| `ORBITPORT_JWKS_TIMEOUT_SECS` | `5` | Bounds a single `GetJwks` call |
 
 ### Plugin: `aptosorbital`
 

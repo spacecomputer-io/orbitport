@@ -3,9 +3,9 @@
 Mints **Personal Access Tokens** (Model B of the auth migration): compact
 ES256 JWS carrying `iss/aud/sub/jti/iat/exp` (+ `kms_tenant` when provided),
 with the Transit key version — or a stable hash of the local key — as the
-`kid` header. Serves the public **JWKS** over gRPC so verifiers (the auth
-plugin, via the gateway's `/.well-known/jwks.json`) never talk to the key
-store.
+`kid` header. Serves the **JWKS** over gRPC so verifiers never talk to the key
+store: the auth plugin calls `GetJwks` directly, and the jwks plugin proxies it
+to the public `/.well-known/jwks.json`.
 
 The dashboard backend owns the PAT lifecycle (metadata row whose id is the
 `jti`, charge flow, revocation flags); this plugin owns claims assembly and

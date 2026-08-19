@@ -432,6 +432,27 @@ services:
       openbao-proxy:
         condition: service_healthy
 
+  # Publishes the issuer's public keys. The only plugin that answers requests
+  # from outside the cluster, which is why it is a separate pod from the issuer
+  # that signs.
+  plugin-jwks:
+    <<: *plugin-base
+    container_name: plugin-jwks
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=jwks
+      - ORBITPORT_GRPC_PORT=50008
+      - ORBITPORT_JWKS_ISSUER_PLUGIN=plugin-issuer:50006
+      - ORBITPORT_JWKS_HTTP_PORT=8080
+    ports:
+      # Host 8091 because 8080 is the gateway and 8081 is ipfs-node.
+      - 8091:8080
+    depends_on:
+      - plugin-issuer
+
   ipfs-node:
     image: ipfs/kubo:release
     ports:
