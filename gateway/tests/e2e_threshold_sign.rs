@@ -17,14 +17,23 @@ async fn test_e2e_threshold_sign_two_of_three() {
 
     let result = async {
         let req_id = unique_req_id();
-        let dkg = common::rpc_threshold_coordinate_dkg(&base_url, &access_token, req_id).await?;
-        let message = "aGVsbG8gdGhyZXNob2xkIHNpZ25pbmc=";
-        let signing =
-            common::rpc_threshold_sign(&base_url, &access_token, req_id + 1, &dkg.key_id, message)
+        let group_name = "e2e-signing-group";
+        let dkg =
+            common::rpc_threshold_coordinate_dkg(&base_url, &access_token, req_id, group_name)
                 .await?;
+        let message = "aGVsbG8gdGhyZXNob2xkIHNpZ25pbmc=";
+        let signing = common::rpc_threshold_sign(
+            &base_url,
+            &access_token,
+            req_id + 1,
+            &dkg.key_id,
+            group_name,
+            message,
+        )
+        .await?;
 
         assert_eq!(signing.key_id, dkg.key_id);
-        assert_eq!(signing.group_name, "e2e-group");
+        assert_eq!(signing.group_name, group_name);
         assert_eq!(signing.status, "sign_completed");
         assert!(!signing.signature.is_empty());
 

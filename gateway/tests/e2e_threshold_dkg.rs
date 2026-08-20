@@ -17,7 +17,9 @@ async fn test_e2e_threshold_coordinate_dkg_two_of_three() {
 
     let result = async {
         let req_id = unique_req_id();
-        let resp = common::rpc_threshold_coordinate_dkg(&base_url, &access_token, req_id).await?;
+        let resp =
+            common::rpc_threshold_coordinate_dkg(&base_url, &access_token, req_id, "e2e-group")
+                .await?;
         let alias = format!("e2e-key-{req_id}");
 
         assert_eq!(resp.key_id, format!("threshold:{alias}"));

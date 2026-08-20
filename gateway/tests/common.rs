@@ -5,7 +5,6 @@ use tokio::process::Command;
 
 use gateway::structures::service::ServiceResult;
 
-const THRESHOLD_GROUP: &str = "e2e-group";
 const THRESHOLD_MOUNT: &str = "threshold";
 
 /// Error type for end-to-end tests
@@ -111,9 +110,10 @@ pub async fn rpc_threshold_coordinate_dkg(
     base_url: &str,
     access_token: &str,
     req_id: u64,
+    group_name: &str,
 ) -> Result<gateway::proto::services::threshold::DkgResponse, E2EError> {
     let nodes = threshold_test_nodes();
-    prepare_threshold_nodes(&nodes).await?;
+    prepare_threshold_nodes(&nodes, group_name).await?;
 
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
@@ -121,7 +121,7 @@ pub async fn rpc_threshold_coordinate_dkg(
         "method": "kms_threshold.CoordinateDKG",
         "params": {
             "Alias": format!("e2e-key-{req_id}"),
-            "GroupName": THRESHOLD_GROUP,
+            "GroupName": group_name,
             "SessionId": format!("dkg-session-{req_id}")
         },
     });
@@ -135,6 +135,7 @@ pub async fn rpc_threshold_sign(
     access_token: &str,
     req_id: u64,
     key_id: &str,
+    group_name: &str,
     message: &str,
 ) -> Result<gateway::proto::services::threshold::ThresholdSignResponse, E2EError> {
     let payload = serde_json::json!({
@@ -143,7 +144,7 @@ pub async fn rpc_threshold_sign(
         "method": "kms_threshold.Sign",
         "params": {
             "KeyId": key_id,
-            "GroupName": THRESHOLD_GROUP,
+            "GroupName": group_name,
             "SessionId": format!("sign-session-{req_id}"),
             "Message": message
         },
@@ -178,7 +179,10 @@ fn threshold_test_nodes() -> Vec<ThresholdTestNode> {
     ]
 }
 
-async fn prepare_threshold_nodes(nodes: &[ThresholdTestNode]) -> Result<(), E2EError> {
+async fn prepare_threshold_nodes(
+    nodes: &[ThresholdTestNode],
+    group_name: &str,
+) -> Result<(), E2EError> {
     let client = reqwest::Client::new();
     let participants = serde_json::to_string(
         &nodes
@@ -205,7 +209,7 @@ async fn prepare_threshold_nodes(nodes: &[ThresholdTestNode]) -> Result<(), E2EE
         openbao_post(
             &client,
             node.host_openbao_url,
-            &format!("/v1/{THRESHOLD_MOUNT}/groups/{THRESHOLD_GROUP}"),
+            &format!("/v1/{THRESHOLD_MOUNT}/groups/{group_name}"),
             serde_json::json!({
                 "threshold": 2,
                 "participants": participants,
