@@ -6,7 +6,7 @@ use crate::proto::services::kms::{
     CreateKeyRequest, DecapsulateRequest, DecryptRequest, EncapsulateRequest, EncryptRequest,
     GenerateDataKeyRequest, GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
 };
-use crate::proto::services::threshold::DkgRequest;
+use crate::proto::services::threshold::{DkgRequest, ThresholdSignRequest};
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{KmsRpcCall, KmsService};
@@ -96,6 +96,8 @@ pub enum RpcCall {
     Decapsulate(DecapsulateRequest),
     #[serde(rename = "kms_threshold.CoordinateDKG")]
     CoordinateDKG(DkgRequest),
+    #[serde(rename = "kms_threshold.Sign")]
+    ThresholdSign(ThresholdSignRequest),
 }
 
 impl RpcCall {
@@ -123,6 +125,9 @@ impl RpcCall {
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
             RpcCall::CoordinateDKG(req) => {
                 ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
+            }
+            RpcCall::ThresholdSign(req) => {
+                ThresholdService::validate_sign(req).map_err(|e| e.to_string())?
             }
         }
         Ok(())
@@ -212,6 +217,15 @@ impl RpcCall {
                     client_id,
                     plugin_catalog,
                     ThresholdRpcCall::CoordinateDkg(req),
+                )
+                .await
+            }
+            RpcCall::ThresholdSign(req) => {
+                execute_threshold(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    ThresholdRpcCall::CoordinateSign(req),
                 )
                 .await
             }
@@ -352,6 +366,32 @@ mod test {
                 assert_eq!(params.session_id, "dkg-1");
             }
             _ => panic!("expected kms_threshold.CoordinateDKG"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_threshold_sign_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "kms_threshold.Sign",
+            "params": {
+                "KeyId": "threshold:key-1",
+                "GroupName": "team-a",
+                "SessionId": "sign-1",
+                "Message": "aGVsbG8="
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::ThresholdSign(params) => {
+                assert_eq!(params.key_id, "threshold:key-1");
+                assert_eq!(params.group_name, "team-a");
+                assert_eq!(params.session_id, "sign-1");
+                assert_eq!(params.message, "aGVsbG8=");
+            }
+            _ => panic!("expected kms_threshold.Sign"),
         }
     }
 

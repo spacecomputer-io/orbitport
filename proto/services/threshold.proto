@@ -3,11 +3,12 @@ syntax = "proto3";
 option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 
 // Public Threshold contract exposed by Orbitport through the gateway JSON-RPC
-// API. This initial surface is focused on DKG orchestration only.
+// API.
 package threshold;
 
 service ThresholdService {
   rpc CoordinateDkg(DkgRequest) returns (DkgResponse);
+  rpc CoordinateSign(ThresholdSignRequest) returns (ThresholdSignResponse);
 }
 
 message DkgRequest {
@@ -22,4 +23,19 @@ message DkgResponse {
   string group_name = 3;
   string status = 4;
   string public_key = 5;
+}
+
+message ThresholdSignRequest {
+  string key_id = 1;
+  string group_name = 2;
+  string session_id = 3;
+  string message = 4;
+}
+
+message ThresholdSignResponse {
+  string key_id = 1;
+  string group_name = 2;
+  string session_id = 3;
+  string status = 4;
+  string signature = 5;
 }

@@ -7,13 +7,18 @@ use tonic::transport::Channel;
 
 use crate::proto::plugins::threshold::{
     DkgRequest as PluginDkgRequest, DkgResponse as PluginDkgResponse,
-    GroupMember as PluginGroupMember, threshold_plugin_client::ThresholdPluginClient,
+    GroupMember as PluginGroupMember, ThresholdSignRequest as PluginSignRequest,
+    ThresholdSignResponse as PluginSignResponse, threshold_plugin_client::ThresholdPluginClient,
 };
-use crate::proto::services::threshold::{DkgRequest, DkgResponse};
+use crate::proto::services::threshold::{
+    DkgRequest, DkgResponse, ThresholdSignRequest as SignRequest,
+    ThresholdSignResponse as SignResponse,
+};
 
 const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "threshold:";
 const DKG_COMPLETED_STATUS: &str = "dkg_completed";
+const SIGN_COMPLETED_STATUS: &str = "sign_completed";
 
 /// Validation and configuration errors for the threshold service.
 #[derive(Error, Debug)]
@@ -30,6 +35,8 @@ pub enum ThresholdError {
     AliasReservedPrefix,
     #[error("alias contains unsupported characters")]
     AliasUnsupportedCharacters,
+    #[error("key_id must use the threshold:<alias> format")]
+    InvalidKeyId,
     #[error("Threshold group {0} requires at least two participants")]
     NotEnoughParticipants(String),
     #[error("Threshold group {0} threshold must be between 2 and participant count")]
@@ -86,12 +93,14 @@ impl ThresholdGroupRegistry {
 #[derive(Debug)]
 pub enum ThresholdRpcCall {
     CoordinateDkg(DkgRequest),
+    CoordinateSign(SignRequest),
 }
 
 impl ThresholdRpcCall {
     pub fn validate(&self) -> Result<(), ThresholdError> {
         match self {
             Self::CoordinateDkg(req) => ThresholdService::validate_coordinate_dkg(req),
+            Self::CoordinateSign(req) => ThresholdService::validate_sign(req),
         }
     }
 
@@ -103,6 +112,12 @@ impl ThresholdRpcCall {
                 req.alias,
                 req.group_name
             ),
+            Self::CoordinateSign(req) => tracing::debug!(
+                "Executing Threshold Sign RPC [id={} key_id={} group_name={}]",
+                req_id,
+                req.key_id,
+                req.group_name
+            ),
         }
     }
 }
@@ -111,6 +126,7 @@ impl ThresholdRpcCall {
 #[serde(untagged)]
 pub enum ThresholdRpcResult {
     CoordinateDkg(DkgResponse),
+    CoordinateSign(SignResponse),
 }
 
 impl ThresholdRpcResult {
@@ -121,6 +137,12 @@ impl ThresholdRpcResult {
                 req_id,
                 result.key_id,
                 result.alias,
+                result.status
+            ),
+            Self::CoordinateSign(result) => tracing::debug!(
+                "Threshold Sign RPC succeeded [id={} key_id={} status={}]",
+                req_id,
+                result.key_id,
                 result.status
             ),
         }
@@ -152,6 +174,23 @@ impl ThresholdService {
         Ok(())
     }
 
+    pub fn validate_sign(req: &SignRequest) -> Result<(), ThresholdError> {
+        threshold_alias_from_key_id(&req.key_id)?;
+        validate_required("GroupName", &req.group_name)?;
+        if req.group_name != req.group_name.trim() {
+            return Err(ThresholdError::SurroundingWhitespace("group_name"));
+        }
+        validate_required("SessionId", &req.session_id)?;
+        if req.session_id != req.session_id.trim() {
+            return Err(ThresholdError::SurroundingWhitespace("session_id"));
+        }
+        validate_required("Message", &req.message)?;
+        if req.message != req.message.trim() {
+            return Err(ThresholdError::SurroundingWhitespace("message"));
+        }
+        Ok(())
+    }
+
     pub async fn execute(
         &mut self,
         client_id: &str,
@@ -163,6 +202,9 @@ impl ThresholdService {
         let result = match call {
             ThresholdRpcCall::CoordinateDkg(req) => {
                 ThresholdRpcResult::CoordinateDkg(self.coordinate_dkg(client_id, req).await?)
+            }
+            ThresholdRpcCall::CoordinateSign(req) => {
+                ThresholdRpcResult::CoordinateSign(self.coordinate_sign(client_id, req).await?)
             }
         };
 
@@ -217,6 +259,63 @@ impl ThresholdService {
             group_name: response.group_name,
             status,
             public_key: response.public_key,
+        })
+    }
+
+    pub async fn coordinate_sign(
+        &mut self,
+        client_id: &str,
+        req: SignRequest,
+    ) -> Result<SignResponse, tonic::Status> {
+        let alias = threshold_alias_from_key_id(&req.key_id)
+            .map_err(|err| tonic::Status::invalid_argument(err.to_string()))?
+            .to_string();
+        let key_id = threshold_key_id(&alias);
+        let group_name = req.group_name;
+        let session_id = req.session_id.trim().to_string();
+        let group = self.groups.get(&group_name).ok_or_else(|| {
+            tonic::Status::invalid_argument(format!(
+                "Threshold group {group_name} is not configured"
+            ))
+        })?;
+
+        let mut participants = group.participants;
+        participants.sort_by_key(|node| node.party_index);
+        participants.truncate(group.threshold as usize);
+
+        let response: PluginSignResponse = self
+            .client
+            .coordinate_sign(tonic::Request::new(PluginSignRequest {
+                key_name: alias,
+                group_name: group_name.clone(),
+                session_id,
+                message: req.message,
+                threshold: group.threshold,
+                participants: participants
+                    .into_iter()
+                    .map(|node| PluginGroupMember {
+                        node_id: node.node_id,
+                        party_index: node.party_index,
+                        openbao_url: node.openbao_url,
+                        mount: if node.mount.trim().is_empty() {
+                            "threshold".to_string()
+                        } else {
+                            node.mount
+                        },
+                    })
+                    .collect(),
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+
+        let status = aggregate_sign_status(&response)?;
+        Ok(SignResponse {
+            key_id,
+            group_name: response.group_name,
+            session_id: response.session_id,
+            status,
+            signature: response.signature,
         })
     }
 }
@@ -290,6 +389,18 @@ fn threshold_key_id(alias: &str) -> String {
     format!("{KEY_ID_PREFIX}{alias}")
 }
 
+fn threshold_alias_from_key_id(key_id: &str) -> Result<&str, ThresholdError> {
+    if key_id != key_id.trim() {
+        return Err(ThresholdError::SurroundingWhitespace("key_id"));
+    }
+    let alias = key_id
+        .strip_prefix(KEY_ID_PREFIX)
+        .ok_or(ThresholdError::InvalidKeyId)?;
+    validate_required("KeyId", alias)?;
+    validate_alias(alias)?;
+    Ok(alias)
+}
+
 fn aggregate_dkg_status(response: &PluginDkgResponse) -> Result<String, tonic::Status> {
     if response.nodes.is_empty() {
         return Err(tonic::Status::internal(
@@ -309,6 +420,30 @@ fn aggregate_dkg_status(response: &PluginDkgResponse) -> Result<String, tonic::S
     Ok(DKG_COMPLETED_STATUS.to_string())
 }
 
+fn aggregate_sign_status(response: &PluginSignResponse) -> Result<String, tonic::Status> {
+    if response.nodes.is_empty() {
+        return Err(tonic::Status::internal(
+            "Threshold plugin returned no signing node statuses",
+        ));
+    }
+    if response.signature.is_empty() {
+        return Err(tonic::Status::internal(
+            "Threshold plugin returned an empty aggregate signature",
+        ));
+    }
+
+    for node in &response.nodes {
+        if node.status != SIGN_COMPLETED_STATUS {
+            return Err(tonic::Status::internal(format!(
+                "Threshold signing node {} returned status {}",
+                node.node_id, node.status
+            )));
+        }
+    }
+
+    Ok(SIGN_COMPLETED_STATUS.to_string())
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -318,6 +453,15 @@ mod test {
             alias: "key-1".to_string(),
             group_name: "team-a".to_string(),
             session_id: "dkg-1".to_string(),
+        }
+    }
+
+    fn valid_sign_request() -> SignRequest {
+        SignRequest {
+            key_id: "threshold:key-1".to_string(),
+            group_name: "team-a".to_string(),
+            session_id: "sign-1".to_string(),
+            message: "aGVsbG8=".to_string(),
         }
     }
 
@@ -379,5 +523,32 @@ mod test {
 
         let err = ThresholdService::validate_coordinate_dkg(&req).unwrap_err();
         assert!(err.to_string().contains("SessionId is required"));
+    }
+
+    #[test]
+    fn validate_sign_accepts_threshold_key_id() {
+        ThresholdService::validate_sign(&valid_sign_request()).unwrap();
+    }
+
+    #[test]
+    fn validate_sign_rejects_non_threshold_key_id() {
+        let mut req = valid_sign_request();
+        req.key_id = "kms:key-1".to_string();
+
+        let err = ThresholdService::validate_sign(&req).unwrap_err();
+        assert!(err.to_string().contains("threshold:<alias>"));
+    }
+
+    #[test]
+    fn aggregate_sign_status_rejects_empty_signature() {
+        let response = PluginSignResponse {
+            key_name: "key-1".to_string(),
+            group_name: "team-a".to_string(),
+            session_id: "sign-1".to_string(),
+            nodes: vec![],
+            signature: String::new(),
+        };
+
+        assert!(aggregate_sign_status(&response).is_err());
     }
 }
