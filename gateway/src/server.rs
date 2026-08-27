@@ -156,12 +156,17 @@ pub async fn start(
     // The public key set is published by the jwks plugin, not here. The
     // gateway routes and meters the API rather than republishing another
     // service's keys.
+    let mut internal_task = None;
     if let Some(client) = patissuer_client {
         match patissuer_shared_secret.as_deref() {
             Some(secret) if !secret.is_empty() => {
                 let internal = internal_routes(client, secret.to_string());
                 tracing::info!("Starting internal http server on: 0.0.0.0:{internal_port}");
-                tokio::spawn(warp::serve(internal).run(([0, 0, 0, 0], internal_port)));
+                let server = warp::serve(internal)
+                    .bind(([0, 0, 0, 0], internal_port))
+                    .await
+                    .graceful(shutdown_signal());
+                internal_task = Some(tokio::spawn(server.run()));
             }
             _ => {
                 tracing::warn!(
@@ -175,7 +180,40 @@ pub async fn start(
 
     tracing::info!("Starting http server on: 0.0.0.0:{}", http_port);
 
-    warp::serve(routes).run(([0, 0, 0, 0], http_port)).await;
+    let server = warp::serve(routes)
+        .bind(([0, 0, 0, 0], http_port))
+        .await
+        .graceful(shutdown_signal());
+        
+    server.run().await;
+    
+    if let Some(task) = internal_task {
+        let _ = task.await;
+    }
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut signal) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            signal.recv().await;
+        } else {
+            std::future::pending().await
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    tracing::info!("Shutdown signal received, draining requests...");
 }
 
 /// Everything served on the internal listener. PAT issuance lives here and
