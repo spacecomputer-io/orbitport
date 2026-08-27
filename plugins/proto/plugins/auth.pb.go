@@ -72,10 +72,9 @@ type TokenValidationResponse struct {
 	// Non-empty jti = the token was a PAT (dual-validation discriminator);
 	// empty = legacy Auth0 M2M.
 	Jti string `protobuf:"bytes,3,opt,name=jti,proto3" json:"jti,omitempty"`
-	// KMS tenancy input (D9), LEGACY AUTH0 ONLY: the RAW sub including any
-	// @clients suffix, keeping legacy KMS tenancy byte-identical. On the PAT
-	// path this carries the token's self-asserted claim, which the gateway
-	// ignores in favour of HoldResponse.kms_tenant — see account.proto.
+	// KMS tenancy (D9), legacy Auth0 only: the RAW sub including any @clients
+	// suffix. On the PAT path this is the self-asserted claim, which the
+	// gateway ignores in favour of HoldResponse.kms_tenant.
 	KmsTenant     string `protobuf:"bytes,4,opt,name=kms_tenant,json=kmsTenant,proto3" json:"kms_tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

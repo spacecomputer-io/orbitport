@@ -1,6 +1,6 @@
 # JWKS plugin
 
-Publishes the issuer plugin's public key set at `GET /.well-known/jwks.json`.
+Publishes the patissuer plugin's public key set at `GET /.well-known/jwks.json`.
 
 It holds no key material. It calls `GetJwks` on the issuer over gRPC, caches the
 response, and serves it verbatim. The gateway used to do this; the gateway
@@ -15,7 +15,7 @@ bounds every phase of a request with a timeout.
 
 | Var | Default | Purpose |
 | --- | --- | --- |
-| `ORBITPORT_JWKS_ISSUER_PLUGIN` | *(required)* | Issuer plugin gRPC address. Startup fails without it |
+| `ORBITPORT_JWKS_PATISSUER_PLUGIN` | *(required)* | patissuer plugin gRPC address. Startup fails without it |
 | `ORBITPORT_JWKS_HTTP_PORT` | `8080` | Public listener |
 | `ORBITPORT_JWKS_CACHE_TTL_SECS` | `60` | Bounds how often an anonymous request reaches the issuer |
 | `ORBITPORT_JWKS_TIMEOUT_SECS` | `5` | Bounds a single `GetJwks` call |
@@ -27,7 +27,7 @@ backs the same k8s probes every other plugin uses.
 ## Fail-closed behaviour
 
 - No issuer address configured, the process refuses to start.
-- Issuer unreachable or slow, `503 {"error":"issuer_plugin_unavailable"}`. A
+- Issuer unreachable or slow, `503 {"error":"patissuer_plugin_unavailable"}`. A
   stale key set is never served, so a rotated-out key cannot keep verifying.
 - Issuer returns an empty key set, also a 503, and nothing is cached. Publishing
   an empty set as a 200 reads as "this issuer has no keys" and would make every

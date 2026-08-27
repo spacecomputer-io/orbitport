@@ -412,20 +412,20 @@ services:
   # The gateway's auth plugin here is authnoop, which does not verify PATs, so
   # this stack covers minting, key publication and tenancy. Stack
   # local-pat.compose.yaml for the real auth plugin and full PAT verification.
-  plugin-issuer:
+  plugin-patissuer:
     <<: *plugin-base
-    container_name: plugin-issuer
+    container_name: plugin-patissuer
     build:
       context: ./plugins
     image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=issuer
+      - ORBITPORT_PLUGIN=patissuer
       - ORBITPORT_GRPC_PORT=50006
-      - ORBITPORT_ISSUER_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
-      - ORBITPORT_ISSUER_AUD=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
-      - ORBITPORT_ISSUER_SIGNER=${ORBITPORT_ISSUER_SIGNER:-transit}
-      - ORBITPORT_ISSUER_OPENBAO_PROXY_URL=http://openbao-proxy:8200
+      - ORBITPORT_PATISSUER_ISS=${ORBITPORT_PATISSUER_ISS:-https://auth.orbitport.local}
+      - ORBITPORT_PATISSUER_AUD=${ORBITPORT_PATISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      - ORBITPORT_PATISSUER_SIGNER=${ORBITPORT_PATISSUER_SIGNER:-transit}
+      - ORBITPORT_PATISSUER_OPENBAO_PROXY_URL=http://openbao-proxy:8200
     depends_on:
       openbao-bootstrap:
         condition: service_completed_successfully
@@ -433,7 +433,7 @@ services:
         condition: service_healthy
 
   # Publishes the issuer's public keys. The only plugin that answers requests
-  # from outside the cluster, which is why it is a separate pod from the issuer
+  # from outside the cluster, which is why it is a separate pod from the patissuer
   # that signs.
   plugin-jwks:
     <<: *plugin-base
@@ -445,13 +445,13 @@ services:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=jwks
       - ORBITPORT_GRPC_PORT=50008
-      - ORBITPORT_JWKS_ISSUER_PLUGIN=plugin-issuer:50006
+      - ORBITPORT_JWKS_PATISSUER_PLUGIN=plugin-patissuer:50006
       - ORBITPORT_JWKS_HTTP_PORT=8080
     ports:
       # Host 8091 because 8080 is the gateway and 8081 is ipfs-node.
       - 8091:8080
     depends_on:
-      - plugin-issuer
+      - plugin-patissuer
 
   ipfs-node:
     image: ipfs/kubo:release
@@ -486,10 +486,10 @@ services:
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
       - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
-      - ORBITPORT_ISSUER_PLUGIN=http://plugin-issuer:50006
+      - ORBITPORT_PATISSUER_PLUGIN=http://plugin-patissuer:50006
       - ORBITPORT_INTERNAL_PORT=8081
       # Dev-only fixed value so the e2e suite can mint without a shared export.
-      - ORBITPORT_ISSUER_SHARED_SECRET=${ORBITPORT_ISSUER_SHARED_SECRET:-dev-only-issuer-secret}
+      - ORBITPORT_PATISSUER_SHARED_SECRET=${ORBITPORT_PATISSUER_SHARED_SECRET:-dev-only-issuer-secret}
     ports:
       - 8080:8080
       # Internal listener. Host 8090 because ipfs-node already takes 8081.
@@ -506,7 +506,7 @@ services:
       - plugin-threshold
       - plugin-masterseed
       - plugin-account
-      - plugin-issuer
+      - plugin-patissuer
 
   plugin-beacon:
     <<: *plugin-base

@@ -33,7 +33,7 @@ const (
 
 // errIssuerUnavailable separates "we could not reach the issuer" (a 503)
 // from "this token is bad" (a 401).
-var errIssuerUnavailable = errors.New("issuer plugin unavailable")
+var errIssuerUnavailable = errors.New("patissuer plugin unavailable")
 
 // unverifiedIssuer decodes the JWT payload WITHOUT verification, solely to
 // read the iss claim for routing between the PAT and Auth0 paths. The token
@@ -56,10 +56,10 @@ func unverifiedIssuer(token string) string {
 	return claims.Iss
 }
 
-// jwksCache caches the issuer plugin's JWKS as a kid -> public key map for
+// jwksCache caches the patissuer plugin's JWKS as a kid -> public key map for
 // jwksCacheTTL, refetching once on an unknown kid to pick up key rotation.
 type jwksCache struct {
-	client proto.IssuerPluginClient
+	client proto.PatIssuerPluginClient
 
 	// mu guards the cached data only — never held across the network call.
 	mu        sync.RWMutex
@@ -85,10 +85,10 @@ func newJWKSCache(issuerPluginURL string) (*jwksCache, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to issuer plugin: %w", err)
+		return nil, fmt.Errorf("failed to connect to patissuer plugin: %w", err)
 	}
 	return &jwksCache{
-		client:     proto.NewIssuerPluginClient(conn),
+		client:     proto.NewPatIssuerPluginClient(conn),
 		minRefresh: jwksMinRefresh,
 	}, nil
 }
@@ -122,7 +122,7 @@ func (c *jwksCache) key(ctx context.Context, kid string) (*ecdsa.PublicKey, erro
 }
 
 // refresh fetches the JWKS with the RPC OUTSIDE the data lock, so a hung
-// issuer plugin never blocks readers holding valid cached keys.
+// patissuer plugin never blocks readers holding valid cached keys.
 func (c *jwksCache) refresh(ctx context.Context) error {
 	c.refreshMu.Lock()
 	defer c.refreshMu.Unlock()
@@ -137,7 +137,7 @@ func (c *jwksCache) refresh(ctx context.Context) error {
 
 	resp, err := c.client.GetJwks(ctx, &proto.GetJwksRequest{})
 	if err != nil {
-		return fmt.Errorf("%w: fetching JWKS from issuer plugin: %v", errIssuerUnavailable, err)
+		return fmt.Errorf("%w: fetching JWKS from patissuer plugin: %v", errIssuerUnavailable, err)
 	}
 	keys, err := parseJWKS(resp.GetJwksJson())
 	if err != nil {
@@ -191,7 +191,7 @@ func parseJWKS(jwksJSON string) (map[string]*ecdsa.PublicKey, error) {
 	return keys, nil
 }
 
-// validatePAT verifies a PAT against the issuer plugin's JWKS.
+// validatePAT verifies a PAT against the patissuer plugin's JWKS.
 func (p *Plugin) validatePAT(ctx context.Context, tokenString string) (*proto.TokenValidationResponse, error) {
 	keyfunc := func(t *jwt.Token) (any, error) {
 		kid, _ := t.Header["kid"].(string)

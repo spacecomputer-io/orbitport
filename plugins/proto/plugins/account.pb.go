@@ -106,10 +106,9 @@ type HoldResponse struct {
 	// non-nil gRPC status (FailedPrecondition / Unavailable) instead of a
 	// response with ok=false, so callers should branch on the gRPC error code.
 	Error string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
-	// Authoritative KMS tenancy, read from the Account row the dashboard just
-	// resolved. The gateway uses THIS, never the token's kms_tenant claim: a
-	// PAT asserts its own tenant once at mint time and is then trusted for up
-	// to a year, so the claim is not a trustworthy tenancy input.
+	// Authoritative KMS tenancy from the resolved Account row. The gateway uses
+	// this, never the PAT's kms_tenant claim, which the token asserts about
+	// itself once at mint time and then carries for up to a year.
 	KmsTenant     string `protobuf:"bytes,5,opt,name=kms_tenant,json=kmsTenant,proto3" json:"kms_tenant,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

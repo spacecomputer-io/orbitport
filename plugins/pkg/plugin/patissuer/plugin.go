@@ -1,4 +1,4 @@
-package issuer
+package patissuer
 
 import (
 	"context"
@@ -15,9 +15,9 @@ import (
 // Plugin mints Personal Access Tokens and serves the public JWKS. The
 // dashboard owns the PAT metadata row (jti) and the charge flow.
 type Plugin struct {
-	proto.UnimplementedIssuerPluginServer
+	proto.UnimplementedPatIssuerPluginServer
 
-	cfg    *issuerConfig
+	cfg    *patissuerConfig
 	signer signer
 	logger *utils.Logger
 }
@@ -44,7 +44,7 @@ func NewPlugin() (*Plugin, error) {
 	}
 	if generated {
 		logger.Warn(
-			"ORBITPORT_ISSUER_LOCAL_KEY_PEM not set — generated an EPHEMERAL signing key; " +
+			"ORBITPORT_PATISSUER_LOCAL_KEY_PEM not set — generated an EPHEMERAL signing key; " +
 				"every restart invalidates all outstanding PATs. Dev only, never production.",
 		)
 	}

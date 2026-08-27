@@ -1,4 +1,4 @@
-package issuer
+package patissuer
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// signer is the key-custody seam, selected by ORBITPORT_ISSUER_SIGNER:
+// signer is the key-custody seam, selected by ORBITPORT_PATISSUER_SIGNER:
 // localSigner for dev, transitSigner for deployed environments.
 type signer interface {
 	// Mint signs the claims and returns a compact JWS with a kid header.
@@ -46,7 +46,7 @@ func newLocalSigner(keyPEM string) (*localSigner, bool, error) {
 	} else {
 		k, err := parseECPrivateKeyPEM([]byte(keyPEM))
 		if err != nil {
-			return nil, false, fmt.Errorf("parsing ORBITPORT_ISSUER_LOCAL_KEY_PEM: %w", err)
+			return nil, false, fmt.Errorf("parsing ORBITPORT_PATISSUER_LOCAL_KEY_PEM: %w", err)
 		}
 		key = k
 	}

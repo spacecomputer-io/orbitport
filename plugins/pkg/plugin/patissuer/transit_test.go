@@ -1,4 +1,4 @@
-package issuer
+package patissuer
 
 import (
 	"context"
@@ -45,10 +45,10 @@ func fakeTransit(t *testing.T, key *ecdsa.PrivateKey, version int) *httptest.Ser
 	})
 	mux.HandleFunc("POST /v1/transit/sign/pat-signing/sha2-256", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Input                string `json:"input"`
-			Prehashed            bool   `json:"prehashed"`
-			MarshalingAlgorithm  string `json:"marshaling_algorithm"`
-			KeyVersion           int    `json:"key_version"`
+			Input               string `json:"input"`
+			Prehashed           bool   `json:"prehashed"`
+			MarshalingAlgorithm string `json:"marshaling_algorithm"`
+			KeyVersion          int    `json:"key_version"`
 		}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		require.False(t, body.Prehashed)
@@ -73,8 +73,8 @@ func fakeTransit(t *testing.T, key *ecdsa.PrivateKey, version int) *httptest.Ser
 func transitTestPlugin(t *testing.T, proxyURL string) *Plugin {
 	t.Helper()
 	return newTestPlugin(t, map[string]string{
-		"ORBITPORT_ISSUER_SIGNER":            "transit",
-		"ORBITPORT_ISSUER_OPENBAO_PROXY_URL": proxyURL,
+		"ORBITPORT_PATISSUER_SIGNER":            "transit",
+		"ORBITPORT_PATISSUER_OPENBAO_PROXY_URL": proxyURL,
 	})
 }
 
@@ -156,7 +156,7 @@ func TestTransitRejectsWrongLengthSignature(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	ts := newTransitSigner(&issuerConfig{
+	ts := newTransitSigner(&patissuerConfig{
 		OpenBaoProxyURL: srv.URL,
 		TransitMount:    "transit",
 		TransitKey:      "pat-signing",
@@ -244,10 +244,10 @@ func TestStripVaultEnvelope(t *testing.T) {
 
 // TestTransitLive exercises the real OpenBao from the dev compose stack
 // (proxy on localhost:8200, token injected by the proxy). Skipped unless
-// ORBITPORT_ISSUER_LIVE_TEST=1. It creates the pat-signing key if absent.
+// ORBITPORT_PATISSUER_LIVE_TEST=1. It creates the pat-signing key if absent.
 func TestTransitLive(t *testing.T) {
-	if os.Getenv("ORBITPORT_ISSUER_LIVE_TEST") != "1" {
-		t.Skip("set ORBITPORT_ISSUER_LIVE_TEST=1 with the dev compose stack up")
+	if os.Getenv("ORBITPORT_PATISSUER_LIVE_TEST") != "1" {
+		t.Skip("set ORBITPORT_PATISSUER_LIVE_TEST=1 with the dev compose stack up")
 	}
 	proxy := "http://localhost:8200"
 

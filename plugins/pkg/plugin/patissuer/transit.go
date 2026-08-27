@@ -1,4 +1,4 @@
-package issuer
+package patissuer
 
 import (
 	"bytes"
@@ -29,7 +29,7 @@ type transitSigner struct {
 	keyName string
 }
 
-func newTransitSigner(cfg *issuerConfig) *transitSigner {
+func newTransitSigner(cfg *patissuerConfig) *transitSigner {
 	return &transitSigner{
 		client:  &http.Client{Timeout: time.Duration(cfg.TimeoutSecs) * time.Second},
 		baseURL: strings.TrimRight(cfg.OpenBaoProxyURL, "/"),

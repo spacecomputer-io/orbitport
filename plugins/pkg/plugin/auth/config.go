@@ -17,7 +17,7 @@ type authConfig struct {
 	PatIss string
 	// PatAudience is the expected aud claim of PATs, defaulting to Auth0Audience.
 	PatAudience string
-	// PatIssuerPlugin is the gRPC URL of the issuer plugin.
+	// PatIssuerPlugin is the gRPC URL of the patissuer plugin.
 	PatIssuerPlugin string
 }
 
@@ -29,7 +29,7 @@ func readFromEnv() *authConfig {
 		Auth0Audience:   viper.GetString("AUTH0_AUDIENCE"),
 		PatIss:          strings.TrimSpace(viper.GetString("AUTH_PAT_ISS")),
 		PatAudience:     strings.TrimSpace(viper.GetString("AUTH_PAT_AUDIENCE")),
-		PatIssuerPlugin: strings.TrimSpace(viper.GetString("AUTH_ISSUER_PLUGIN")),
+		PatIssuerPlugin: strings.TrimSpace(viper.GetString("AUTH_PATISSUER_PLUGIN")),
 	}
 }
 
@@ -38,7 +38,7 @@ func setDefaults() {
 	viper.SetDefault("AUTH0_AUDIENCE", "")
 	viper.SetDefault("AUTH_PAT_ISS", "")
 	viper.SetDefault("AUTH_PAT_AUDIENCE", "")
-	viper.SetDefault("AUTH_ISSUER_PLUGIN", "")
+	viper.SetDefault("AUTH_PATISSUER_PLUGIN", "")
 }
 
 // patEnabled reports whether any PAT env var is set at all.
@@ -56,7 +56,7 @@ func (c *authConfig) validatePat() error {
 		missing = append(missing, "ORBITPORT_AUTH_PAT_ISS")
 	}
 	if c.PatIssuerPlugin == "" {
-		missing = append(missing, "ORBITPORT_AUTH_ISSUER_PLUGIN")
+		missing = append(missing, "ORBITPORT_AUTH_PATISSUER_PLUGIN")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("FATAL: PAT validation partially configured, missing: %s", strings.Join(missing, ", "))

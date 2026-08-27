@@ -1,4 +1,4 @@
-package issuer
+package patissuer
 
 import (
 	"context"
@@ -25,8 +25,8 @@ import (
 func newTestPlugin(t *testing.T, extraEnv map[string]string) *Plugin {
 	t.Helper()
 	viper.Reset()
-	t.Setenv("ORBITPORT_ISSUER_ISS", "https://auth.orbitport.test")
-	t.Setenv("ORBITPORT_ISSUER_AUD", "https://api.orbitport.test")
+	t.Setenv("ORBITPORT_PATISSUER_ISS", "https://auth.orbitport.test")
+	t.Setenv("ORBITPORT_PATISSUER_AUD", "https://api.orbitport.test")
 	for k, v := range extraEnv {
 		t.Setenv(k, v)
 	}
@@ -159,30 +159,30 @@ func TestStablePemKeyKeepsKid(t *testing.T) {
 	require.NoError(t, err)
 	pemStr := string(pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: der}))
 
-	p1 := newTestPlugin(t, map[string]string{"ORBITPORT_ISSUER_LOCAL_KEY_PEM": pemStr})
+	p1 := newTestPlugin(t, map[string]string{"ORBITPORT_PATISSUER_LOCAL_KEY_PEM": pemStr})
 	kid1, _ := jwksKey(t, p1)
-	p2 := newTestPlugin(t, map[string]string{"ORBITPORT_ISSUER_LOCAL_KEY_PEM": pemStr})
+	p2 := newTestPlugin(t, map[string]string{"ORBITPORT_PATISSUER_LOCAL_KEY_PEM": pemStr})
 	kid2, _ := jwksKey(t, p2)
 	require.Equal(t, kid1, kid2)
 }
 
 func TestConfigFailClosed(t *testing.T) {
 	viper.Reset()
-	t.Setenv("ORBITPORT_ISSUER_ISS", "")
-	t.Setenv("ORBITPORT_ISSUER_AUD", "")
+	t.Setenv("ORBITPORT_PATISSUER_ISS", "")
+	t.Setenv("ORBITPORT_PATISSUER_AUD", "")
 	viper.SetEnvPrefix("ORBITPORT")
 	viper.AutomaticEnv()
 
 	_, err := NewPlugin()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "ORBITPORT_ISSUER_ISS")
+	require.Contains(t, err.Error(), "ORBITPORT_PATISSUER_ISS")
 }
 
 func TestTransitRequiresProxyURL(t *testing.T) {
 	viper.Reset()
-	t.Setenv("ORBITPORT_ISSUER_ISS", "https://auth.orbitport.test")
-	t.Setenv("ORBITPORT_ISSUER_AUD", "https://api.orbitport.test")
-	t.Setenv("ORBITPORT_ISSUER_SIGNER", "transit")
+	t.Setenv("ORBITPORT_PATISSUER_ISS", "https://auth.orbitport.test")
+	t.Setenv("ORBITPORT_PATISSUER_AUD", "https://api.orbitport.test")
+	t.Setenv("ORBITPORT_PATISSUER_SIGNER", "transit")
 	viper.SetEnvPrefix("ORBITPORT")
 	viper.AutomaticEnv()
 

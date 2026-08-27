@@ -1,14 +1,14 @@
 syntax = "proto3";
 
-package issuer;
+package patissuer;
 
 option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 
-// IssuerPlugin mints Personal Access Tokens (Model B): compact JWS signed
+// PatIssuerPlugin mints Personal Access Tokens (Model B): compact JWS signed
 // with the platform signing key. The dashboard owns the PAT metadata row
 // (jti) and the charge flow; this plugin owns claims assembly and signing.
 // Verifiers fetch the public keys via GetJwks.
-service IssuerPlugin {
+service PatIssuerPlugin {
   rpc IssueToken(IssueTokenRequest) returns (IssueTokenResponse);
   rpc GetJwks(GetJwksRequest) returns (GetJwksResponse);
 }

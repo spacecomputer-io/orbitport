@@ -1,6 +1,6 @@
 # Full PAT verification overlay.
 #
-# The dev stack already runs plugin-issuer and mints real PATs, but its auth
+# The dev stack already runs plugin-patissuer and mints real PATs, but its auth
 # plugin is authnoop, which accepts any string and never verifies a signature.
 # This swaps in the real auth plugin with the PAT path enabled, so presenting a
 # PAT actually checks its signature, issuer, audience and expiry against the
@@ -20,8 +20,8 @@
 #   8090  internal listener -> container 8081, POST /internal/pat/issue
 #
 # The dashboard backend pairs with this via:
-#   ORBITPORT_ISSUER_URL=http://host.docker.internal:8090
-#   ORBITPORT_ISSUER_SHARED_SECRET=<must match the gateway's>
+#   ORBITPORT_PATISSUER_URL=http://host.docker.internal:8090
+#   ORBITPORT_PATISSUER_SHARED_SECRET=<must match the gateway's>
 
 services:
   # Auth0 vars serve the legacy-token path only.
@@ -30,8 +30,8 @@ services:
       - ORBITPORT_PLUGIN=auth
       - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN:-auth.spacecomputer.io}
       - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE:-https://op-dev.spacecomputer.io/api}
-      - ORBITPORT_AUTH_PAT_ISS=${ORBITPORT_ISSUER_ISS:-https://auth.orbitport.local}
-      - ORBITPORT_AUTH_PAT_AUDIENCE=${ORBITPORT_ISSUER_AUD:-https://op-dev.spacecomputer.io/api}
-      - ORBITPORT_AUTH_ISSUER_PLUGIN=plugin-issuer:50006
+      - ORBITPORT_AUTH_PAT_ISS=${ORBITPORT_PATISSUER_ISS:-https://auth.orbitport.local}
+      - ORBITPORT_AUTH_PAT_AUDIENCE=${ORBITPORT_PATISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      - ORBITPORT_AUTH_PATISSUER_PLUGIN=plugin-patissuer:50006
     depends_on:
-      - plugin-issuer
+      - plugin-patissuer

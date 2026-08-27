@@ -15,7 +15,7 @@ use crate::filters::{
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
-use crate::proto::plugins::issuer::issuer_plugin_client::IssuerPluginClient;
+use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
 use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
 use crate::trng::SRC_DERIVED_TRNG;
 use tonic::transport::Channel;
@@ -62,7 +62,7 @@ pub async fn start(
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
-    issuer_shared_secret: Option<String>,
+    patissuer_shared_secret: Option<String>,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -71,8 +71,8 @@ pub async fn start(
 
     let account_client: Option<AccountPluginClient<Channel>> =
         plugin_catalog.get_account_client().await.ok();
-    let issuer_client: Option<IssuerPluginClient<Channel>> =
-        plugin_catalog.get_issuer_client().await.ok();
+    let patissuer_client: Option<PatIssuerPluginClient<Channel>> =
+        plugin_catalog.get_patissuer_client().await.ok();
     let account_client_rpc = account_client.clone();
     let account_client_get = account_client.clone();
     let account_client_post = account_client.clone();
@@ -156,8 +156,8 @@ pub async fn start(
     // The public key set is published by the jwks plugin, not here. The
     // gateway routes and meters the API rather than republishing another
     // service's keys.
-    if let Some(client) = issuer_client {
-        match issuer_shared_secret.as_deref() {
+    if let Some(client) = patissuer_client {
+        match patissuer_shared_secret.as_deref() {
             Some(secret) if !secret.is_empty() => {
                 let internal = internal_routes(client, secret.to_string());
                 tracing::info!("Starting internal http server on: 0.0.0.0:{internal_port}");
@@ -165,7 +165,7 @@ pub async fn start(
             }
             _ => {
                 tracing::warn!(
-                    "ORBITPORT_ISSUER_PLUGIN is set but ORBITPORT_ISSUER_SHARED_SECRET is unset or empty; refusing to mount POST /internal/pat/issue"
+                    "ORBITPORT_PATISSUER_PLUGIN is set but ORBITPORT_PATISSUER_SHARED_SECRET is unset or empty; refusing to mount POST /internal/pat/issue"
                 );
             }
         }
@@ -181,7 +181,7 @@ pub async fn start(
 /// Everything served on the internal listener. PAT issuance lives here and
 /// nowhere else, so no configuration can expose it on the public port.
 pub fn internal_routes(
-    client: IssuerPluginClient<Channel>,
+    client: PatIssuerPluginClient<Channel>,
     shared_secret: String,
 ) -> impl Filter<Extract = (impl Reply,), Error = Infallible> + Clone {
     pat_issue_route(client, shared_secret).recover(handle_rejection)

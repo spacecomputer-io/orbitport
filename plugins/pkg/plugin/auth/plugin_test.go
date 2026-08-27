@@ -29,9 +29,9 @@ const (
 	testPatAud = "https://api.orbitport.test"
 )
 
-// mockIssuer is an in-process gRPC issuer plugin serving a swappable JWKS.
+// mockIssuer is an in-process gRPC patissuer plugin serving a swappable JWKS.
 type mockIssuer struct {
-	proto.UnimplementedIssuerPluginServer
+	proto.UnimplementedPatIssuerPluginServer
 
 	mu    sync.Mutex
 	jwks  string
@@ -62,7 +62,7 @@ func startMockIssuer(t *testing.T, m *mockIssuer) string {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	srv := grpc.NewServer()
-	proto.RegisterIssuerPluginServer(srv, m)
+	proto.RegisterPatIssuerPluginServer(srv, m)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 	return lis.Addr().String()
@@ -117,7 +117,7 @@ func newTestPlugin(t *testing.T, issuerAddr string) *Plugin {
 	t.Setenv("ORBITPORT_AUTH0_AUDIENCE", testPatAud)
 	t.Setenv("ORBITPORT_AUTH_PAT_ISS", testPatIss)
 	t.Setenv("ORBITPORT_AUTH_PAT_AUDIENCE", testPatAud)
-	t.Setenv("ORBITPORT_AUTH_ISSUER_PLUGIN", issuerAddr)
+	t.Setenv("ORBITPORT_AUTH_PATISSUER_PLUGIN", issuerAddr)
 	viper.SetEnvPrefix("ORBITPORT")
 	viper.AutomaticEnv()
 
@@ -248,13 +248,13 @@ func TestNewPlugin_PartialPatConfigFailsStartup(t *testing.T) {
 	t.Setenv("ORBITPORT_AUTH0_DOMAIN", "auth0.invalid")
 	t.Setenv("ORBITPORT_AUTH0_AUDIENCE", testPatAud)
 	t.Setenv("ORBITPORT_AUTH_PAT_ISS", testPatIss)
-	// ORBITPORT_AUTH_ISSUER_PLUGIN deliberately unset — fail-closed.
+	// ORBITPORT_AUTH_PATISSUER_PLUGIN deliberately unset — fail-closed.
 	viper.SetEnvPrefix("ORBITPORT")
 	viper.AutomaticEnv()
 
 	_, err := NewPlugin()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "ORBITPORT_AUTH_ISSUER_PLUGIN")
+	require.Contains(t, err.Error(), "ORBITPORT_AUTH_PATISSUER_PLUGIN")
 }
 
 // The keyfunc runs before signature verification, so without a throttle each
@@ -289,7 +289,7 @@ func TestValidateToken_UnknownKidRefetchIsThrottled(t *testing.T) {
 	require.Equal(t, 1, mock.callCount())
 }
 
-// An unreachable issuer plugin is an outage, not a bad token: it must surface
+// An unreachable patissuer plugin is an outage, not a bad token: it must surface
 // as Unavailable so the gateway answers 503 rather than 401.
 func TestValidateToken_IssuerOutageIsUnavailable(t *testing.T) {
 	key := newP256Key(t)

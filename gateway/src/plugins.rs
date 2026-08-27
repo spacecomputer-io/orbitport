@@ -12,8 +12,8 @@ use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPlug
 
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
-use crate::proto::plugins::issuer::issuer_plugin_client::IssuerPluginClient;
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
+use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
 use crate::proto::plugins::threshold::threshold_plugin_client::ThresholdPluginClient;
 use crate::services::threshold::ThresholdGroupRegistry;
 
@@ -131,7 +131,7 @@ impl PluginCatalog {
         masterseed_url: &str,
         kms_url: &str,
         account_url: Option<&str>,
-        issuer_url: Option<&str>,
+        patissuer_url: Option<&str>,
         threshold_enabled: bool,
         threshold_url: &str,
         threshold_groups: ThresholdGroupRegistry,
@@ -143,8 +143,8 @@ impl PluginCatalog {
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
         }
-        if let Some(url) = issuer_url {
-            urls.insert("issuer".to_string(), url.to_string());
+        if let Some(url) = patissuer_url {
+            urls.insert("patissuer".to_string(), url.to_string());
         }
         if threshold_enabled {
             urls.insert("threshold".to_string(), threshold_url.to_string());
@@ -193,9 +193,11 @@ impl PluginCatalog {
         Ok(AccountPluginClient::new(channel))
     }
 
-    pub async fn get_issuer_client(&self) -> Result<IssuerPluginClient<Channel>, PluginError> {
-        let channel = self.get_client("issuer").await?;
-        Ok(IssuerPluginClient::new(channel))
+    pub async fn get_patissuer_client(
+        &self,
+    ) -> Result<PatIssuerPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("patissuer").await?;
+        Ok(PatIssuerPluginClient::new(channel))
     }
 
     pub async fn get_threshold_client(

@@ -14,19 +14,19 @@ use tonic::{Request, Response, Status};
 use warp::http::StatusCode;
 
 use gateway::auth::pat_issue_route;
-use gateway::proto::plugins::issuer::{
+use gateway::proto::plugins::patissuer::{
     GetJwksRequest, GetJwksResponse, IssueTokenRequest, IssueTokenResponse,
-    issuer_plugin_client::IssuerPluginClient,
-    issuer_plugin_server::{IssuerPlugin, IssuerPluginServer},
+    pat_issuer_plugin_client::PatIssuerPluginClient,
+    pat_issuer_plugin_server::{PatIssuerPlugin, PatIssuerPluginServer},
 };
 
 #[derive(Default)]
-struct MockIssuerPlugin {
+struct MockPatIssuerPlugin {
     issue_calls: Arc<AtomicU32>,
 }
 
 #[tonic::async_trait]
-impl IssuerPlugin for MockIssuerPlugin {
+impl PatIssuerPlugin for MockPatIssuerPlugin {
     async fn issue_token(
         &self,
         req: Request<IssueTokenRequest>,
@@ -54,7 +54,7 @@ impl IssuerPlugin for MockIssuerPlugin {
 
 async fn start_mock_issuer() -> (SocketAddr, Arc<AtomicU32>) {
     let issue_calls = Arc::new(AtomicU32::new(0));
-    let plugin = MockIssuerPlugin {
+    let plugin = MockPatIssuerPlugin {
         issue_calls: issue_calls.clone(),
     };
 
@@ -63,7 +63,7 @@ async fn start_mock_issuer() -> (SocketAddr, Arc<AtomicU32>) {
 
     tokio::spawn(async move {
         Server::builder()
-            .add_service(IssuerPluginServer::new(plugin))
+            .add_service(PatIssuerPluginServer::new(plugin))
             .serve_with_incoming(TcpListenerStream::new(listener))
             .await
             .ok();
@@ -74,8 +74,8 @@ async fn start_mock_issuer() -> (SocketAddr, Arc<AtomicU32>) {
     (addr, issue_calls)
 }
 
-async fn connect(addr: SocketAddr) -> IssuerPluginClient<Channel> {
-    IssuerPluginClient::connect(format!("http://{addr}"))
+async fn connect(addr: SocketAddr) -> PatIssuerPluginClient<Channel> {
+    PatIssuerPluginClient::connect(format!("http://{addr}"))
         .await
         .unwrap()
 }

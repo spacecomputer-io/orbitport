@@ -35,7 +35,7 @@ enable_mount_if_missing() {
 enable_mount_if_missing "${OPENBAO_TRANSIT_MOUNT}" transit
 enable_mount_if_missing "${OPENBAO_KV_MOUNT}" kv-v2
 
-# PAT signing key (issuer plugin transit mode). Idempotent: read-or-create.
+# PAT signing key (patissuer plugin transit mode). Idempotent: read-or-create.
 OPENBAO_PAT_KEY="${OPENBAO_PAT_KEY:-pat-signing}"
 if ! bao read "${OPENBAO_TRANSIT_MOUNT}/keys/${OPENBAO_PAT_KEY}" >/dev/null 2>&1; then
     bao write -f "${OPENBAO_TRANSIT_MOUNT}/keys/${OPENBAO_PAT_KEY}" type=ecdsa-p256

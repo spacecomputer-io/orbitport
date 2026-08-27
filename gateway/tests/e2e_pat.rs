@@ -41,7 +41,7 @@ fn jwks_url() -> String {
 }
 
 fn shared_secret() -> String {
-    env::var("ORBITPORT_ISSUER_SHARED_SECRET").unwrap_or(DEV_SHARED_SECRET.to_string())
+    env::var("ORBITPORT_PATISSUER_SHARED_SECRET").unwrap_or(DEV_SHARED_SECRET.to_string())
 }
 
 fn issue_body(jti: &str, claimed_tenant: &str, ttl_secs: i64) -> serde_json::Value {
@@ -183,11 +183,11 @@ async fn test_e2e_pat_minted_pat_verifies_against_the_published_jwks() {
     .expect("JWK is not a usable EC key");
 
     let mut validation = Validation::new(Algorithm::ES256);
-    validation.set_audience(&[env::var("ORBITPORT_ISSUER_AUD")
+    validation.set_audience(&[env::var("ORBITPORT_PATISSUER_AUD")
         .unwrap_or("https://op-dev.spacecomputer.io/api".to_string())]);
-    validation.set_issuer(&[
-        env::var("ORBITPORT_ISSUER_ISS").unwrap_or("https://auth.orbitport.local".to_string())
-    ]);
+    validation
+        .set_issuer(&[env::var("ORBITPORT_PATISSUER_ISS")
+            .unwrap_or("https://auth.orbitport.local".to_string())]);
 
     let claims = decode::<serde_json::Value>(&token, &key, &validation)
         .expect("the published JWKS does not verify the minted PAT")

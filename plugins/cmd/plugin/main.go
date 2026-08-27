@@ -16,10 +16,10 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
-	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/issuer"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/jwks"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/patissuer"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/threshold"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -115,13 +115,13 @@ func main() {
 				logger.Errorf("error closing masterseed plugin: %v", err)
 			}
 		}()
-	case "issuer":
-		plugin, err := issuer.NewPlugin()
+	case "patissuer":
+		plugin, err := patissuer.NewPlugin()
 		if err != nil {
 			panic(err)
 		}
-		proto.RegisterIssuerPluginServer(grpcServer, plugin)
-		logger.Info("Issuer plugin ready")
+		proto.RegisterPatIssuerPluginServer(grpcServer, plugin)
+		logger.Info("PatIssuer plugin ready")
 	case "jwks":
 		plugin, err := jwks.NewPlugin()
 		if err != nil {

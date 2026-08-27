@@ -1,8 +1,8 @@
-// Package jwks publishes the issuer plugin's public key set over HTTP.
+// Package jwks publishes the patissuer plugin's public key set over HTTP.
 //
 // It exists so the gateway does not have to. The gateway routes and meters the
 // JSON-RPC API, and republishing another service's keys is not that job. This
-// plugin holds no key material of its own. It caches whatever the issuer plugin
+// plugin holds no key material of its own. It caches whatever the patissuer plugin
 // returns from GetJwks and serves it verbatim.
 //
 // This is the only plugin that answers requests from the internet, so it serves
@@ -31,12 +31,12 @@ import (
 // verifiers without every one of them polling us.
 const browserCacheMaxAge = 300
 
-const unavailableBody = `{"error":"issuer_plugin_unavailable"}`
+const unavailableBody = `{"error":"patissuer_plugin_unavailable"}`
 
 // Plugin serves GET /.well-known/jwks.json from a cached GetJwks response.
 type Plugin struct {
 	cfg    *jwksConfig
-	client proto.IssuerPluginClient
+	client proto.PatIssuerPluginClient
 	logger *utils.Logger
 
 	cacheTTL time.Duration
@@ -59,22 +59,22 @@ func NewPlugin() (*Plugin, error) {
 	}
 
 	conn, err := grpc.NewClient(
-		cfg.IssuerPlugin,
+		cfg.PatIssuerPlugin,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to issuer plugin: %w", err)
+		return nil, fmt.Errorf("failed to connect to patissuer plugin: %w", err)
 	}
 
 	logger := utils.GetLogger("orbitport:jwks")
 	logger.Infof(
 		"publishing JWKS from %s on :%d (cache %ds)",
-		cfg.IssuerPlugin, cfg.HTTPPort, cfg.CacheTTLSecs,
+		cfg.PatIssuerPlugin, cfg.HTTPPort, cfg.CacheTTLSecs,
 	)
 
 	return &Plugin{
 		cfg:      cfg,
-		client:   proto.NewIssuerPluginClient(conn),
+		client:   proto.NewPatIssuerPluginClient(conn),
 		logger:   logger,
 		cacheTTL: time.Duration(cfg.CacheTTLSecs) * time.Second,
 		timeout:  time.Duration(cfg.TimeoutSecs) * time.Second,
@@ -131,7 +131,7 @@ func (p *Plugin) fresh() (string, bool) {
 }
 
 // refresh fetches the key set with the RPC OUTSIDE the data lock, so a hung
-// issuer plugin never serializes readers behind it.
+// patissuer plugin never serializes readers behind it.
 func (p *Plugin) refresh() (string, error) {
 	p.refreshMu.Lock()
 	defer p.refreshMu.Unlock()
@@ -148,13 +148,13 @@ func (p *Plugin) refresh() (string, error) {
 
 	resp, err := p.client.GetJwks(ctx, &proto.GetJwksRequest{})
 	if err != nil {
-		return "", fmt.Errorf("fetching JWKS from issuer plugin: %w", err)
+		return "", fmt.Errorf("fetching JWKS from patissuer plugin: %w", err)
 	}
 
 	// Fail closed. An empty set published as a 200 would read as "this issuer
 	// has no keys" and make every verifier reject every PAT.
 	if resp.GetJwksJson() == "" {
-		return "", fmt.Errorf("issuer plugin returned an empty JWKS")
+		return "", fmt.Errorf("patissuer plugin returned an empty JWKS")
 	}
 
 	p.mu.Lock()

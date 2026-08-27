@@ -34,13 +34,13 @@ struct Args {
     /// release on downstream failure.
     #[clap(long, env = "ORBITPORT_ACCOUNT_PLUGIN")]
     account_plugin: Option<String>,
-    /// Optional issuer plugin gRPC URL. When set, the gateway serves the
+    /// Optional patissuer plugin gRPC URL. When set, the gateway serves the
     /// public JWKS route and the internal PAT issuance route.
-    #[clap(long, env = "ORBITPORT_ISSUER_PLUGIN")]
-    issuer_plugin: Option<String>,
+    #[clap(long, env = "ORBITPORT_PATISSUER_PLUGIN")]
+    patissuer_plugin: Option<String>,
     /// Shared secret guarding POST /internal/pat/issue.
-    #[clap(long, env = "ORBITPORT_ISSUER_SHARED_SECRET")]
-    issuer_shared_secret: Option<Secret>,
+    #[clap(long, env = "ORBITPORT_PATISSUER_SHARED_SECRET")]
+    patissuer_shared_secret: Option<Secret>,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
@@ -62,14 +62,14 @@ impl Args {
 /// PAT revocation is only enforced on the account plugin's Hold path, so an
 /// issuer without an account plugin mints tokens that can never be revoked.
 fn validate_pat_revocation_gating(
-    issuer_configured: bool,
+    patissuer_configured: bool,
     account_configured: bool,
 ) -> Result<(), String> {
-    if !issuer_configured || account_configured {
+    if !patissuer_configured || account_configured {
         return Ok(());
     }
     Err(
-        "ORBITPORT_ISSUER_PLUGIN is set but ORBITPORT_ACCOUNT_PLUGIN is not: PATs would be \
+        "ORBITPORT_PATISSUER_PLUGIN is set but ORBITPORT_ACCOUNT_PLUGIN is not: PATs would be \
          mintable but never revocable (revocation is enforced on the account plugin's Hold \
          path). Set ORBITPORT_ACCOUNT_PLUGIN."
             .to_string(),
@@ -85,11 +85,14 @@ async fn main() -> Result<(), GatewayError> {
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
 
-    validate_pat_revocation_gating(args.issuer_plugin.is_some(), args.account_plugin.is_some())
-        .map_err(|e| {
-            tracing::error!("{}", e);
-            GatewayError::InternalError(e)
-        })?;
+    validate_pat_revocation_gating(
+        args.patissuer_plugin.is_some(),
+        args.account_plugin.is_some(),
+    )
+    .map_err(|e| {
+        tracing::error!("{}", e);
+        GatewayError::InternalError(e)
+    })?;
 
     let shutdown = Arc::new(Notify::new());
     {
@@ -110,7 +113,7 @@ async fn main() -> Result<(), GatewayError> {
     if let Some(ref url) = args.account_plugin {
         plugin_urls.push(url.to_string());
     }
-    if let Some(ref url) = args.issuer_plugin {
+    if let Some(ref url) = args.patissuer_plugin {
         plugin_urls.push(url.to_string());
     }
     if args.threshold_enabled {
@@ -154,7 +157,7 @@ async fn main() -> Result<(), GatewayError> {
         &args.masterseed_plugin,
         &args.kms_plugin,
         args.account_plugin.as_deref(),
-        args.issuer_plugin.as_deref(),
+        args.patissuer_plugin.as_deref(),
         args.threshold_enabled,
         args.threshold_plugin.trim(),
         threshold_groups,
@@ -168,7 +171,7 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
-        args.issuer_shared_secret.clone().map(|s| s.0),
+        args.patissuer_shared_secret.clone().map(|s| s.0),
     )
     .await;
 
@@ -195,7 +198,7 @@ mod test {
     }
 
     #[test]
-    fn issuer_without_account_fails_closed() {
+    fn patissuer_without_account_fails_closed() {
         assert!(validate_pat_revocation_gating(true, false).is_err());
     }
 

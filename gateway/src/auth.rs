@@ -4,7 +4,9 @@
 use serde::Deserialize;
 use warp::{Filter, Rejection, http::StatusCode, reply::Response};
 
-use crate::proto::plugins::issuer::{IssueTokenRequest, issuer_plugin_client::IssuerPluginClient};
+use crate::proto::plugins::patissuer::{
+    IssueTokenRequest, pat_issuer_plugin_client::PatIssuerPluginClient,
+};
 use tonic::transport::Channel;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -21,7 +23,7 @@ struct PatIssueBody {
 /// `with_auth`: the caller is the dashboard backend, not an end user.
 /// Guarded by a constant-time shared-secret bearer check.
 pub fn pat_issue_route(
-    client: IssuerPluginClient<Channel>,
+    client: PatIssuerPluginClient<Channel>,
     shared_secret: String,
 ) -> impl Filter<Extract = (Response,), Error = Rejection> + Clone {
     warp::post()
@@ -37,7 +39,7 @@ pub fn pat_issue_route(
 async fn handle_pat_issue(
     auth_header: Option<String>,
     body: PatIssueBody,
-    mut client: IssuerPluginClient<Channel>,
+    mut client: PatIssuerPluginClient<Channel>,
     shared_secret: String,
 ) -> Result<Response, Rejection> {
     let expected = format!("Bearer {shared_secret}");
@@ -68,9 +70,9 @@ async fn handle_pat_issue(
             StatusCode::BAD_REQUEST,
         )),
         Err(e) => {
-            tracing::error!("Issuer plugin IssueToken failed: {}", e);
+            tracing::error!("PatIssuer plugin IssueToken failed: {}", e);
             Ok(json_status(
-                &serde_json::json!({"error": "issuer_plugin_unavailable"}),
+                &serde_json::json!({"error": "patissuer_plugin_unavailable"}),
                 StatusCode::SERVICE_UNAVAILABLE,
             ))
         }

@@ -18,9 +18,9 @@ import (
 
 const testJWKS = `{"keys":[{"kty":"EC","crv":"P-256","kid":"v1","x":"abc","y":"def"}]}`
 
-// mockIssuer is an in-process gRPC issuer plugin serving a swappable JWKS.
+// mockIssuer is an in-process gRPC patissuer plugin serving a swappable JWKS.
 type mockIssuer struct {
-	proto.UnimplementedIssuerPluginServer
+	proto.UnimplementedPatIssuerPluginServer
 
 	mu    sync.Mutex
 	jwks  string
@@ -49,7 +49,7 @@ func startMockIssuer(t *testing.T, m *mockIssuer) string {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	srv := grpc.NewServer()
-	proto.RegisterIssuerPluginServer(srv, m)
+	proto.RegisterPatIssuerPluginServer(srv, m)
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 	return lis.Addr().String()
@@ -66,7 +66,7 @@ func bindEnv(t *testing.T) {
 func newTestPlugin(t *testing.T, m *mockIssuer) *Plugin {
 	t.Helper()
 	bindEnv(t)
-	t.Setenv("ORBITPORT_JWKS_ISSUER_PLUGIN", startMockIssuer(t, m))
+	t.Setenv("ORBITPORT_JWKS_PATISSUER_PLUGIN", startMockIssuer(t, m))
 	p, err := NewPlugin()
 	require.NoError(t, err)
 	return p
@@ -128,12 +128,12 @@ func TestEmptyKeySetIsRefused(t *testing.T) {
 	require.Equal(t, 2, m.callCount())
 }
 
-func TestIssuerPluginAddressIsRequired(t *testing.T) {
+func TestPatIssuerPluginAddressIsRequired(t *testing.T) {
 	bindEnv(t)
-	t.Setenv("ORBITPORT_JWKS_ISSUER_PLUGIN", "")
+	t.Setenv("ORBITPORT_JWKS_PATISSUER_PLUGIN", "")
 	_, err := NewPlugin()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "ORBITPORT_JWKS_ISSUER_PLUGIN")
+	require.Contains(t, err.Error(), "ORBITPORT_JWKS_PATISSUER_PLUGIN")
 }
 
 func TestConcurrentRequestsCollapseToOneFetch(t *testing.T) {
