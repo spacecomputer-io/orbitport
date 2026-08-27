@@ -184,9 +184,9 @@ pub async fn start(
         .bind(([0, 0, 0, 0], http_port))
         .await
         .graceful(shutdown_signal());
-        
+
     server.run().await;
-    
+
     if let Some(task) = internal_task {
         let _ = task.await;
     }
@@ -199,7 +199,9 @@ async fn shutdown_signal() {
 
     #[cfg(unix)]
     let terminate = async {
-        if let Ok(mut signal) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+        if let Ok(mut signal) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
             signal.recv().await;
         } else {
             std::future::pending().await
