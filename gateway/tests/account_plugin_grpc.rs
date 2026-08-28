@@ -1,10 +1,6 @@
-//! gRPC-layer smoke tests for the account plugin client wiring.
-//!
-//! These spin up an in-process tonic server that impersonates the account
-//! plugin and exercise the generated gRPC client directly — i.e. the contract
-//! between gateway and plugin, not the warp filter chain. Filter-chain
-//! behavior (insufficient → 402, unreachable → 503, no-op when client is
-//! None) lives in `account_filter.rs`.
+//! gRPC-layer smoke tests for the account plugin client wiring, exercising
+//! the generated client against an in-process mock. Filter-chain behavior
+//! lives in `account_filter.rs`.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -48,6 +44,7 @@ impl AccountPlugin for MockAccountPlugin {
                 ledger_id: "ledger-1".to_string(),
                 balance_after: 42,
                 error: String::new(),
+                kms_tenant: "tenant-1".to_string(),
             })),
             HoldBehavior::Insufficient => Err(Status::failed_precondition("insufficient_credits")),
             HoldBehavior::Unavailable => Err(Status::unavailable("dashboard down")),
@@ -123,6 +120,7 @@ async fn hold_success_returns_ledger_id() {
             client_id: "client-1".to_string(),
             units: 1,
             operation: "trng".to_string(),
+            jti: String::new(),
         })
         .await
         .unwrap()
@@ -143,6 +141,7 @@ async fn hold_insufficient_credits_maps_to_failed_precondition() {
             client_id: "client-1".to_string(),
             units: 1,
             operation: "trng".to_string(),
+            jti: String::new(),
         })
         .await
         .unwrap_err();
@@ -161,6 +160,7 @@ async fn hold_unavailable_propagates() {
             client_id: "client-1".to_string(),
             units: 1,
             operation: "trng".to_string(),
+            jti: String::new(),
         })
         .await
         .unwrap_err();
@@ -181,7 +181,6 @@ async fn release_increments_counter() {
 
 #[tokio::test]
 async fn release_noop_when_no_client() {
-    // Smoke test: should not panic when account plugin is not configured.
     gateway::filters::account_release(None, "ledger-1").await;
     // And empty ledger_id is also a no-op.
     gateway::filters::account_release(None, "").await;
@@ -189,9 +188,8 @@ async fn release_noop_when_no_client() {
 
 #[tokio::test]
 async fn release_2s_timeout_is_respected() {
-    // Use a never-binding address to force a connect/RPC timeout path.
-    // We construct a channel against 127.0.0.1:1 (likely closed) — the
-    // release helper should swallow the error and return within 2s.
+    // A closed port forces the timeout path: release should swallow the
+    // error and return within 2s.
     let bad_endpoint = "http://127.0.0.1:1";
     let channel = tonic::transport::Channel::from_static(bad_endpoint).connect_lazy();
     let client = AccountPluginClient::new(channel);
@@ -219,7 +217,6 @@ async fn settle_increments_counter() {
 
 #[tokio::test]
 async fn settle_noop_when_no_client() {
-    // Smoke test: should not panic when account plugin is not configured.
     gateway::filters::account_settle(None, "ledger-1").await;
     // And empty ledger_id is also a no-op.
     gateway::filters::account_settle(None, "").await;
@@ -227,9 +224,8 @@ async fn settle_noop_when_no_client() {
 
 #[tokio::test]
 async fn settle_2s_timeout_is_respected() {
-    // Use a never-binding address to force a connect/RPC timeout path.
-    // We construct a channel against 127.0.0.1:1 (likely closed) — the
-    // settle helper should swallow the error and return within 2s.
+    // A closed port forces the timeout path: settle should swallow the
+    // error and return within 2s.
     let bad_endpoint = "http://127.0.0.1:1";
     let channel = tonic::transport::Channel::from_static(bad_endpoint).connect_lazy();
     let client = AccountPluginClient::new(channel);

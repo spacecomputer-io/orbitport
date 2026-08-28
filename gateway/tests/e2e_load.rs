@@ -44,8 +44,6 @@ async fn test_e2e_load() {
             tracing::debug!("Starting thread {i}");
             let access_token = access_token.clone();
             let base_url = base_url.clone();
-            let rps = rps;
-            let total_req = total_req;
             let unique_token = format!("{}_{}", access_token, i);
 
             let handle = tokio::spawn(async move {
@@ -127,7 +125,7 @@ async fn run_test(
                     sent.fetch_add(1, Ordering::SeqCst);
                     match common::get_trng(&base_url, &access_token, None, None, None).await {
                         Ok(resp) => {
-                            if resp.data.len() > 0 {
+                            if !resp.data.is_empty() {
                                 received.fetch_add(1, Ordering::SeqCst);
                             }
                         }

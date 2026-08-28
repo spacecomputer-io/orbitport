@@ -34,13 +34,13 @@ async fn test_e2e_happy() {
         tracing::info!("Making {n} trng requests");
         for _ in 0..n {
             let resp = common::get_trng(&base_url, &access_token, None, None, None).await?;
-            assert!(resp.data.len() > 0, "Response data is empty");
+            assert!(!resp.data.is_empty(), "Response data is empty");
         }
         tracing::info!("Making {n} trng (bulk=10) requests");
         for _ in 0..n {
             let resp = common::get_trng(&base_url, &access_token, None, Some(10), None).await?;
             tracing::debug!("Bulk response: {:?}", resp);
-            assert!(resp.data.len() > 0, "Response data is empty");
+            assert!(!resp.data.is_empty(), "Response data is empty");
             assert!(resp.bulk.is_some(), "Bulk is None");
             assert_eq!(resp.bulk.unwrap().len(), 10, "Bulk is not 10");
         }

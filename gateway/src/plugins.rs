@@ -13,6 +13,7 @@ use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPlug
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
+use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
 use crate::proto::plugins::threshold::threshold_plugin_client::ThresholdPluginClient;
 use crate::services::threshold::ThresholdGroupRegistry;
 
@@ -124,11 +125,13 @@ pub struct PluginCatalog {
 }
 
 impl PluginCatalog {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_url: &str,
         masterseed_url: &str,
         kms_url: &str,
         account_url: Option<&str>,
+        patissuer_url: Option<&str>,
         threshold_enabled: bool,
         threshold_url: &str,
         threshold_groups: ThresholdGroupRegistry,
@@ -139,6 +142,9 @@ impl PluginCatalog {
         urls.insert("masterseed".to_string(), masterseed_url.to_string());
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
+        }
+        if let Some(url) = patissuer_url {
+            urls.insert("patissuer".to_string(), url.to_string());
         }
         if threshold_enabled {
             urls.insert("threshold".to_string(), threshold_url.to_string());
@@ -151,17 +157,18 @@ impl PluginCatalog {
         }
     }
 
+    /// Returns a lazy channel. An eager `.connect()` would let a startup blip
+    /// leave the caller holding `None` for the process lifetime, silently
+    /// disabling whatever that plugin gates.
     pub async fn get_client(&self, plugin_name: &str) -> Result<Channel, PluginError> {
         let url = self
             .urls
             .get(plugin_name)
             .ok_or_else(|| PluginError::PluginNotFound(plugin_name.to_string()))?;
 
-        Channel::from_shared(url.to_string())
+        Ok(Channel::from_shared(url.to_string())
             .map_err(|e| PluginError::ConnectionError(format!("Failed to create channel: {e}")))?
-            .connect()
-            .await
-            .map_err(|_e| PluginError::ConnectionError(plugin_name.to_string()))
+            .connect_lazy())
     }
 
     pub async fn get_auth_client(&self) -> Result<AuthPluginClient<Channel>, PluginError> {
@@ -184,6 +191,13 @@ impl PluginCatalog {
     pub async fn get_account_client(&self) -> Result<AccountPluginClient<Channel>, PluginError> {
         let channel = self.get_client("account").await?;
         Ok(AccountPluginClient::new(channel))
+    }
+
+    pub async fn get_patissuer_client(
+        &self,
+    ) -> Result<PatIssuerPluginClient<Channel>, PluginError> {
+        let channel = self.get_client("patissuer").await?;
+        Ok(PatIssuerPluginClient::new(channel))
     }
 
     pub async fn get_threshold_client(

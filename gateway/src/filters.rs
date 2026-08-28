@@ -19,19 +19,30 @@ use warp::{
 
 const BEARER: &str = "Bearer ";
 
+/// Ceiling on a single auth-plugin validate_token call.
+const AUTH_VALIDATE_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[derive(Clone, Debug)]
 pub struct AuthContext {
     pub jwt: String,
     pub client_id: String,
+    /// Non-empty = the token was a PAT; empty = legacy Auth0 M2M.
+    pub jti: String,
+    /// PATs: the token's kms_tenant claim. Legacy Auth0: the raw sub.
+    /// Empty when the auth plugin predates the field.
+    pub kms_tenant: String,
 }
 
-/// AuthContextWithHold carries both the validated JWT context and the
-/// dashboard CreditLedger row id minted by the account plugin's Hold RPC.
-/// The ledger_id is empty when the account plugin is unconfigured.
+/// AuthContextWithHold carries the validated JWT context and the dashboard
+/// CreditLedger row id. The ledger_id is empty when the account plugin is
+/// unconfigured.
 #[derive(Clone, Debug)]
 pub struct AuthContextWithHold {
     pub auth: AuthContext,
     pub ledger_id: String,
+    /// KMS tenancy to route this request under, resolved by the dashboard
+    /// from the Account row during Hold. Never the token's own claim.
+    pub kms_tenant: String,
 }
 
 /// Rate limit structure
@@ -77,9 +88,19 @@ async fn authorize(
     match jwt_from_header(&headers) {
         Ok(jwt) => {
             let request = tonic::Request::new(TokenValidationRequest { token: jwt.clone() });
-            let response: TokenValidationResponse = auth_client
-                .validate_token(request)
-                .await
+            // The auth plugin fetches issuer JWKS on the PAT path, so a hung
+            // issuer must not pin this request open forever.
+            let validated =
+                tokio::time::timeout(AUTH_VALIDATE_TIMEOUT, auth_client.validate_token(request))
+                    .await
+                    .map_err(|_| {
+                        metrics::record_auth("plugin_timeout", timer.elapsed().as_secs_f64());
+                        tracing::error!("Auth plugin validate_token timed out");
+                        warp::reject::custom(GatewayError::AuthPluginConnectionError(
+                            "timeout".to_string(),
+                        ))
+                    })?;
+            let response: TokenValidationResponse = validated
                 .map_err(|e| match e.code() {
                     tonic::Code::Unavailable | tonic::Code::NotFound => {
                         metrics::record_auth("plugin_unavailable", timer.elapsed().as_secs_f64());
@@ -87,6 +108,16 @@ async fn authorize(
                         warp::reject::custom(GatewayError::AuthPluginConnectionError(
                             "unavailable".to_string(),
                         ))
+                    }
+                    // Expired PATs are typed Unauthenticated AND carry a
+                    // "pat_expired:" message; either signal alone is enough.
+                    _ if e.message().contains("pat_expired")
+                        || (e.code() == tonic::Code::Unauthenticated
+                            && e.message().contains("expired")) =>
+                    {
+                        metrics::record_auth("pat_expired", timer.elapsed().as_secs_f64());
+                        tracing::info!("Rejected expired PAT");
+                        warp::reject::custom(GatewayError::PatExpired)
                     }
                     _ => {
                         metrics::record_auth("failed", timer.elapsed().as_secs_f64());
@@ -107,7 +138,12 @@ async fn authorize(
             }
             metrics::record_auth("ok", timer.elapsed().as_secs_f64());
             tracing::debug!("JWT authorized successfully");
-            Ok(AuthContext { jwt, client_id })
+            Ok(AuthContext {
+                jwt,
+                client_id,
+                jti: response.jti.trim().to_string(),
+                kms_tenant: response.kms_tenant.trim().to_string(),
+            })
         }
         Err(GatewayError::NoAuthHeaderError) => {
             metrics::record_auth("missing_header", timer.elapsed().as_secs_f64());
@@ -154,10 +190,8 @@ pub fn with_rate_limiter(
 }
 
 /// Wraps an auth filter with a credit-hold step against the account plugin.
-/// When `account_client` is `None`, the filter passes through with an empty
-/// ledger_id — i.e. no credit gating. Otherwise it calls Hold(client_id, units,
-/// operation); on `insufficient_credits` it rejects with HTTP 402, on
-/// transport failure with HTTP 503 (fail-closed).
+/// `None` passes through with an empty ledger_id — no credit gating.
+/// `insufficient_credits` rejects with 402, transport failure with 503.
 pub fn with_account_hold(
     auth_filter: impl Filter<Extract = (AuthContext,), Error = warp::Rejection> + Clone,
     account_client: Option<AccountPluginClient<Channel>>,
@@ -170,30 +204,60 @@ pub fn with_account_hold(
         .and_then(account_hold)
 }
 
+/// Legacy Auth0 tenancy: the raw sub the auth plugin validated. Falling back
+/// to client_id keeps the exact value this path used before kms_tenant existed.
+fn legacy_tenant(auth: &AuthContext) -> String {
+    if auth.kms_tenant.is_empty() {
+        auth.client_id.clone()
+    } else {
+        auth.kms_tenant.clone()
+    }
+}
+
 async fn account_hold(
     auth: AuthContext,
     account_client: Option<AccountPluginClient<Channel>>,
     (units, operation): (u32, &'static str),
 ) -> Result<AuthContextWithHold, warp::Rejection> {
     let Some(mut client) = account_client else {
+        // No Hold means no authoritative tenancy, and a PAT's own claim is
+        // not a substitute.
+        if !auth.jti.is_empty() {
+            metrics::record_account_hold("pat_without_account_plugin");
+            tracing::error!(
+                "PAT presented but ORBITPORT_ACCOUNT_PLUGIN is unset: cannot resolve KMS tenancy"
+            );
+            return Err(warp::reject::custom(
+                GatewayError::AccountPluginUnavailable(
+                    "account plugin required to resolve tenancy".to_string(),
+                ),
+            ));
+        }
+        let kms_tenant = legacy_tenant(&auth);
         return Ok(AuthContextWithHold {
             auth,
             ledger_id: String::new(),
+            kms_tenant,
         });
     };
 
-    // Auth0 M2M tokens carry `sub` as `<client_id>@clients`; the dashboard
-    // stores the bare client_id. Strip the suffix here (account boundary only)
-    // so the credit lookup matches. Left untouched elsewhere (e.g. KMS keys are
-    // namespaced by the full `client_id` and must not change).
-    let request = tonic::Request::new(HoldRequest {
-        client_id: auth
-            .client_id
+    // Auth0 M2M tokens carry `sub` as `<client_id>@clients` but the dashboard
+    // stores the bare client_id, so strip the suffix at this boundary only —
+    // KMS keys are namespaced by the full `client_id` and must not change.
+    // PATs carry the Account.id as `sub`, so pass those through unstripped.
+    let client_id = if auth.jti.is_empty() {
+        auth.client_id
             .strip_suffix("@clients")
             .unwrap_or(&auth.client_id)
-            .to_string(),
+            .to_string()
+    } else {
+        auth.client_id.clone()
+    };
+    let request = tonic::Request::new(HoldRequest {
+        client_id,
         units,
         operation: operation.to_string(),
+        jti: auth.jti.clone(),
     });
 
     match client.hold(request).await {
@@ -210,16 +274,39 @@ async fn account_hold(
                     GatewayError::AccountPluginUnavailable(body.error),
                 ));
             }
+            let kms_tenant = match body.kms_tenant.trim() {
+                "" if auth.jti.is_empty() => legacy_tenant(&auth),
+                // A PAT's tenancy must come from the Account row. Falling back
+                // to the claim would re-trust a value the token asserts about
+                // itself and keeps for up to a year.
+                "" => {
+                    metrics::record_account_hold("missing_tenant");
+                    tracing::error!("Account plugin Hold returned no kms_tenant for a PAT");
+                    return Err(warp::reject::custom(
+                        GatewayError::AccountPluginUnavailable(
+                            "hold response missing kms_tenant".to_string(),
+                        ),
+                    ));
+                }
+                t => t.to_string(),
+            };
             metrics::record_account_hold("ok");
             Ok(AuthContextWithHold {
                 auth,
                 ledger_id: body.ledger_id,
+                kms_tenant,
             })
         }
         Err(e) => match e.code() {
             tonic::Code::FailedPrecondition => {
                 metrics::record_account_hold("insufficient_credits");
                 Err(warp::reject::custom(GatewayError::InsufficientCredits))
+            }
+            // Dashboard 404: unknown/revoked/expired credential — the PAT
+            // revocation path. An auth failure, not a plugin outage.
+            tonic::Code::PermissionDenied => {
+                metrics::record_account_hold("invalid_credential");
+                Err(warp::reject::custom(GatewayError::InvalidCredential))
             }
             _ => {
                 metrics::record_account_hold("plugin_unavailable");
@@ -232,11 +319,9 @@ async fn account_hold(
     }
 }
 
-/// Best-effort settle. Commits the hold on a successful request so the dashboard
-/// sweeper does not refund it as an orphan. Logs + ignores failure; a dropped
-/// settle leaves the hold unresolved, so the sweeper refunds it (the customer is
-/// never overcharged — at worst the request goes uncharged). Times out at 2 s
-/// regardless of the per-plugin HTTP timeout.
+/// Best-effort settle, committing the hold so the dashboard sweeper does not
+/// refund it as an orphan. A dropped settle leaves the hold unresolved and the
+/// sweeper refunds it, so the customer is never overcharged.
 pub async fn account_settle(account_client: Option<AccountPluginClient<Channel>>, ledger_id: &str) {
     if ledger_id.is_empty() {
         return;
@@ -283,9 +368,7 @@ pub async fn account_settle(account_client: Option<AccountPluginClient<Channel>>
     }
 }
 
-/// Best-effort release. Logs + ignores failure. The dashboard sweeper backstops
-/// orphaned holds at the sweeper TTL. Times out at 2 s regardless of the
-/// per-plugin HTTP timeout.
+/// Best-effort release. The dashboard sweeper backstops orphaned holds.
 pub async fn account_release(
     account_client: Option<AccountPluginClient<Channel>>,
     ledger_id: &str,
@@ -385,6 +468,8 @@ mod test {
         let auth = AuthContext {
             jwt: "test_token".to_string(),
             client_id: "client".to_string(),
+            jti: String::new(),
+            kms_tenant: String::new(),
         };
 
         for _i in 0..5 {

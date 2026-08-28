@@ -1,0 +1,83 @@
+# Real dashboard credit-loop override.
+#
+# The dev stack runs accountnoop, which grants every hold and charges nobody.
+# This replaces it with the real account plugin against a host-run dashboard,
+# so holds, settles, releases and PAT revocation hit an actual database. Stack
+# it when you are changing billing or revocation; the dev stack is enough for
+# everything else.
+#
+# It also swaps the noop auth plugin for the real Auth0 one, so the gateway
+# reads the customer's client_id from their JWT (the account plugin charges
+# that customer). Add local-pat.compose.yaml on top for PAT verification.
+#
+# Run (from the orbitport repo, with the dashboard already up on the host):
+#   export ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=...      # <-- pending from team
+#   export ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=...  # <-- pending from team
+#   docker compose -f dev.docker-compose.yaml -f local-account.compose.yaml \
+#     up -d --build plugin-auth plugin-aptos-orbital aptos-orbital-api \
+#     aptos-orbital-auth plugin-account gateway
+#
+# NOTE: this intentionally starts only the services needed for the cTRNG +
+# credit path (no kms/openbao/ipfs), since the openbao-eth-plugin-poc sibling
+# repo is missing locally. The gateway in the base compose depends_on kms +
+# masterseed; if compose refuses, add `--no-deps` and start masterseed too.
+#
+# Values below mirror the dashboard backend/.env (dev tenant). Confirm the
+# AUTH0_DOMAIN — the account M2M token must be minted from the tenant whose
+# tokens the dashboard backend accepts.
+
+services:
+  # Real auth instead of authnoop, so the gateway extracts the customer's
+  # client_id from their JWT (the account plugin charges that customer).
+  plugin-auth:
+    environment:
+      - ORBITPORT_PLUGIN=auth
+      - ORBITPORT_AUTH0_DOMAIN=auth.spacecomputer.io
+      - ORBITPORT_AUTH0_AUDIENCE=https://op-dev.spacecomputer.io/api
+
+  plugin-account:
+    # (plugin-base anchor is file-local to dev.docker-compose.yaml; inlined here)
+    container_name: plugin-account
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=account
+      - ORBITPORT_GRPC_PORT=50005
+      # dashboard BACKEND (3001), not the frontend (3000)
+      - ORBITPORT_ACCOUNT_DASHBOARD_URL=http://host.docker.internal:3001
+      # plaintext http to the host dashboard — local only, never prod
+      - ORBITPORT_ACCOUNT_ALLOW_INSECURE=true
+      - ORBITPORT_ACCOUNT_AUTH0_DOMAIN=dev-hic0i5wm2yi15jdc.us.auth0.com
+      # MUST equal the dashboard backend's AUTH0_AUDIENCE
+      - ORBITPORT_ACCOUNT_AUTH0_AUDIENCE=https://op-dev.spacecomputer.io/api
+      # the M2M app authorized for the dashboard API — its client_id must be
+      # in the dashboard's ALLOWED_SERVICE_CLIENT_IDS (mgbl... is already there)
+      - ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID}
+      - ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET}
+      - ORBITPORT_ACCOUNT_CREDITS_PER_UNIT=1
+      - ORBITPORT_ACCOUNT_HTTP_TIMEOUT_SECS=5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - plugin-auth
+
+  gateway:
+    environment:
+      - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - plugin-account

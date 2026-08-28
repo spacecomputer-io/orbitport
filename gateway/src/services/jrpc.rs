@@ -362,6 +362,7 @@ mod test {
             "http://masterseed:50003",
             "http://kms:50004",
             None,
+            None,
             false,
             "",
             crate::services::threshold::ThresholdGroupRegistry::default(),

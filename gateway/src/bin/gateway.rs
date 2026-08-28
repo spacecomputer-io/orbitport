@@ -2,12 +2,19 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use gateway::{logging, plugins, server, service_manager, types::GatewayError};
+use gateway::{
+    logging, plugins, server, service_manager,
+    types::{GatewayError, Secret},
+};
 
 #[derive(Parser, Debug)]
 struct Args {
     #[clap(short = 'p', long, env = "ORBITPORT_HTTP_PORT", default_value = "8080")]
     http_port: u16,
+    /// Port for internal-only routes (PAT issuance). Must not be published by
+    /// any load balancer or Ingress-backed Service.
+    #[clap(long, env = "ORBITPORT_INTERNAL_PORT", default_value = "8081")]
+    internal_port: u16,
     #[clap(long, env = "ORBITPORT_METRICS_PORT", default_value = "9100")]
     metric_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
@@ -27,6 +34,13 @@ struct Args {
     /// release on downstream failure.
     #[clap(long, env = "ORBITPORT_ACCOUNT_PLUGIN")]
     account_plugin: Option<String>,
+    /// Optional patissuer plugin gRPC URL. When set, the gateway serves the
+    /// public JWKS route and the internal PAT issuance route.
+    #[clap(long, env = "ORBITPORT_PATISSUER_PLUGIN")]
+    patissuer_plugin: Option<String>,
+    /// Shared secret guarding POST /internal/pat/issue.
+    #[clap(long, env = "ORBITPORT_PATISSUER_SHARED_SECRET")]
+    patissuer_shared_secret: Option<Secret>,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
@@ -45,6 +59,23 @@ impl Args {
     }
 }
 
+/// PAT revocation is only enforced on the account plugin's Hold path, so an
+/// issuer without an account plugin mints tokens that can never be revoked.
+fn validate_pat_revocation_gating(
+    patissuer_configured: bool,
+    account_configured: bool,
+) -> Result<(), String> {
+    if !patissuer_configured || account_configured {
+        return Ok(());
+    }
+    Err(
+        "ORBITPORT_PATISSUER_PLUGIN is set but ORBITPORT_ACCOUNT_PLUGIN is not: PATs would be \
+         mintable but never revocable (revocation is enforced on the account plugin's Hold \
+         path). Set ORBITPORT_ACCOUNT_PLUGIN."
+            .to_string(),
+    )
+}
+
 #[tokio::main]
 async fn main() -> Result<(), GatewayError> {
     let _log_guard = logging::initialize_logging();
@@ -53,6 +84,15 @@ async fn main() -> Result<(), GatewayError> {
 
     let args: Args = Args::with_dot_env();
     tracing::info!("Starting orbitport with args: {:?}", args);
+
+    validate_pat_revocation_gating(
+        args.patissuer_plugin.is_some(),
+        args.account_plugin.is_some(),
+    )
+    .map_err(|e| {
+        tracing::error!("{}", e);
+        GatewayError::InternalError(e)
+    })?;
 
     let shutdown = Arc::new(Notify::new());
     {
@@ -71,6 +111,9 @@ async fn main() -> Result<(), GatewayError> {
         args.masterseed_plugin.to_string(),
     ];
     if let Some(ref url) = args.account_plugin {
+        plugin_urls.push(url.to_string());
+    }
+    if let Some(ref url) = args.patissuer_plugin {
         plugin_urls.push(url.to_string());
     }
     if args.threshold_enabled {
@@ -114,6 +157,7 @@ async fn main() -> Result<(), GatewayError> {
         &args.masterseed_plugin,
         &args.kms_plugin,
         args.account_plugin.as_deref(),
+        args.patissuer_plugin.as_deref(),
         args.threshold_enabled,
         args.threshold_plugin.trim(),
         threshold_groups,
@@ -121,11 +165,13 @@ async fn main() -> Result<(), GatewayError> {
 
     server::start(
         args.http_port,
+        args.internal_port,
         service_manager.clone(),
         plugin_catalog.clone(),
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
+        args.patissuer_shared_secret.clone().map(|s| s.0),
     )
     .await;
 
@@ -135,4 +181,31 @@ async fn main() -> Result<(), GatewayError> {
         time_elapsed.as_secs_f64()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::{Secret, validate_pat_revocation_gating};
+
+    /// `Args` is logged with `{:?}` at startup, so a leaky `Debug` here puts the
+    /// PAT-minting secret in every log aggregator.
+    #[test]
+    fn secret_debug_is_redacted() {
+        let s = Secret::from("super-secret-value");
+        assert_eq!(format!("{s:?}"), "[redacted]");
+        assert!(!format!("{s:?}").contains("super-secret-value"));
+        assert!(!format!("{:?}", Some(s)).contains("super-secret-value"));
+    }
+
+    #[test]
+    fn patissuer_without_account_fails_closed() {
+        assert!(validate_pat_revocation_gating(true, false).is_err());
+    }
+
+    #[test]
+    fn other_combinations_pass() {
+        assert!(validate_pat_revocation_gating(false, false).is_ok());
+        assert!(validate_pat_revocation_gating(false, true).is_ok());
+        assert!(validate_pat_revocation_gating(true, true).is_ok());
+    }
 }

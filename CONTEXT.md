@@ -50,6 +50,7 @@ beacons.yaml                Public beacon registry
 | [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS | No RPC; consumes the others |
 | [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate) backed by OpenBao | Wraps Transit + Ethereum secrets engines |
 | [`account`](plugins/pkg/plugin/account/README.md) | Per-request credit gating against the dashboard backend account service | Holds credits before serving compute; settles on success, releases on failure |
+| [`patissuer`](plugins/pkg/plugin/patissuer/README.md) | Mints Personal Access Tokens (ES256 JWS) and serves the JWKS verifiers cache | Key custody behind a signer seam: local P-256 key now, OpenBao Transit when provisioned |
 
 ## Configuration
 
@@ -66,6 +67,8 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_TRNG_PLUGIN` | — | gRPC URL of the cTRNG plugin (`aptosorbital`) |
 | `ORBITPORT_KMS_PLUGIN` | — | gRPC URL of the KMS plugin |
 | `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving, settle on success, and release on downstream failure. |
+| `ORBITPORT_PATISSUER_PLUGIN` | — | gRPC URL of the patissuer plugin. When set, mounts `POST /internal/pat/issue` on the internal listener. The key set is published by the jwks plugin |
+| `ORBITPORT_PATISSUER_SHARED_SECRET` | — | Bearer secret guarding `/internal/pat/issue` (constant-time compare). Route is not mounted when empty |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
@@ -87,7 +90,44 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | `ORBITPORT_AUTH0_DOMAIN` | yes | Auth0 tenant domain |
 | `ORBITPORT_AUTH0_AUDIENCE` | yes | Expected `aud` claim value |
 
+Optional PAT (Personal Access Token) dual-validation path — all three must be
+set together (partial config refuses startup); when unset the plugin behaves
+exactly as before:
+
+| Env var | Required | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_AUTH_PAT_ISS` | with PAT path | Expected `iss` of self-issued PATs; also the routing key (tokens with any other `iss` take the Auth0 path) |
+| `ORBITPORT_AUTH_PAT_AUDIENCE` | no | Expected `aud` for PATs (defaults to `ORBITPORT_AUTH0_AUDIENCE`) |
+| `ORBITPORT_AUTH_PATISSUER_PLUGIN` | with PAT path | gRPC address of the patissuer plugin — source of the JWKS (5-min cache, refetch on unknown kid) |
+
 `authnoop` takes no configuration.
+
+### Plugin: `patissuer`
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_PATISSUER_ISS` | — | `iss` claim stamped into every PAT (required) |
+| `ORBITPORT_PATISSUER_AUD` | — | `aud` claim (required) |
+| `ORBITPORT_PATISSUER_SIGNER` | `local` | Key custody: `local` (in-process EC P-256) or `transit` (OpenBao Transit via the proxy) |
+| `ORBITPORT_PATISSUER_LOCAL_KEY_PEM` | — | PEM EC P-256 private key for the local signer. Empty = ephemeral key generated at startup (dev only: restarts invalidate all outstanding PATs) |
+| `ORBITPORT_PATISSUER_MAX_TTL_DAYS` | `370` | Ceiling on requested `expires_at` (backstop; the dashboard enforces the product cap) |
+| `ORBITPORT_PATISSUER_OPENBAO_PROXY_URL` | — | HTTP base URL of the OpenBao proxy (required for `transit`). The proxy owns auth — the plugin never holds OpenBao credentials, same contract as the KMS plugin |
+| `ORBITPORT_PATISSUER_TRANSIT_MOUNT` | `transit` | Transit secrets engine mount path |
+| `ORBITPORT_PATISSUER_TRANSIT_KEY` | `pat-signing` | Signing key name; `kid` = the Transit key version, rotation is a key-rotate away |
+| `ORBITPORT_PATISSUER_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
+
+### Plugin: `jwks`
+
+Publishes the issuer's public keys at `GET /.well-known/jwks.json`. Serves HTTP
+rather than gRPC and holds no key material. See
+`plugins/pkg/plugin/jwks/README.md`.
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_JWKS_PATISSUER_PLUGIN` | — | gRPC address of the patissuer plugin (required; startup fails without it) |
+| `ORBITPORT_JWKS_HTTP_PORT` | `8080` | Public listener serving the key set |
+| `ORBITPORT_JWKS_CACHE_TTL_SECS` | `60` | Bounds how often an anonymous request reaches the issuer |
+| `ORBITPORT_JWKS_TIMEOUT_SECS` | `5` | Bounds a single `GetJwks` call |
 
 ### Plugin: `aptosorbital`
 

@@ -30,6 +30,9 @@ message HoldRequest {
   uint32 units = 2;
   // Operation tag for ledger description + metrics ("trng", "kms_sign", ...).
   string operation = 3;
+  // Non-empty jti = the token was a PAT (dual-validation discriminator);
+  // empty = legacy Auth0 M2M.
+  string jti = 4;
 }
 
 message HoldResponse {
@@ -43,6 +46,10 @@ message HoldResponse {
   // non-nil gRPC status (FailedPrecondition / Unavailable) instead of a
   // response with ok=false, so callers should branch on the gRPC error code.
   string error = 4;
+  // Authoritative KMS tenancy from the resolved Account row. The gateway uses
+  // this, never the PAT's kms_tenant claim, which the token asserts about
+  // itself once at mint time and then carries for up to a year.
+  string kms_tenant = 5;
 }
 
 message SettleRequest {

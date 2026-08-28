@@ -15,4 +15,11 @@ message TokenValidationRequest {
 message TokenValidationResponse {
     bool ok = 1;
     string client_id = 2;
+    // Non-empty jti = the token was a PAT (dual-validation discriminator);
+    // empty = legacy Auth0 M2M.
+    string jti = 3;
+    // KMS tenancy (D9), legacy Auth0 only: the RAW sub including any @clients
+    // suffix. On the PAT path this is the self-asserted claim, which the
+    // gateway ignores in favour of HoldResponse.kms_tenant.
+    string kms_tenant = 4;
 }

@@ -14,6 +14,9 @@ pub mod proto {
         pub mod ipfs {
             tonic::include_proto!("ipfs");
         }
+        pub mod patissuer {
+            tonic::include_proto!("patissuer");
+        }
         pub mod kms {
             tonic::include_proto!("kmsapi");
         }
@@ -43,6 +46,7 @@ pub mod types;
 pub mod logging;
 pub mod metrics;
 
+pub mod auth;
 pub mod filters;
 pub mod plugins;
 pub mod server;
