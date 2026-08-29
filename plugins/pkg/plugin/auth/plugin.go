@@ -2,17 +2,23 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/auth0/go-jwt-middleware/v2/jwks"
 	"github.com/auth0/go-jwt-middleware/v2/validator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
+
+var errAuth0JWKSUnavailable = errors.New("Auth0 JWKS unavailable")
 
 // Plugin implements the AuthPluginServer interface for the Auth0 API.
 type Plugin struct {
@@ -22,9 +28,36 @@ type Plugin struct {
 	cachingProvider *jwks.CachingProvider
 
 	// patKeys is nil when PAT validation is not configured.
-	patIss      string
-	patAudience string
-	patKeys     *jwksCache
+	patIss           string
+	patAudience      string
+	patKeys          *jwksCache
+	serviceClientIDs map[string]struct{}
+}
+
+type serviceClaims struct {
+	Scope     string `json:"scope"`
+	GrantType string `json:"gty"`
+}
+
+func (*serviceClaims) Validate(context.Context) error {
+	return nil
+}
+
+func (c *serviceClaims) hasRequiredScopes(requiredScopes []string) bool {
+	scopes := make(map[string]struct{}, len(requiredScopes))
+	for _, scope := range strings.Fields(c.Scope) {
+		scopes[scope] = struct{}{}
+	}
+	for _, scope := range requiredScopes {
+		if _, ok := scopes[scope]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *serviceClaims) hasClientCredentialsGrant() bool {
+	return c.GrantType == "client-credentials"
 }
 
 // NewPlugin creates a new Auth plugin.
@@ -48,6 +81,7 @@ func NewPlugin() (*Plugin, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Auth plugin: %w", err)
 	}
+	plugin.serviceClientIDs = cfg.serviceClientIDSet()
 	logger.Info("authentication is ON")
 
 	if cfg.patEnabled() {
@@ -76,11 +110,14 @@ func newAuthPlugin(auth0Domain, auth0Audience string) (*Plugin, error) {
 	cProvider := jwks.NewCachingProvider(issuerURL, 5*time.Minute)
 
 	jwtValidator, err := validator.New(
-		cProvider.KeyFunc,
+		wrapAuth0KeyFunc(cProvider.KeyFunc),
 		validator.RS256,
 		issuerURL.String(),
 		[]string{auth0Audience},
 		validator.WithAllowedClockSkew(time.Minute),
+		validator.WithCustomClaims(func() validator.CustomClaims {
+			return &serviceClaims{}
+		}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to set up the jwt validator: %w", err)
@@ -106,18 +143,22 @@ func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRe
 		}
 		return resp, nil
 	}
-	claims, err := p.jwtValidator.ValidateToken(ctx, req.Token)
+	validatedClaims, err := p.validateAuth0Token(ctx, req.Token)
 	if err != nil {
 		logger.Warnf("Encountered error while validating JWT: %v", err)
 		return nil, fmt.Errorf("failed to validate JWT token: %w", err)
 	}
-	validatedClaims, ok := claims.(*validator.ValidatedClaims)
-	if !ok {
-		return nil, fmt.Errorf("unexpected validated claims type %T", claims)
-	}
 	clientID := validatedClaims.RegisteredClaims.Subject
 	if clientID == "" {
 		return nil, fmt.Errorf("validated JWT is missing sub claim")
+	}
+	// A gateway-internal service credential is not a customer credential: it
+	// targets the same audience, so without this it would also pass as a
+	// paying client on the metered API.
+	if bare, isM2M := strings.CutSuffix(clientID, "@clients"); isM2M {
+		if _, isService := p.serviceClientIDs[bare]; isService {
+			return nil, fmt.Errorf("service credential cannot authenticate as a customer")
+		}
 	}
 
 	return &proto.TokenValidationResponse{
@@ -127,4 +168,64 @@ func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRe
 		// byte-identical to what the gateway used before.
 		KmsTenant: clientID,
 	}, nil
+}
+
+// ValidateServiceToken authorizes an Auth0 M2M client for a gateway-internal
+// capability. It intentionally does not accept user JWTs or PATs.
+func (p *Plugin) ValidateServiceToken(
+	ctx context.Context,
+	req *proto.ServiceTokenValidationRequest,
+) (*proto.ServiceTokenValidationResponse, error) {
+	validatedClaims, err := p.validateAuth0Token(ctx, req.GetToken())
+	if err != nil {
+		if errors.Is(err, errAuth0JWKSUnavailable) {
+			return nil, status.Error(codes.Unavailable, "Auth0 JWKS unavailable")
+		}
+		return nil, status.Error(codes.Unauthenticated, "invalid service token")
+	}
+	if validatedClaims.RegisteredClaims.Expiry <= 0 {
+		return nil, status.Error(codes.Unauthenticated, "invalid service token")
+	}
+
+	clientID, isM2M := strings.CutSuffix(validatedClaims.RegisteredClaims.Subject, "@clients")
+	if !isM2M || clientID == "" {
+		return nil, status.Error(codes.PermissionDenied, "service token is not authorized")
+	}
+	if _, ok := p.serviceClientIDs[clientID]; !ok {
+		return nil, status.Error(codes.PermissionDenied, "service token is not authorized")
+	}
+
+	claims, ok := validatedClaims.CustomClaims.(*serviceClaims)
+	if !ok || !claims.hasClientCredentialsGrant() || !claims.hasRequiredScopes(req.GetRequiredScopes()) {
+		return nil, status.Error(codes.PermissionDenied, "service token is not authorized")
+	}
+
+	return &proto.ServiceTokenValidationResponse{
+		Ok:       true,
+		ClientId: clientID,
+	}, nil
+}
+
+func (p *Plugin) validateAuth0Token(ctx context.Context, token string) (*validator.ValidatedClaims, error) {
+	claims, err := p.jwtValidator.ValidateToken(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	validatedClaims, ok := claims.(*validator.ValidatedClaims)
+	if !ok {
+		return nil, fmt.Errorf("unexpected validated claims type %T", claims)
+	}
+	return validatedClaims, nil
+}
+
+func wrapAuth0KeyFunc(
+	keyFunc func(context.Context) (interface{}, error),
+) func(context.Context) (interface{}, error) {
+	return func(ctx context.Context) (interface{}, error) {
+		key, err := keyFunc(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errAuth0JWKSUnavailable, err)
+		}
+		return key, nil
+	}
 }

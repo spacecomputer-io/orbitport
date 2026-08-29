@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	auth0validator "github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
@@ -25,8 +27,9 @@ import (
 )
 
 const (
-	testPatIss = "https://auth.orbitport.test"
-	testPatAud = "https://api.orbitport.test"
+	testAuth0Iss = "https://auth0.orbitport.test/"
+	testPatIss   = "https://auth.orbitport.test"
+	testPatAud   = "https://api.orbitport.test"
 )
 
 // mockIssuer is an in-process gRPC patissuer plugin serving a swappable JWKS.
@@ -124,6 +127,380 @@ func newTestPlugin(t *testing.T, issuerAddr string) *Plugin {
 	p, err := NewPlugin()
 	require.NoError(t, err)
 	return p
+}
+
+func newServiceTestPlugin(t *testing.T) (*Plugin, *rsa.PrivateKey) {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	jwtValidator, err := auth0validator.New(
+		wrapAuth0KeyFunc(func(context.Context) (interface{}, error) { return &key.PublicKey, nil }),
+		auth0validator.RS256,
+		testAuth0Iss,
+		[]string{testPatAud},
+		auth0validator.WithCustomClaims(func() auth0validator.CustomClaims {
+			return &serviceClaims{}
+		}),
+	)
+	require.NoError(t, err)
+
+	return &Plugin{
+		jwtValidator:     jwtValidator,
+		serviceClientIDs: map[string]struct{}{"dashboard-service": {}},
+	}, key
+}
+
+func mintServiceToken(t *testing.T, key *rsa.PrivateKey, subject, scope string) string {
+	return mintServiceTokenWithClaims(t, key, testAuth0Iss, testPatAud, subject, scope, time.Now().Add(time.Hour))
+}
+
+func mintServiceTokenWithClaims(
+	t *testing.T,
+	key *rsa.PrivateKey,
+	issuer, audience, subject, scope string,
+	expiresAt time.Time,
+) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iss":   issuer,
+		"aud":   audience,
+		"sub":   subject,
+		"scope": scope,
+		"gty":   "client-credentials",
+		"iat":   time.Now().Unix(),
+		"exp":   expiresAt.Unix(),
+	})
+	signed, err := token.SignedString(key)
+	require.NoError(t, err)
+	return signed
+}
+
+func mintServiceTokenWithoutExpiration(t *testing.T, key *rsa.PrivateKey) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iss":   testAuth0Iss,
+		"aud":   testPatAud,
+		"sub":   "dashboard-service@clients",
+		"scope": "pat:issue",
+		"gty":   "client-credentials",
+		"iat":   time.Now().Unix(),
+	})
+	signed, err := token.SignedString(key)
+	require.NoError(t, err)
+	return signed
+}
+
+func mintServiceTokenWithGrantType(t *testing.T, key *rsa.PrivateKey, grantType string) string {
+	t.Helper()
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
+		"iss":   testAuth0Iss,
+		"aud":   testPatAud,
+		"sub":   "dashboard-service@clients",
+		"scope": "pat:issue",
+		"gty":   grantType,
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(time.Hour).Unix(),
+	})
+	signed, err := token.SignedString(key)
+	require.NoError(t, err)
+	return signed
+}
+
+func TestValidateServiceToken_RequiresAllowlistedM2MClientAndScope(t *testing.T) {
+	p, key := newServiceTestPlugin(t)
+
+	tests := []struct {
+		name       string
+		subject    string
+		scope      string
+		wantCode   codes.Code
+		wantClient string
+	}{
+		{
+			name:       "allowlisted client with required scope",
+			subject:    "dashboard-service@clients",
+			scope:      "pat:issue services:read",
+			wantCode:   codes.OK,
+			wantClient: "dashboard-service",
+		},
+		{
+			name:     "user token is not a service token",
+			subject:  "auth0|user-1",
+			scope:    "pat:issue",
+			wantCode: codes.PermissionDenied,
+		},
+		{
+			name:     "unallowlisted service client",
+			subject:  "other-service@clients",
+			scope:    "pat:issue",
+			wantCode: codes.PermissionDenied,
+		},
+		{
+			name:     "missing required scope",
+			subject:  "dashboard-service@clients",
+			scope:    "services:read",
+			wantCode: codes.PermissionDenied,
+		},
+		{
+			name:     "scope substring does not authorize",
+			subject:  "dashboard-service@clients",
+			scope:    "pat:issue-other",
+			wantCode: codes.PermissionDenied,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := p.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+				Token:          mintServiceToken(t, key, tt.subject, tt.scope),
+				RequiredScopes: []string{"pat:issue"},
+			})
+			if tt.wantCode != codes.OK {
+				st, ok := status.FromError(err)
+				require.True(t, ok, "expected gRPC status error, got %v", err)
+				require.Equal(t, tt.wantCode, st.Code())
+				return
+			}
+
+			require.NoError(t, err)
+			require.True(t, resp.Ok)
+			require.Equal(t, tt.wantClient, resp.ClientId)
+		})
+	}
+}
+
+func TestValidateServiceToken_RejectsInvalidAuth0Tokens(t *testing.T) {
+	p, key := newServiceTestPlugin(t)
+	otherKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{
+			name:  "malformed token",
+			token: "not-a-jwt",
+		},
+		{
+			name: "wrong issuer",
+			token: mintServiceTokenWithClaims(
+				t, key, "https://other-auth0.test/", testPatAud, "dashboard-service@clients", "pat:issue", time.Now().Add(time.Hour),
+			),
+		},
+		{
+			name: "wrong audience",
+			token: mintServiceTokenWithClaims(
+				t, key, testAuth0Iss, "https://other-api.test", "dashboard-service@clients", "pat:issue", time.Now().Add(time.Hour),
+			),
+		},
+		{
+			name: "expired token",
+			token: mintServiceTokenWithClaims(
+				t, key, testAuth0Iss, testPatAud, "dashboard-service@clients", "pat:issue", time.Now().Add(-time.Minute),
+			),
+		},
+		{
+			name: "invalid signature",
+			token: mintServiceTokenWithClaims(
+				t, otherKey, testAuth0Iss, testPatAud, "dashboard-service@clients", "pat:issue", time.Now().Add(time.Hour),
+			),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := p.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+				Token:          tt.token,
+				RequiredScopes: []string{"pat:issue"},
+			})
+			st, ok := status.FromError(err)
+			require.True(t, ok, "expected gRPC status error, got %v", err)
+			require.Equal(t, codes.Unauthenticated, st.Code())
+		})
+	}
+}
+
+func TestValidateServiceToken_RequiresExpirationAndClientCredentialsGrant(t *testing.T) {
+	p, key := newServiceTestPlugin(t)
+
+	tests := []struct {
+		name     string
+		token    string
+		wantCode codes.Code
+	}{
+		{
+			name:     "missing expiration",
+			token:    mintServiceTokenWithoutExpiration(t, key),
+			wantCode: codes.Unauthenticated,
+		},
+		{
+			name:     "missing client credentials grant",
+			token:    mintServiceTokenWithGrantType(t, key, ""),
+			wantCode: codes.PermissionDenied,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := p.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+				Token:          tt.token,
+				RequiredScopes: []string{"pat:issue"},
+			})
+			st, ok := status.FromError(err)
+			require.True(t, ok, "expected gRPC status error, got %v", err)
+			require.Equal(t, tt.wantCode, st.Code())
+		})
+	}
+}
+
+func TestValidateServiceToken_ReportsAuth0JWKSErrorsAsUnavailable(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	jwtValidator, err := auth0validator.New(
+		wrapAuth0KeyFunc(func(context.Context) (interface{}, error) {
+			return nil, errors.New("JWKS request failed")
+		}),
+		auth0validator.RS256,
+		testAuth0Iss,
+		[]string{testPatAud},
+		auth0validator.WithCustomClaims(func() auth0validator.CustomClaims {
+			return &serviceClaims{}
+		}),
+	)
+	require.NoError(t, err)
+	p := &Plugin{
+		jwtValidator:     jwtValidator,
+		serviceClientIDs: map[string]struct{}{"dashboard-service": {}},
+	}
+
+	_, err = p.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+		Token:          mintServiceToken(t, key, "dashboard-service@clients", "pat:issue"),
+		RequiredScopes: []string{"pat:issue"},
+	})
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error, got %v", err)
+	require.Equal(t, codes.Unavailable, st.Code())
+}
+
+func TestValidateServiceToken_ScopeMatching(t *testing.T) {
+	p, key := newServiceTestPlugin(t)
+
+	tests := []struct {
+		name           string
+		scope          string
+		requiredScopes []string
+		wantCode       codes.Code
+	}{
+		{
+			name:           "empty required scopes pass the scope check",
+			scope:          "",
+			requiredScopes: nil,
+			wantCode:       codes.OK,
+		},
+		{
+			name:           "irregular whitespace between scopes",
+			scope:          "  pat:issue \t services:read\n",
+			requiredScopes: []string{"pat:issue", "services:read"},
+			wantCode:       codes.OK,
+		},
+		{
+			name:           "one of multiple required scopes missing",
+			scope:          "pat:issue",
+			requiredScopes: []string{"pat:issue", "services:read"},
+			wantCode:       codes.PermissionDenied,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := p.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+				Token:          mintServiceToken(t, key, "dashboard-service@clients", tt.scope),
+				RequiredScopes: tt.requiredScopes,
+			})
+			if tt.wantCode != codes.OK {
+				st, ok := status.FromError(err)
+				require.True(t, ok, "expected gRPC status error, got %v", err)
+				require.Equal(t, tt.wantCode, st.Code())
+				return
+			}
+
+			require.NoError(t, err)
+			require.True(t, resp.Ok)
+			require.Equal(t, "dashboard-service", resp.ClientId)
+		})
+	}
+}
+
+func TestValidateServiceToken_RejectsEmptyClientIDAndWrongGrantType(t *testing.T) {
+	p, key := newServiceTestPlugin(t)
+
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{
+			// sub exactly "@clients" strips to an empty client id.
+			name:  "sub is exactly @clients",
+			token: mintServiceToken(t, key, "@clients", "pat:issue"),
+		},
+		{
+			name:  "wrong grant type",
+			token: mintServiceTokenWithGrantType(t, key, "password"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := p.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+				Token:          tt.token,
+				RequiredScopes: []string{"pat:issue"},
+			})
+			st, ok := status.FromError(err)
+			require.True(t, ok, "expected gRPC status error, got %v", err)
+			require.Equal(t, codes.PermissionDenied, st.Code())
+		})
+	}
+}
+
+// The allowlist parsed from a whitespace-padded env value authorizes every
+// listed client end to end.
+func TestValidateServiceToken_AllowlistBuiltFromWhitespaceConfig(t *testing.T) {
+	p, key := newServiceTestPlugin(t)
+	cfg := authConfig{ServiceClientIDs: " a , b "}
+	p.serviceClientIDs = cfg.serviceClientIDSet()
+
+	for _, clientID := range []string{"a", "b"} {
+		resp, err := p.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+			Token:          mintServiceToken(t, key, clientID+"@clients", "pat:issue"),
+			RequiredScopes: []string{"pat:issue"},
+		})
+		require.NoError(t, err)
+		require.True(t, resp.Ok)
+		require.Equal(t, clientID, resp.ClientId)
+	}
+}
+
+func TestServiceClientIDSetEmptyConfigAuthorizesNothing(t *testing.T) {
+	for _, raw := range []string{"", " , ,"} {
+		cfg := authConfig{ServiceClientIDs: raw}
+		require.Empty(t, cfg.serviceClientIDSet(), "raw config %q", raw)
+	}
+}
+
+func TestServiceClientIDSetTrimsAndDeduplicatesClientIDs(t *testing.T) {
+	cfg := authConfig{
+		ServiceClientIDs: " dashboard-service,another-service, dashboard-service , ",
+	}
+
+	clientIDs := cfg.serviceClientIDSet()
+
+	require.Len(t, clientIDs, 2)
+	_, hasDashboard := clientIDs["dashboard-service"]
+	_, hasAnother := clientIDs["another-service"]
+	require.True(t, hasDashboard)
+	require.True(t, hasAnother)
 }
 
 func TestValidateToken_PATHappyPath(t *testing.T) {
@@ -315,4 +692,23 @@ func TestValidateToken_IssuerOutageIsUnavailable(t *testing.T) {
 	st, ok := status.FromError(err)
 	require.True(t, ok, "issuer outage must carry a gRPC status, got: %v", err)
 	require.Equal(t, codes.Unavailable, st.Code(), "got: %v", st.Message())
+}
+
+// A credential allowlisted for gateway-internal capabilities targets the same
+// Auth0 audience as customer tokens, so ValidateToken must refuse it outright.
+func TestValidateTokenRejectsServiceCredentials(t *testing.T) {
+	plugin, key := newServiceTestPlugin(t)
+
+	_, err := plugin.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintServiceToken(t, key, "dashboard-service@clients", "pat:issue"),
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "service credential")
+
+	resp, err := plugin.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintServiceToken(t, key, "some-customer@clients", ""),
+	})
+	require.NoError(t, err)
+	require.True(t, resp.Ok)
+	require.Equal(t, "some-customer@clients", resp.ClientId)
 }

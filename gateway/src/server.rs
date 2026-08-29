@@ -15,6 +15,7 @@ use crate::filters::{
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
+use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
 use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
 use crate::trng::SRC_DERIVED_TRNG;
@@ -62,7 +63,6 @@ pub async fn start(
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
-    patissuer_shared_secret: Option<String>,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -158,22 +158,13 @@ pub async fn start(
     // service's keys.
     let mut internal_task = None;
     if let Some(client) = patissuer_client {
-        match patissuer_shared_secret.as_deref() {
-            Some(secret) if !secret.is_empty() => {
-                let internal = internal_routes(client, secret.to_string());
-                tracing::info!("Starting internal http server on: 0.0.0.0:{internal_port}");
-                let server = warp::serve(internal)
-                    .bind(([0, 0, 0, 0], internal_port))
-                    .await
-                    .graceful(shutdown_signal());
-                internal_task = Some(tokio::spawn(server.run()));
-            }
-            _ => {
-                tracing::warn!(
-                    "ORBITPORT_PATISSUER_PLUGIN is set but ORBITPORT_PATISSUER_SHARED_SECRET is unset or empty; refusing to mount POST /internal/pat/issue"
-                );
-            }
-        }
+        let internal = internal_routes(client, service_manager.get_auth_client());
+        tracing::info!("Starting internal http server on: 0.0.0.0:{internal_port}");
+        let server = warp::serve(internal)
+            .bind(([0, 0, 0, 0], internal_port))
+            .await
+            .graceful(shutdown_signal());
+        internal_task = Some(tokio::spawn(server.run()));
     }
 
     let routes = routes.recover(handle_rejection);
@@ -222,9 +213,9 @@ async fn shutdown_signal() {
 /// nowhere else, so no configuration can expose it on the public port.
 pub fn internal_routes(
     client: PatIssuerPluginClient<Channel>,
-    shared_secret: String,
+    auth_client: AuthPluginClient<Channel>,
 ) -> impl Filter<Extract = (impl Reply,), Error = Infallible> + Clone {
-    pat_issue_route(client, shared_secret).recover(handle_rejection)
+    pat_issue_route(client, auth_client).recover(handle_rejection)
 }
 
 /// Maps gateway-specific custom rejections to HTTP responses. Without this,
@@ -251,6 +242,10 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
             GatewayError::AuthenticationFailed => (
                 StatusCode::UNAUTHORIZED,
                 serde_json::json!({"error": "authentication_failed"}),
+            ),
+            GatewayError::ServiceAuthorizationDenied => (
+                StatusCode::FORBIDDEN,
+                serde_json::json!({"error": "service_authorization_denied"}),
             ),
             GatewayError::PatExpired => (
                 StatusCode::UNAUTHORIZED,

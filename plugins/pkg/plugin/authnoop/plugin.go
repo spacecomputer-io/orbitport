@@ -31,3 +31,17 @@ func (p *Plugin) ValidateToken(_ context.Context, req *proto.TokenValidationRequ
 		ClientId: "dev_" + hex.EncodeToString(sum[:8]),
 	}, nil
 }
+
+// ValidateServiceToken accepts every token in development, mirroring
+// ValidateToken. Production deployments must use the auth plugin.
+func (p *Plugin) ValidateServiceToken(
+	_ context.Context,
+	req *proto.ServiceTokenValidationRequest,
+) (*proto.ServiceTokenValidationResponse, error) {
+	utils.GetLogger("orbitport:authnoop").Warn("Processing service token with noop authentication")
+	sum := sha256.Sum256([]byte(req.Token))
+	return &proto.ServiceTokenValidationResponse{
+		Ok:       true,
+		ClientId: "dev_" + hex.EncodeToString(sum[:8]),
+	}, nil
+}
