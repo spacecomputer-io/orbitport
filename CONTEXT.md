@@ -61,6 +61,7 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | Env var | Default | Purpose |
 | --- | --- | --- |
 | `ORBITPORT_HTTP_PORT` | `8080` | HTTP server port |
+| `ORBITPORT_INTERNAL_PORT` | `8081` | Internal PAT issuance listener; never publish through a public load balancer or Ingress |
 | `ORBITPORT_METRICS_PORT` | `9100` | Prometheus metrics port |
 | `ORBITPORT_AUTH_PLUGIN` | — | gRPC URL of the auth plugin (required) |
 | `ORBITPORT_MASTERSEED_PLUGIN` | — | gRPC URL of the masterseed plugin (required) |
@@ -68,7 +69,6 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_KMS_PLUGIN` | — | gRPC URL of the KMS plugin |
 | `ORBITPORT_ACCOUNT_PLUGIN` | — | gRPC URL of the account plugin. When set, JWT-authenticated routes hold credits before serving, settle on success, and release on downstream failure. |
 | `ORBITPORT_PATISSUER_PLUGIN` | — | gRPC URL of the patissuer plugin. When set, mounts `POST /internal/pat/issue` on the internal listener. The key set is published by the jwks plugin |
-| `ORBITPORT_PATISSUER_SHARED_SECRET` | — | Bearer secret guarding `/internal/pat/issue` (constant-time compare). Route is not mounted when empty |
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
@@ -99,6 +99,12 @@ exactly as before:
 | `ORBITPORT_AUTH_PAT_ISS` | with PAT path | Expected `iss` of self-issued PATs; also the routing key (tokens with any other `iss` take the Auth0 path) |
 | `ORBITPORT_AUTH_PAT_AUDIENCE` | no | Expected `aud` for PATs (defaults to `ORBITPORT_AUTH0_AUDIENCE`) |
 | `ORBITPORT_AUTH_PATISSUER_PLUGIN` | with PAT path | gRPC address of the patissuer plugin — source of the JWKS (5-min cache, refetch on unknown kid) |
+
+Optional service-token authorization for the internal PAT issuance listener:
+
+| Env var | Required | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_AUTH_SERVICE_CLIENT_IDS` | yes when PAT issuance is enabled | Comma-separated allowlist of Auth0 M2M client IDs allowed to mint PATs. The token must target `ORBITPORT_AUTH0_AUDIENCE`, carry `gty=client-credentials`, include `pat:issue`, and have an expiry. Empty authorizes no clients. |
 
 `authnoop` takes no configuration.
 

@@ -2,10 +2,7 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use gateway::{
-    logging, plugins, server, service_manager,
-    types::{GatewayError, Secret},
-};
+use gateway::{logging, plugins, server, service_manager, types::GatewayError};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -35,12 +32,9 @@ struct Args {
     #[clap(long, env = "ORBITPORT_ACCOUNT_PLUGIN")]
     account_plugin: Option<String>,
     /// Optional patissuer plugin gRPC URL. When set, the gateway serves the
-    /// public JWKS route and the internal PAT issuance route.
+    /// M2M-authorized internal PAT issuance route.
     #[clap(long, env = "ORBITPORT_PATISSUER_PLUGIN")]
     patissuer_plugin: Option<String>,
-    /// Shared secret guarding POST /internal/pat/issue.
-    #[clap(long, env = "ORBITPORT_PATISSUER_SHARED_SECRET")]
-    patissuer_shared_secret: Option<Secret>,
     /// Rate limit per access token, 4 requests per second
     /// (40 requests per 10 seconds window)
     #[clap(long, env = "ORBITPORT_RATE_LIMIT", default_value = "40")]
@@ -171,7 +165,6 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
-        args.patissuer_shared_secret.clone().map(|s| s.0),
     )
     .await;
 
@@ -185,17 +178,7 @@ async fn main() -> Result<(), GatewayError> {
 
 #[cfg(test)]
 mod test {
-    use super::{Secret, validate_pat_revocation_gating};
-
-    /// `Args` is logged with `{:?}` at startup, so a leaky `Debug` here puts the
-    /// PAT-minting secret in every log aggregator.
-    #[test]
-    fn secret_debug_is_redacted() {
-        let s = Secret::from("super-secret-value");
-        assert_eq!(format!("{s:?}"), "[redacted]");
-        assert!(!format!("{s:?}").contains("super-secret-value"));
-        assert!(!format!("{:?}", Some(s)).contains("super-secret-value"));
-    }
+    use super::validate_pat_revocation_gating;
 
     #[test]
     fn patissuer_without_account_fails_closed() {

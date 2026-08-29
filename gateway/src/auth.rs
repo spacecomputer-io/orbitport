@@ -7,6 +7,10 @@ use warp::{Filter, Rejection, http::StatusCode, reply::Response};
 use crate::proto::plugins::patissuer::{
     IssueTokenRequest, pat_issuer_plugin_client::PatIssuerPluginClient,
 };
+use crate::{
+    filters::{ServiceAuthContext, with_service_auth},
+    proto::plugins::auth::auth_plugin_client::AuthPluginClient,
+};
 use tonic::transport::Channel;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -19,40 +23,30 @@ struct PatIssueBody {
     expires_at: i64,
 }
 
-/// INTERNAL `POST /internal/pat/issue` — deliberately NOT wrapped in
-/// `with_auth`: the caller is the dashboard backend, not an end user.
-/// Guarded by a constant-time shared-secret bearer check.
+/// INTERNAL `POST /internal/pat/issue`, guarded by an Auth0 M2M capability
+/// token. It intentionally does not use the public user/PAT auth filter.
 pub fn pat_issue_route(
     client: PatIssuerPluginClient<Channel>,
-    shared_secret: String,
+    auth_client: AuthPluginClient<Channel>,
 ) -> impl Filter<Extract = (Response,), Error = Rejection> + Clone {
     warp::post()
         .and(warp::path!("internal" / "pat" / "issue"))
-        .and(warp::header::optional::<String>("authorization"))
+        .and(with_service_auth(auth_client, &["pat:issue"]))
         .and(warp::body::content_length_limit(4096))
         .and(warp::body::json())
         .and(warp::any().map(move || client.clone()))
-        .and(warp::any().map(move || shared_secret.clone()))
         .and_then(handle_pat_issue)
 }
 
 async fn handle_pat_issue(
-    auth_header: Option<String>,
+    service_auth: ServiceAuthContext,
     body: PatIssueBody,
     mut client: PatIssuerPluginClient<Channel>,
-    shared_secret: String,
 ) -> Result<Response, Rejection> {
-    let expected = format!("Bearer {shared_secret}");
-    let authorized = auth_header
-        .as_deref()
-        .is_some_and(|header| constant_time_eq(header, &expected));
-    if !authorized {
-        tracing::warn!("Rejected /internal/pat/issue: bad or missing shared secret");
-        return Ok(json_status(
-            &serde_json::json!({"error": "unauthorized"}),
-            StatusCode::UNAUTHORIZED,
-        ));
-    }
+    tracing::info!(
+        service_client_id = %service_auth.client_id,
+        "Authorized PAT issuance request"
+    );
 
     let request = tonic::Request::new(IssueTokenRequest {
         jti: body.jti,
@@ -81,16 +75,4 @@ async fn handle_pat_issue(
 
 fn json_status(body: &serde_json::Value, status: StatusCode) -> Response {
     warp::reply::Reply::into_response(warp::reply::with_status(warp::reply::json(body), status))
-}
-
-/// Constant-time string equality via SHA-256 digests: hashing first makes
-/// the comparison length-independent.
-fn constant_time_eq(a: &str, b: &str) -> bool {
-    use sha2::{Digest, Sha256};
-    let a = Sha256::digest(a.as_bytes());
-    let b = Sha256::digest(b.as_bytes());
-    a.iter()
-        .zip(b.iter())
-        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
-        == 0
 }

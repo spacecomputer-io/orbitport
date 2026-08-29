@@ -19,17 +19,21 @@ type authConfig struct {
 	PatAudience string
 	// PatIssuerPlugin is the gRPC URL of the patissuer plugin.
 	PatIssuerPlugin string
+	// ServiceClientIDs is the comma-separated Auth0 M2M client allowlist for
+	// gateway-internal capability routes. Empty authorizes no service clients.
+	ServiceClientIDs string
 }
 
 func readFromEnv() *authConfig {
 	setDefaults()
 
 	return &authConfig{
-		Auth0Domain:     viper.GetString("AUTH0_DOMAIN"),
-		Auth0Audience:   viper.GetString("AUTH0_AUDIENCE"),
-		PatIss:          strings.TrimSpace(viper.GetString("AUTH_PAT_ISS")),
-		PatAudience:     strings.TrimSpace(viper.GetString("AUTH_PAT_AUDIENCE")),
-		PatIssuerPlugin: strings.TrimSpace(viper.GetString("AUTH_PATISSUER_PLUGIN")),
+		Auth0Domain:      viper.GetString("AUTH0_DOMAIN"),
+		Auth0Audience:    viper.GetString("AUTH0_AUDIENCE"),
+		PatIss:           strings.TrimSpace(viper.GetString("AUTH_PAT_ISS")),
+		PatAudience:      strings.TrimSpace(viper.GetString("AUTH_PAT_AUDIENCE")),
+		PatIssuerPlugin:  strings.TrimSpace(viper.GetString("AUTH_PATISSUER_PLUGIN")),
+		ServiceClientIDs: strings.TrimSpace(viper.GetString("AUTH_SERVICE_CLIENT_IDS")),
 	}
 }
 
@@ -39,6 +43,7 @@ func setDefaults() {
 	viper.SetDefault("AUTH_PAT_ISS", "")
 	viper.SetDefault("AUTH_PAT_AUDIENCE", "")
 	viper.SetDefault("AUTH_PATISSUER_PLUGIN", "")
+	viper.SetDefault("AUTH_SERVICE_CLIENT_IDS", "")
 }
 
 // patEnabled reports whether any PAT env var is set at all.
@@ -62,4 +67,14 @@ func (c *authConfig) validatePat() error {
 		return fmt.Errorf("FATAL: PAT validation partially configured, missing: %s", strings.Join(missing, ", "))
 	}
 	return nil
+}
+
+func (c *authConfig) serviceClientIDSet() map[string]struct{} {
+	clientIDs := make(map[string]struct{})
+	for _, clientID := range strings.Split(c.ServiceClientIDs, ",") {
+		if clientID = strings.TrimSpace(clientID); clientID != "" {
+			clientIDs[clientID] = struct{}{}
+		}
+	}
+	return clientIDs
 }
