@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 )
 
 const (
 	defaultRetryAttempts = 3
 	defaultRetryBackoff  = 100 * time.Millisecond
+	nodeCheckTimeout     = 2 * time.Second
 )
 
 type Coordinator struct {
@@ -112,6 +114,147 @@ func (c *Coordinator) CoordinateDKG(ctx context.Context, req DKGRequest) (*DKGRe
 	}, nil
 }
 
+func (c *Coordinator) CoordinateSign(ctx context.Context, req SignRequest) (*SignResult, error) {
+	if len(req.Participants) < req.Threshold || req.Threshold < 2 {
+		return nil, fmt.Errorf("signing participants must satisfy threshold %d", req.Threshold)
+	}
+
+	participants, err := c.selectSignParticipants(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	req.Participants = participants
+
+	bootstrap, err := c.newSignBootstrap(req)
+	if err != nil {
+		return nil, err
+	}
+
+	round1, err := c.startSign(ctx, req, bootstrap)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.deliverSignRound(ctx, req.KeyName, req.Participants, round1, 1); err != nil {
+		return nil, err
+	}
+
+	for round := 2; round <= 4; round++ {
+		outputs, err := c.proceedSignRound(ctx, req.KeyName, req.Participants, round)
+		if err != nil {
+			return nil, err
+		}
+		if err := c.deliverSignRound(ctx, req.KeyName, req.Participants, outputs, round); err != nil {
+			return nil, err
+		}
+	}
+
+	completed, err := c.proceedSignRound(ctx, req.KeyName, req.Participants, 5)
+	if err != nil {
+		return nil, err
+	}
+	partialSignatures := make(map[string]string, len(completed))
+	for nodeID, node := range completed {
+		if node.Status != signStatusCompleted {
+			return nil, fmt.Errorf("node %q completed round 5 with status %q", nodeID, node.Status)
+		}
+		if node.PartialSignature == "" {
+			return nil, fmt.Errorf("node %q completed signing without a partial signature", nodeID)
+		}
+		partialSignatures[nodeID] = node.PartialSignature
+	}
+
+	aggregator := req.Participants[0]
+	aggregated, err := callWithRetry(ctx, c, fmt.Sprintf("aggregate signing on %q", aggregator.NodeID), func() (*SignStatus, error) {
+		return aggregator.Client.AggregateSign(ctx, req.KeyName, req.Message, partialSignatures)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("aggregate signing on %q: %w", aggregator.NodeID, err)
+	}
+	if aggregated == nil {
+		return nil, fmt.Errorf("node %q returned an empty aggregate signing status", aggregator.NodeID)
+	}
+	if aggregated.Status != signStatusCompleted {
+		return nil, fmt.Errorf("node %q aggregated signing with status %q", aggregator.NodeID, aggregated.Status)
+	}
+	if aggregated.Signature == "" {
+		return nil, fmt.Errorf("node %q returned an empty aggregate signature", aggregator.NodeID)
+	}
+
+	return &SignResult{
+		KeyName:   req.KeyName,
+		GroupName: req.GroupName,
+		SessionID: req.SessionID,
+		Signature: aggregated.Signature,
+		Nodes:     completed,
+	}, nil
+}
+
+// Choose available nodes once, before signing starts.
+// Return an error if a selected node fails during signing.
+func (c *Coordinator) selectSignParticipants(ctx context.Context, req SignRequest) ([]DKGParticipant, error) {
+	checkCtx, cancel := context.WithTimeout(ctx, nodeCheckTimeout)
+	defer cancel()
+
+	type nodeResult struct {
+		participant DKGParticipant
+		status      *DKGStatus
+		err         error
+	}
+	results := make(chan nodeResult, len(req.Participants))
+
+	// Check all nodes at once, with the same timeout.
+	for _, participant := range req.Participants {
+		go func() {
+			operation := fmt.Sprintf("read signing key on %q", participant.NodeID)
+			status, err := callWithRetry(checkCtx, c, operation, func() (*DKGStatus, error) {
+				return participant.Client.ReadDKGStatus(checkCtx, req.KeyName)
+			})
+			results <- nodeResult{participant: participant, status: status, err: err}
+		}()
+	}
+
+	availableParticipants := make([]DKGParticipant, 0, len(req.Participants))
+	var groupPublicKey string
+	for range req.Participants {
+		var result nodeResult
+		select {
+		case result = <-results:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		if result.err != nil || result.status == nil {
+			continue
+		}
+
+		status := result.status
+		if status.Status != keyStatusCompleted || status.PublicKey == "" {
+			continue
+		}
+		if status.Name != req.KeyName || status.Group != req.GroupName {
+			continue
+		}
+		if status.NodeID != result.participant.NodeID {
+			continue
+		}
+		if groupPublicKey != "" && status.PublicKey != groupPublicKey {
+			return nil, fmt.Errorf("node %q has a different group public key than its peers", result.participant.NodeID)
+		}
+		groupPublicKey = status.PublicKey
+		availableParticipants = append(availableParticipants, result.participant)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(availableParticipants) < req.Threshold {
+		return nil, fmt.Errorf("only %d signing participants have an available completed key in group %q; threshold is %d", len(availableParticipants), req.GroupName, req.Threshold)
+	}
+	// Sort available nodes by party_index before choosing who signs.
+	sort.Slice(availableParticipants, func(i, j int) bool {
+		return availableParticipants[i].PartyIndex < availableParticipants[j].PartyIndex
+	})
+	return availableParticipants[:req.Threshold], nil
+}
+
 type dkgBootstrap struct {
 	commonSeed          string
 	pairwiseSeedsByNode map[string]map[string]string
@@ -142,6 +285,31 @@ func (c *Coordinator) newDKGBootstrap(req DKGRequest) (*dkgBootstrap, error) {
 	}, nil
 }
 
+func (c *Coordinator) newSignBootstrap(req SignRequest) (*dkgBootstrap, error) {
+	if len(c.sessionSecret) == 0 {
+		return nil, fmt.Errorf("threshold session secret is required")
+	}
+
+	commonSeed := c.deriveSeed(req.SessionID, req.KeyName, "signing:common")
+	pairwiseSeedsByNode := make(map[string]map[string]string, len(req.Participants))
+	for _, participant := range req.Participants {
+		pairwiseSeedsByNode[participant.NodeID] = make(map[string]string, len(req.Participants)-1)
+	}
+
+	for i, left := range req.Participants {
+		for _, right := range req.Participants[i+1:] {
+			seed := c.deriveSeed(req.SessionID, req.KeyName, "signing:pairwise:"+left.NodeID+":"+right.NodeID)
+			pairwiseSeedsByNode[left.NodeID][right.NodeID] = seed
+			pairwiseSeedsByNode[right.NodeID][left.NodeID] = seed
+		}
+	}
+
+	return &dkgBootstrap{
+		commonSeed:          commonSeed,
+		pairwiseSeedsByNode: pairwiseSeedsByNode,
+	}, nil
+}
+
 func (c *Coordinator) deriveSeed(sessionID, keyName, label string) string {
 	mac := hmac.New(sha512.New, c.sessionSecret)
 	_, _ = mac.Write([]byte("orbitport-threshold-bootstrap"))
@@ -158,7 +326,7 @@ func (c *Coordinator) deriveSeed(sessionID, keyName, label string) string {
 func (c *Coordinator) startDKG(ctx context.Context, req DKGRequest, participants []DKGParticipant, bootstrap *dkgBootstrap) (map[string]DKGStatus, error) {
 	outputs := make(map[string]DKGStatus, len(participants))
 	for _, participant := range participants {
-		status, err := c.callWithRetry(ctx, fmt.Sprintf("start dkg on %q", participant.NodeID), func() (*DKGStatus, error) {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("start dkg on %q", participant.NodeID), func() (*DKGStatus, error) {
 			return participant.Client.StartDKG(ctx, StartDKGRequest{
 				KeyName:       req.KeyName,
 				GroupName:     req.GroupName,
@@ -181,7 +349,7 @@ func (c *Coordinator) startDKG(ctx context.Context, req DKGRequest, participants
 func (c *Coordinator) proceedRound(ctx context.Context, keyName string, participants []DKGParticipant, round int) (map[string]DKGStatus, error) {
 	outputs := make(map[string]DKGStatus, len(participants))
 	for _, participant := range participants {
-		status, err := c.callWithRetry(ctx, fmt.Sprintf("proceed dkg round %d on %q", round, participant.NodeID), func() (*DKGStatus, error) {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("proceed dkg round %d on %q", round, participant.NodeID), func() (*DKGStatus, error) {
 			return participant.Client.ProceedDKG(ctx, keyName, round)
 		})
 		if err != nil {
@@ -216,7 +384,7 @@ func (c *Coordinator) deliverRound(ctx context.Context, keyName string, particip
 				}
 			}
 
-			if _, err := c.callWithRetry(ctx, fmt.Sprintf("deliver round %d from %q to %q", round, sender.NodeID, receiver.NodeID), func() (*DKGStatus, error) {
+			if _, err := callWithRetry(ctx, c, fmt.Sprintf("deliver round %d from %q to %q", round, sender.NodeID, receiver.NodeID), func() (*DKGStatus, error) {
 				return receiver.Client.DeliverDKG(ctx, keyName, DeliverDKGRequest{
 					Round:     round,
 					From:      sender.NodeID,
@@ -231,13 +399,94 @@ func (c *Coordinator) deliverRound(ctx context.Context, keyName string, particip
 	return nil
 }
 
-func (c *Coordinator) callWithRetry(ctx context.Context, operation string, call func() (*DKGStatus, error)) (*DKGStatus, error) {
+func (c *Coordinator) startSign(ctx context.Context, req SignRequest, bootstrap *dkgBootstrap) (map[string]SignStatus, error) {
+	participantNodeIDs := make([]string, 0, len(req.Participants))
+	for _, participant := range req.Participants {
+		participantNodeIDs = append(participantNodeIDs, participant.NodeID)
+	}
+
+	outputs := make(map[string]SignStatus, len(req.Participants))
+	for _, participant := range req.Participants {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("start signing on %q", participant.NodeID), func() (*SignStatus, error) {
+			return participant.Client.StartSign(ctx, StartSignRequest{
+				KeyName:       req.KeyName,
+				GroupName:     req.GroupName,
+				SessionID:     req.SessionID,
+				Message:       req.Message,
+				Participants:  participantNodeIDs,
+				CommonSeed:    bootstrap.commonSeed,
+				PairwiseSeeds: bootstrap.pairwiseSeedsByNode[participant.NodeID],
+			})
+		})
+		if err != nil {
+			return nil, fmt.Errorf("start signing on %q: %w", participant.NodeID, err)
+		}
+		if err := requireSignRoundOutput(participant.NodeID, status, 1); err != nil {
+			return nil, err
+		}
+		outputs[participant.NodeID] = *status
+	}
+	return outputs, nil
+}
+
+func (c *Coordinator) proceedSignRound(ctx context.Context, keyName string, participants []DKGParticipant, round int) (map[string]SignStatus, error) {
+	outputs := make(map[string]SignStatus, len(participants))
+	for _, participant := range participants {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("proceed signing round %d on %q", round, participant.NodeID), func() (*SignStatus, error) {
+			return participant.Client.ProceedSign(ctx, keyName, round)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("proceed signing round %d on %q: %w", round, participant.NodeID, err)
+		}
+		if err := requireSignRoundOutput(participant.NodeID, status, round); err != nil {
+			return nil, err
+		}
+		outputs[participant.NodeID] = *status
+	}
+	return outputs, nil
+}
+
+func (c *Coordinator) deliverSignRound(ctx context.Context, keyName string, participants []DKGParticipant, outputs map[string]SignStatus, round int) error {
+	for _, receiver := range participants {
+		for _, sender := range participants {
+			if sender.NodeID == receiver.NodeID {
+				continue
+			}
+
+			output, ok := outputs[sender.NodeID]
+			if !ok {
+				return fmt.Errorf("missing signing round %d output for %q", round, sender.NodeID)
+			}
+			unicast := output.Unicasts[receiver.NodeID]
+			if unicast == "" {
+				return fmt.Errorf("missing signing round %d unicast from %q to %q", round, sender.NodeID, receiver.NodeID)
+			}
+
+			if _, err := callWithRetry(ctx, c, fmt.Sprintf("deliver signing round %d from %q to %q", round, sender.NodeID, receiver.NodeID), func() (*SignStatus, error) {
+				return receiver.Client.DeliverSign(ctx, keyName, DeliverSignRequest{
+					Round:     round,
+					From:      sender.NodeID,
+					Broadcast: output.Broadcast,
+					Unicast:   unicast,
+				})
+			}); err != nil {
+				return fmt.Errorf("deliver signing round %d from %q to %q: %w", round, sender.NodeID, receiver.NodeID, err)
+			}
+		}
+	}
+	return nil
+}
+
+func callWithRetry[T any](ctx context.Context, c *Coordinator, operation string, call func() (*T, error)) (*T, error) {
 	attempts := c.retryAttempts
 	if attempts < 1 {
 		attempts = 1
 	}
 
 	for attempt := 1; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("retry canceled: %w", err)
+		}
 		status, err := call()
 		if err == nil {
 			return status, nil
@@ -290,6 +539,28 @@ func requireRoundOutput(nodeID string, status *DKGStatus, round int) error {
 	}
 	if round == 2 && len(status.Unicasts) == 0 {
 		return fmt.Errorf("node %q returned no round 2 unicasts", nodeID)
+	}
+	return nil
+}
+
+func requireSignRoundOutput(nodeID string, status *SignStatus, round int) error {
+	if status == nil {
+		return fmt.Errorf("node %q returned nil signing round %d status", nodeID, round)
+	}
+	if status.Round != round {
+		return fmt.Errorf("node %q returned signing round %d, expected %d", nodeID, status.Round, round)
+	}
+	if round == 5 {
+		if status.PartialSignature == "" {
+			return fmt.Errorf("node %q returned an empty partial signature", nodeID)
+		}
+		return nil
+	}
+	if len(status.Unicasts) == 0 {
+		return fmt.Errorf("node %q returned no signing round %d unicasts", nodeID, round)
+	}
+	if round >= 3 && status.Broadcast == "" {
+		return fmt.Errorf("node %q returned empty signing round %d broadcast", nodeID, round)
 	}
 	return nil
 }

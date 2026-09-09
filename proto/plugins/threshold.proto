@@ -8,6 +8,7 @@ package thresholdapi;
 
 service ThresholdPlugin {
   rpc CoordinateDkg(DkgRequest) returns (DkgResponse);
+  rpc CoordinateSign(ThresholdSignRequest) returns (ThresholdSignResponse);
 }
 
 message GroupMember {
@@ -39,4 +40,29 @@ message DkgResponse {
   string session_id = 3;
   repeated DkgNodeStatus nodes = 4;
   string public_key = 5;
+}
+
+message SignNodeStatus {
+  string node_id = 1;
+  string status = 2;
+  int32 round = 3;
+  repeated string pending_from = 4;
+}
+
+message ThresholdSignRequest {
+  string key_name = 1;
+  string group_name = 2;
+  string session_id = 3;
+  string message = 4;
+  int32 threshold = 5;
+  repeated GroupMember participants = 6;
+  string client_id = 7;
+}
+
+message ThresholdSignResponse {
+  string key_name = 1;
+  string group_name = 2;
+  string session_id = 3;
+  repeated SignNodeStatus nodes = 4;
+  string signature = 5;
 }

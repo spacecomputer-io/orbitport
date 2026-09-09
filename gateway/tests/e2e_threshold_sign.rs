@@ -4,28 +4,38 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod common;
 
 #[tokio::test]
-async fn test_e2e_threshold_coordinate_dkg_two_of_three() {
+async fn test_e2e_threshold_sign_two_of_three() {
     _ = tracing_subscriber::fmt::try_init();
 
     let access_token = env::var("OPTEST_TOKEN").unwrap_or("test_access_token".to_string());
     let base_url = env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string());
 
-    tracing::info!("Starting e2e threshold DKG test with base_url: {base_url}");
+    tracing::info!("Starting e2e threshold signing test with base_url: {base_url}");
 
     #[cfg(feature = "localtest")]
     let started = common::pre_test("happy").await.unwrap();
 
     let result = async {
         let req_id = unique_req_id();
-        let resp =
-            common::rpc_threshold_coordinate_dkg(&base_url, &access_token, req_id, "e2e-group")
+        let group_name = "e2e-signing-group";
+        let dkg =
+            common::rpc_threshold_coordinate_dkg(&base_url, &access_token, req_id, group_name)
                 .await?;
-        let alias = format!("e2e-key-{req_id}");
+        let message = "aGVsbG8gdGhyZXNob2xkIHNpZ25pbmc=";
+        let signing = common::rpc_threshold_sign(
+            &base_url,
+            &access_token,
+            req_id + 1,
+            &dkg.key_id,
+            group_name,
+            message,
+        )
+        .await?;
 
-        assert_eq!(resp.key_id, format!("threshold:{alias}"));
-        assert_eq!(resp.alias, alias);
-        assert_eq!(resp.group_name, "e2e-group");
-        assert_eq!(resp.status, "dkg_completed");
+        assert_eq!(signing.key_id, dkg.key_id);
+        assert_eq!(signing.group_name, group_name);
+        assert_eq!(signing.status, "sign_completed");
+        assert!(!signing.signature.is_empty());
 
         Ok::<(), common::E2EError>(())
     }
@@ -40,7 +50,7 @@ async fn test_e2e_threshold_coordinate_dkg_two_of_three() {
         panic!("Test failed: {:?}", e);
     }
 
-    tracing::info!("Threshold DKG e2e test completed successfully");
+    tracing::info!("Threshold signing e2e test completed successfully");
 }
 
 fn unique_req_id() -> u64 {
