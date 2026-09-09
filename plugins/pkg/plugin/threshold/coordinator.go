@@ -8,12 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 )
 
 const (
 	defaultRetryAttempts = 3
 	defaultRetryBackoff  = 100 * time.Millisecond
+	nodeCheckTimeout     = 2 * time.Second
 )
 
 type Coordinator struct {
@@ -117,6 +119,12 @@ func (c *Coordinator) CoordinateSign(ctx context.Context, req SignRequest) (*Sig
 		return nil, fmt.Errorf("signing participants must satisfy threshold %d", req.Threshold)
 	}
 
+	participants, err := c.selectSignParticipants(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	req.Participants = participants
+
 	bootstrap, err := c.newSignBootstrap(req)
 	if err != nil {
 		return nil, err
@@ -156,7 +164,7 @@ func (c *Coordinator) CoordinateSign(ctx context.Context, req SignRequest) (*Sig
 	}
 
 	aggregator := req.Participants[0]
-	aggregated, err := c.callSignWithRetry(ctx, fmt.Sprintf("aggregate signing on %q", aggregator.NodeID), func() (*SignStatus, error) {
+	aggregated, err := callWithRetry(ctx, c, fmt.Sprintf("aggregate signing on %q", aggregator.NodeID), func() (*SignStatus, error) {
 		return aggregator.Client.AggregateSign(ctx, req.KeyName, req.Message, partialSignatures)
 	})
 	if err != nil {
@@ -179,6 +187,72 @@ func (c *Coordinator) CoordinateSign(ctx context.Context, req SignRequest) (*Sig
 		Signature: aggregated.Signature,
 		Nodes:     completed,
 	}, nil
+}
+
+// Choose available nodes once, before signing starts.
+// Return an error if a selected node fails during signing.
+func (c *Coordinator) selectSignParticipants(ctx context.Context, req SignRequest) ([]DKGParticipant, error) {
+	checkCtx, cancel := context.WithTimeout(ctx, nodeCheckTimeout)
+	defer cancel()
+
+	type nodeResult struct {
+		participant DKGParticipant
+		status      *DKGStatus
+		err         error
+	}
+	results := make(chan nodeResult, len(req.Participants))
+
+	// Check all nodes at once, with the same timeout.
+	for _, participant := range req.Participants {
+		go func() {
+			operation := fmt.Sprintf("read signing key on %q", participant.NodeID)
+			status, err := callWithRetry(checkCtx, c, operation, func() (*DKGStatus, error) {
+				return participant.Client.ReadDKGStatus(checkCtx, req.KeyName)
+			})
+			results <- nodeResult{participant: participant, status: status, err: err}
+		}()
+	}
+
+	availableParticipants := make([]DKGParticipant, 0, len(req.Participants))
+	var groupPublicKey string
+	for range req.Participants {
+		var result nodeResult
+		select {
+		case result = <-results:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		if result.err != nil || result.status == nil {
+			continue
+		}
+
+		status := result.status
+		if status.Status != keyStatusCompleted || status.PublicKey == "" {
+			continue
+		}
+		if status.Name != req.KeyName || status.Group != req.GroupName {
+			continue
+		}
+		if status.NodeID != result.participant.NodeID {
+			continue
+		}
+		if groupPublicKey != "" && status.PublicKey != groupPublicKey {
+			return nil, fmt.Errorf("node %q has a different group public key than its peers", result.participant.NodeID)
+		}
+		groupPublicKey = status.PublicKey
+		availableParticipants = append(availableParticipants, result.participant)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(availableParticipants) < req.Threshold {
+		return nil, fmt.Errorf("only %d signing participants have an available completed key in group %q; threshold is %d", len(availableParticipants), req.GroupName, req.Threshold)
+	}
+	// Sort available nodes by party_index before choosing who signs.
+	sort.Slice(availableParticipants, func(i, j int) bool {
+		return availableParticipants[i].PartyIndex < availableParticipants[j].PartyIndex
+	})
+	return availableParticipants[:req.Threshold], nil
 }
 
 type dkgBootstrap struct {
@@ -252,7 +326,7 @@ func (c *Coordinator) deriveSeed(sessionID, keyName, label string) string {
 func (c *Coordinator) startDKG(ctx context.Context, req DKGRequest, participants []DKGParticipant, bootstrap *dkgBootstrap) (map[string]DKGStatus, error) {
 	outputs := make(map[string]DKGStatus, len(participants))
 	for _, participant := range participants {
-		status, err := c.callDKGWithRetry(ctx, fmt.Sprintf("start dkg on %q", participant.NodeID), func() (*DKGStatus, error) {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("start dkg on %q", participant.NodeID), func() (*DKGStatus, error) {
 			return participant.Client.StartDKG(ctx, StartDKGRequest{
 				KeyName:       req.KeyName,
 				GroupName:     req.GroupName,
@@ -275,7 +349,7 @@ func (c *Coordinator) startDKG(ctx context.Context, req DKGRequest, participants
 func (c *Coordinator) proceedRound(ctx context.Context, keyName string, participants []DKGParticipant, round int) (map[string]DKGStatus, error) {
 	outputs := make(map[string]DKGStatus, len(participants))
 	for _, participant := range participants {
-		status, err := c.callDKGWithRetry(ctx, fmt.Sprintf("proceed dkg round %d on %q", round, participant.NodeID), func() (*DKGStatus, error) {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("proceed dkg round %d on %q", round, participant.NodeID), func() (*DKGStatus, error) {
 			return participant.Client.ProceedDKG(ctx, keyName, round)
 		})
 		if err != nil {
@@ -310,7 +384,7 @@ func (c *Coordinator) deliverRound(ctx context.Context, keyName string, particip
 				}
 			}
 
-			if _, err := c.callDKGWithRetry(ctx, fmt.Sprintf("deliver round %d from %q to %q", round, sender.NodeID, receiver.NodeID), func() (*DKGStatus, error) {
+			if _, err := callWithRetry(ctx, c, fmt.Sprintf("deliver round %d from %q to %q", round, sender.NodeID, receiver.NodeID), func() (*DKGStatus, error) {
 				return receiver.Client.DeliverDKG(ctx, keyName, DeliverDKGRequest{
 					Round:     round,
 					From:      sender.NodeID,
@@ -333,7 +407,7 @@ func (c *Coordinator) startSign(ctx context.Context, req SignRequest, bootstrap 
 
 	outputs := make(map[string]SignStatus, len(req.Participants))
 	for _, participant := range req.Participants {
-		status, err := c.callSignWithRetry(ctx, fmt.Sprintf("start signing on %q", participant.NodeID), func() (*SignStatus, error) {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("start signing on %q", participant.NodeID), func() (*SignStatus, error) {
 			return participant.Client.StartSign(ctx, StartSignRequest{
 				KeyName:       req.KeyName,
 				GroupName:     req.GroupName,
@@ -358,7 +432,7 @@ func (c *Coordinator) startSign(ctx context.Context, req SignRequest, bootstrap 
 func (c *Coordinator) proceedSignRound(ctx context.Context, keyName string, participants []DKGParticipant, round int) (map[string]SignStatus, error) {
 	outputs := make(map[string]SignStatus, len(participants))
 	for _, participant := range participants {
-		status, err := c.callSignWithRetry(ctx, fmt.Sprintf("proceed signing round %d on %q", round, participant.NodeID), func() (*SignStatus, error) {
+		status, err := callWithRetry(ctx, c, fmt.Sprintf("proceed signing round %d on %q", round, participant.NodeID), func() (*SignStatus, error) {
 			return participant.Client.ProceedSign(ctx, keyName, round)
 		})
 		if err != nil {
@@ -388,7 +462,7 @@ func (c *Coordinator) deliverSignRound(ctx context.Context, keyName string, part
 				return fmt.Errorf("missing signing round %d unicast from %q to %q", round, sender.NodeID, receiver.NodeID)
 			}
 
-			if _, err := c.callSignWithRetry(ctx, fmt.Sprintf("deliver signing round %d from %q to %q", round, sender.NodeID, receiver.NodeID), func() (*SignStatus, error) {
+			if _, err := callWithRetry(ctx, c, fmt.Sprintf("deliver signing round %d from %q to %q", round, sender.NodeID, receiver.NodeID), func() (*SignStatus, error) {
 				return receiver.Client.DeliverSign(ctx, keyName, DeliverSignRequest{
 					Round:     round,
 					From:      sender.NodeID,
@@ -403,42 +477,16 @@ func (c *Coordinator) deliverSignRound(ctx context.Context, keyName string, part
 	return nil
 }
 
-func (c *Coordinator) callDKGWithRetry(ctx context.Context, operation string, call func() (*DKGStatus, error)) (*DKGStatus, error) {
+func callWithRetry[T any](ctx context.Context, c *Coordinator, operation string, call func() (*T, error)) (*T, error) {
 	attempts := c.retryAttempts
 	if attempts < 1 {
 		attempts = 1
 	}
 
 	for attempt := 1; ; attempt++ {
-		status, err := call()
-		if err == nil {
-			return status, nil
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("retry canceled: %w", err)
 		}
-		if attempt >= attempts || !isRetryableOpenBaoError(err) {
-			return nil, err
-		}
-
-		delay := c.retryBackoff * time.Duration(attempt)
-		logger.Warnf("%s failed on attempt %d/%d: %v; retrying in %s", operation, attempt, attempts, err, delay)
-		if delay > 0 {
-			timer := time.NewTimer(delay)
-			select {
-			case <-timer.C:
-			case <-ctx.Done():
-				timer.Stop()
-				return nil, fmt.Errorf("retry canceled: %w", ctx.Err())
-			}
-		}
-	}
-}
-
-func (c *Coordinator) callSignWithRetry(ctx context.Context, operation string, call func() (*SignStatus, error)) (*SignStatus, error) {
-	attempts := c.retryAttempts
-	if attempts < 1 {
-		attempts = 1
-	}
-
-	for attempt := 1; ; attempt++ {
 		status, err := call()
 		if err == nil {
 			return status, nil

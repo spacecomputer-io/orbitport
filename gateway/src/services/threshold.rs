@@ -281,7 +281,7 @@ impl ThresholdService {
 
         let mut participants = group.participants;
         participants.sort_by_key(|node| node.party_index);
-        participants.truncate(group.threshold as usize);
+        // The coordinator selects a reachable quorum before starting the signing rounds.
 
         let response: PluginSignResponse = self
             .client

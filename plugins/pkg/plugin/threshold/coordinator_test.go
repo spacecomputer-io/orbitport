@@ -210,6 +210,7 @@ type fakeThresholdNode struct {
 	peers   []string
 	client  *OpenBaoClient
 	server  *httptest.Server
+	sign    *fakeSignClient
 
 	mu                sync.Mutex
 	nodeConfigWritten bool
@@ -229,6 +230,7 @@ func newFakeThresholdNode(t *testing.T, nodeID string, allNodeIDs []string) *fak
 		keyName:       "key-1",
 		pairwiseSeeds: make(map[string]string),
 		failures:      make(map[string]int),
+		sign:          newFakeSignClient(nodeID, allNodeIDs),
 	}
 	for _, peer := range allNodeIDs {
 		if peer != nodeID {
@@ -253,13 +255,23 @@ func (n *fakeThresholdNode) handle(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/threshold/groups/"):
 		n.handleWriteGroup(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/dkg/start":
-		n.handleStart(w, r)
+		n.handleDKGStart(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/dkg/deliver":
-		n.handleDeliver(w, r)
+		n.handleDKGDeliver(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/dkg/proceed":
-		n.handleProceed(w, r)
+		n.handleDKGProceed(w, r)
 	case r.Method == http.MethodGet && r.URL.Path == keyPath+"/dkg/status":
-		writeOpenBaoData(w, n.status(0, "", nil))
+		n.handleDKGStatus(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/sign/start":
+		n.handleSignStart(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/sign/deliver":
+		n.handleSignDeliver(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/sign/proceed":
+		n.handleSignProceed(w, r)
+	case r.Method == http.MethodGet && r.URL.Path == keyPath+"/sign/status":
+		n.handleSignStatus(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == keyPath+"/sign/aggregate":
+		n.handleSignAggregate(w, r)
 	default:
 		http.Error(w, fmt.Sprintf("unexpected request %s %s", r.Method, r.URL.Path), http.StatusNotFound)
 	}
@@ -278,7 +290,7 @@ func (n *fakeThresholdNode) handleWriteNodeConfig(w http.ResponseWriter, r *http
 	n.mu.Lock()
 	n.nodeConfigWritten = true
 	n.mu.Unlock()
-	writeOpenBaoData(w, map[string]any{"node_id": n.nodeID})
+	writeOpenBaoResponse(w, map[string]any{"node_id": n.nodeID})
 }
 
 func (n *fakeThresholdNode) handleWriteGroup(w http.ResponseWriter, r *http.Request) {
@@ -307,10 +319,10 @@ func (n *fakeThresholdNode) handleWriteGroup(w http.ResponseWriter, r *http.Requ
 	n.mu.Lock()
 	n.groupWritten = true
 	n.mu.Unlock()
-	writeOpenBaoData(w, map[string]any{"name": "team-a", "threshold": 2})
+	writeOpenBaoResponse(w, map[string]any{"name": "team-a", "threshold": 2})
 }
 
-func (n *fakeThresholdNode) handleStart(w http.ResponseWriter, r *http.Request) {
+func (n *fakeThresholdNode) handleDKGStart(w http.ResponseWriter, r *http.Request) {
 	if n.consumeFailure(w, "start") {
 		return
 	}
@@ -341,10 +353,10 @@ func (n *fakeThresholdNode) handleStart(w http.ResponseWriter, r *http.Request) 
 	n.commonSeed = req.CommonSeed
 	n.pairwiseSeeds = pairwiseSeeds
 	n.mu.Unlock()
-	writeOpenBaoData(w, n.status(1, "round1:"+n.nodeID, nil))
+	writeOpenBaoResponse(w, n.status(1, "round1:"+n.nodeID, nil))
 }
 
-func (n *fakeThresholdNode) handleDeliver(w http.ResponseWriter, r *http.Request) {
+func (n *fakeThresholdNode) handleDKGDeliver(w http.ResponseWriter, r *http.Request) {
 	if n.consumeFailure(w, "deliver") {
 		return
 	}
@@ -359,10 +371,10 @@ func (n *fakeThresholdNode) handleDeliver(w http.ResponseWriter, r *http.Request
 	n.mu.Lock()
 	n.deliveries = append(n.deliveries, req)
 	n.mu.Unlock()
-	writeOpenBaoData(w, n.status(0, "", nil))
+	writeOpenBaoResponse(w, n.status(0, "", nil))
 }
 
-func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, r *http.Request) {
+func (n *fakeThresholdNode) handleDKGProceed(w http.ResponseWriter, r *http.Request) {
 	if n.consumeFailure(w, "proceed") {
 		return
 	}
@@ -389,19 +401,19 @@ func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, r *http.Request
 			http.Error(w, "round 1 deliveries missing", http.StatusBadRequest)
 			return
 		}
-		writeOpenBaoData(w, n.status(2, "round2:"+n.nodeID, n.round2Unicasts()))
+		writeOpenBaoResponse(w, n.status(2, "round2:"+n.nodeID, n.round2Unicasts()))
 	case 2:
 		if !n.hasDeliveriesForRound(2) {
 			http.Error(w, "round 2 deliveries missing", http.StatusBadRequest)
 			return
 		}
-		writeOpenBaoData(w, n.status(3, "round3:"+n.nodeID, nil))
+		writeOpenBaoResponse(w, n.status(3, "round3:"+n.nodeID, nil))
 	case 3:
 		if !n.hasDeliveriesForRound(3) {
 			http.Error(w, "round 3 deliveries missing", http.StatusBadRequest)
 			return
 		}
-		writeOpenBaoData(w, DKGStatus{
+		writeOpenBaoResponse(w, DKGStatus{
 			Name:      n.keyName,
 			Group:     "team-a",
 			SessionID: "dkg-1",
@@ -413,6 +425,21 @@ func (n *fakeThresholdNode) handleProceed(w http.ResponseWriter, r *http.Request
 	default:
 		http.Error(w, "too many proceed calls", http.StatusBadRequest)
 	}
+}
+
+func (n *fakeThresholdNode) handleDKGStatus(w http.ResponseWriter, r *http.Request) {
+	if n.consumeFailure(w, "status") {
+		return
+	}
+	n.mu.Lock()
+	completed := n.proceedCalls == 3
+	n.mu.Unlock()
+	status := n.status(0, "", nil)
+	if completed {
+		status.Status = keyStatusCompleted
+		status.PublicKey = "AmNvb3JkaW5hdGVkLWdyb3VwLXB1YmxpYy1rZXk="
+	}
+	writeOpenBaoResponse(w, status)
 }
 
 func (n *fakeThresholdNode) failNext(operation string, count int) {
@@ -480,7 +507,7 @@ func mustDecodeJSON(r *http.Request, into any) {
 	}
 }
 
-func writeOpenBaoData(w http.ResponseWriter, data any) {
+func writeOpenBaoResponse(w http.ResponseWriter, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
 }
