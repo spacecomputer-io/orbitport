@@ -38,6 +38,13 @@ enable_mount_if_missing() {
 enable_mount_if_missing "${OPENBAO_TRANSIT_MOUNT}" transit
 enable_mount_if_missing "${OPENBAO_KV_MOUNT}" kv-v2
 
+# PAT signing key (patissuer plugin transit mode). Idempotent: read-or-create.
+OPENBAO_PAT_KEY="${OPENBAO_PAT_KEY:-pat-signing}"
+if ! bao read "${OPENBAO_TRANSIT_MOUNT}/keys/${OPENBAO_PAT_KEY}" >/dev/null 2>&1; then
+    bao write -f "${OPENBAO_TRANSIT_MOUNT}/keys/${OPENBAO_PAT_KEY}" type=ecdsa-p256
+    echo "created transit key ${OPENBAO_PAT_KEY} (ecdsa-p256)"
+fi
+
 if [ -f "${eth_plugin_path}" ]; then
     plugin_sha="$(sha256sum "${eth_plugin_path}" | cut -d' ' -f1)"
     bao plugin register -sha256="${plugin_sha}" secret "${OPENBAO_ETH_PLUGIN_NAME}"

@@ -10,13 +10,16 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/account"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/accountnoop"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/aptosorbital"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/jwks"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/patissuer"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/threshold"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -61,6 +64,13 @@ func main() {
 		}
 		proto.RegisterAuthPluginServer(grpcServer, plugin)
 		logger.Info("Noop auth plugin ready")
+	case "accountnoop":
+		plugin, err := accountnoop.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterAccountPluginServer(grpcServer, plugin)
+		logger.Info("Noop account plugin ready")
 	case "ipfs":
 		plugin, err := ipfs.NewPlugin()
 		if err != nil {
@@ -105,6 +115,27 @@ func main() {
 				logger.Errorf("error closing masterseed plugin: %v", err)
 			}
 		}()
+	case "patissuer":
+		plugin, err := patissuer.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterPatIssuerPluginServer(grpcServer, plugin)
+		logger.Info("PatIssuer plugin ready")
+	case "jwks":
+		plugin, err := jwks.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		// Serves HTTP rather than gRPC, so it registers nothing here. The
+		// health server registered below still backs the k8s probes.
+		go func() {
+			logger.Infof("Starting JWKS http server on port %d", plugin.HTTPPort())
+			// Staying up with a dead listener would keep passing probes while
+			// serving nothing, so take the process down and let it restart.
+			panic(plugin.ListenHTTP())
+		}()
+		logger.Info("JWKS plugin ready")
 	case "kms":
 		plugin, err := kms.NewPlugin()
 		if err != nil {

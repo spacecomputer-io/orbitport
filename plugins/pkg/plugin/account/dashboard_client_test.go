@@ -15,9 +15,19 @@ import (
 type staticTokens struct {
 	value string
 	err   error
+	// The token served after invalidate(), so a test can tell the retry apart.
+	rotated      string
+	invalidCalls int
 }
 
-func (s staticTokens) token(context.Context) (string, error) { return s.value, s.err }
+func (s *staticTokens) token(context.Context) (string, error) { return s.value, s.err }
+
+func (s *staticTokens) invalidate() {
+	s.invalidCalls++
+	if s.rotated != "" {
+		s.value = s.rotated
+	}
+}
 
 func newTestClient(t *testing.T, handler http.Handler) (*dashboardClient, *httptest.Server) {
 	t.Helper()
@@ -26,7 +36,7 @@ func newTestClient(t *testing.T, handler http.Handler) (*dashboardClient, *httpt
 		DashboardURL:    srv.URL,
 		HTTPTimeoutSecs: 5,
 	}
-	return newDashboardClient(cfg, staticTokens{value: "test-token"}), srv
+	return newDashboardClient(cfg, &staticTokens{value: "test-token"}), srv
 }
 
 func TestDashboardClient_Hold_Success(t *testing.T) {
@@ -41,19 +51,21 @@ func TestDashboardClient_Hold_Success(t *testing.T) {
 		_ = json.Unmarshal(body, &capturedBody)
 
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ledgerId":"ledger-abc","balance":42}`))
+		_, _ = w.Write([]byte(`{"ledgerId":"ledger-abc","balance":42,"kmsTenant":"acct-1"}`))
 	}))
 	defer srv.Close()
 
-	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 2, "trng")
+	held, err := client.Hold(context.Background(), "client-x", 2, "trng", "pat-jti-1")
 	require.NoError(t, err)
-	require.Equal(t, "ledger-abc", ledgerID)
-	require.Equal(t, int64(42), balance)
+	require.Equal(t, "ledger-abc", held.LedgerID)
+	require.Equal(t, int64(42), held.Balance)
+	require.Equal(t, "acct-1", held.KmsTenant)
 	require.Equal(t, "Bearer test-token", capturedAuth)
 	require.Equal(t, "/service/credits/hold", capturedPath)
 	require.Equal(t, "client-x", capturedBody.ClientID)
 	require.Equal(t, uint32(2), capturedBody.Units)
 	require.Equal(t, "trng", capturedBody.Operation)
+	require.Equal(t, "pat-jti-1", capturedBody.Jti)
 }
 
 func TestDashboardClient_Hold_Accepts201(t *testing.T) {
@@ -63,10 +75,10 @@ func TestDashboardClient_Hold_Accepts201(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	ledgerID, balance, err := client.Hold(context.Background(), "client-x", 1, "trng")
+	held, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.NoError(t, err)
-	require.Equal(t, "ledger-201", ledgerID)
-	require.Equal(t, int64(7), balance)
+	require.Equal(t, "ledger-201", held.LedgerID)
+	require.Equal(t, int64(7), held.Balance)
 }
 
 func TestDashboardClient_Release_Accepts201(t *testing.T) {
@@ -88,7 +100,7 @@ func TestDashboardClient_Hold_InsufficientCredits(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng")
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.ErrorIs(t, err, ErrInsufficientCredits)
 }
 
@@ -111,7 +123,7 @@ func TestDashboardClient_Hold_OtherErrors(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			_, _, err := client.Hold(context.Background(), "client-x", 1, "trng")
+			_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 			require.Error(t, err)
 			require.False(t, errors.Is(err, ErrInsufficientCredits))
 		})
@@ -192,8 +204,64 @@ func TestDashboardClient_NoToken_Errors(t *testing.T) {
 	defer srv.Close()
 
 	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
-	client := newDashboardClient(cfg, staticTokens{err: errors.New("no token")})
+	client := newDashboardClient(cfg, &staticTokens{err: errors.New("no token")})
 
-	_, _, err := client.Hold(context.Background(), "client-x", 1, "trng")
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
 	require.Error(t, err)
+}
+
+// A 401 means the cached M2M token was rejected regardless of its claimed
+// expiry, so the client must drop it and retry once with a fresh one.
+func TestDashboardClient_Hold_RetriesOnceAfter401(t *testing.T) {
+	var seenAuth []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAuth = append(seenAuth, r.Header.Get("Authorization"))
+		if len(seenAuth) == 1 {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"Invalid or missing access token"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ledgerId":"ledger-retry","balance":7}`))
+	}))
+	defer srv.Close()
+
+	tokens := &staticTokens{value: "stale-token", rotated: "fresh-token"}
+	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
+	client := newDashboardClient(cfg, tokens)
+
+	held, err := client.Hold(context.Background(), "client-x", 1, "trng", "jti-1")
+	require.NoError(t, err)
+	require.Equal(t, "ledger-retry", held.LedgerID)
+	require.Equal(t, int64(7), held.Balance)
+	require.Equal(t, 1, tokens.invalidCalls)
+	require.Equal(t, []string{"Bearer stale-token", "Bearer fresh-token"}, seenAuth)
+}
+
+// The retry is once, not a loop: a persistently rejecting dashboard must
+// surface an error rather than spin.
+func TestDashboardClient_Hold_401RetryHappensOnce(t *testing.T) {
+	var calls int
+	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	require.Error(t, err)
+	require.Equal(t, 2, calls)
+}
+
+// 404 is the PAT revocation path and must stay a distinguishable client error,
+// never folded into a generic transport failure.
+func TestDashboardClient_Hold_404IsUnknownCredential(t *testing.T) {
+	client, srv := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+	}))
+	defer srv.Close()
+
+	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "revoked-jti")
+	require.ErrorIs(t, err, ErrUnknownCredential)
 }

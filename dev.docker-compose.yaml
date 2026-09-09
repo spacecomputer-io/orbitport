@@ -414,26 +414,75 @@ services:
       - ORBITPORT_GRPC_PORT=50000
       # Dev compose intentionally runs the noop auth plugin.
 
-  # The account plugin is intentionally NOT enabled in dev compose because the
-  # dashboard backend isn't part of this stack. To enable locally, run the
-  # dashboard separately (e.g. on the host), uncomment the block below, and
-  # set ORBITPORT_ACCOUNT_PLUGIN on the gateway service.
+  # Noop account plugin, not the real one: the real plugin needs the dashboard
+  # backend and an Auth0 M2M client, neither of which belongs in this stack.
+  # This one grants every hold, which is enough to exercise the credit-gating
+  # filter and — the reason it is here — to prove KMS tenancy comes from the
+  # hold response rather than from the caller's token.
   #
-  # plugin-account:
-  #   <<: *plugin-base
-  #   container_name: plugin-account
-  #   build:
-  #     context: ./plugins
-  #   image: op-plugin:latest
-  #   environment:
-  #     - GOLOG_LOG_LEVEL=debug
-  #     - ORBITPORT_PLUGIN=account
-  #     - ORBITPORT_GRPC_PORT=50005
-  #     - ORBITPORT_ACCOUNT_DASHBOARD_URL=http://host.docker.internal:3000
-  #     - ORBITPORT_ACCOUNT_AUTH0_DOMAIN=${ORBITPORT_ACCOUNT_AUTH0_DOMAIN}
-  #     - ORBITPORT_ACCOUNT_AUTH0_AUDIENCE=${ORBITPORT_ACCOUNT_AUTH0_AUDIENCE}
-  #     - ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID}
-  #     - ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET}
+  # For the real thing against a host-run dashboard, stack
+  # local-account.compose.yaml on top.
+  plugin-account:
+    <<: *plugin-base
+    container_name: plugin-account
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=accountnoop
+      - ORBITPORT_GRPC_PORT=50005
+      # Deliberately not an account id or an Auth0 sub, so a KMS namespace
+      # built from it is unmistakably the hold's doing.
+      - ORBITPORT_ACCOUNTNOOP_KMS_TENANT=${ORBITPORT_ACCOUNTNOOP_KMS_TENANT:-noop-tenant}
+
+  # Mints PATs and serves JWKS. Signs through the dev OpenBao transit mount by
+  # default so the signing path this stack exercises is the one production
+  # uses; openbao-bootstrap creates the pat-signing key.
+  #
+  # The gateway's auth plugin here is authnoop, which does not verify PATs, so
+  # this stack covers minting, key publication and tenancy. Stack
+  # local-pat.compose.yaml for the real auth plugin and full PAT verification.
+  plugin-patissuer:
+    <<: *plugin-base
+    container_name: plugin-patissuer
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=patissuer
+      - ORBITPORT_GRPC_PORT=50006
+      - ORBITPORT_PATISSUER_ISS=${ORBITPORT_PATISSUER_ISS:-https://auth.orbitport.local}
+      - ORBITPORT_PATISSUER_AUD=${ORBITPORT_PATISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      - ORBITPORT_PATISSUER_SIGNER=${ORBITPORT_PATISSUER_SIGNER:-transit}
+      - ORBITPORT_PATISSUER_OPENBAO_PROXY_URL=http://openbao-proxy:8200
+    depends_on:
+      openbao-bootstrap:
+        condition: service_completed_successfully
+      openbao-proxy:
+        condition: service_healthy
+
+  # Publishes the issuer's public keys. The only plugin that answers requests
+  # from outside the cluster, which is why it is a separate pod from the patissuer
+  # that signs.
+  plugin-jwks:
+    <<: *plugin-base
+    container_name: plugin-jwks
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=jwks
+      - ORBITPORT_GRPC_PORT=50008
+      - ORBITPORT_JWKS_PATISSUER_PLUGIN=plugin-patissuer:50006
+      - ORBITPORT_JWKS_HTTP_PORT=8080
+    ports:
+      # Host 8091 because 8080 is the gateway and 8081 is ipfs-node.
+      - 8091:8080
+    depends_on:
+      - plugin-patissuer
 
   ipfs-node:
     image: ipfs/kubo:release
@@ -467,8 +516,15 @@ services:
       - ORBITPORT_THRESHOLD_PLUGIN=http://plugin-threshold:50005
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
+      - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
+      - ORBITPORT_PATISSUER_PLUGIN=http://plugin-patissuer:50006
+      - ORBITPORT_INTERNAL_PORT=8081
+      # Dev-only fixed value so the e2e suite can mint without a shared export.
+      - ORBITPORT_PATISSUER_SHARED_SECRET=${ORBITPORT_PATISSUER_SHARED_SECRET:-dev-only-issuer-secret}
     ports:
       - 8080:8080
+      # Internal listener. Host 8090 because ipfs-node already takes 8081.
+      - 8090:8081
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 10s
@@ -480,6 +536,8 @@ services:
       - plugin-kms
       - plugin-threshold
       - plugin-masterseed
+      - plugin-account
+      - plugin-patissuer
 
   plugin-beacon:
     <<: *plugin-base

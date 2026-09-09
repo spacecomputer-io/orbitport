@@ -39,3 +39,8 @@ plugins/bin/
 # will have compiled files and executables
 debug/
 target/
+
+.omc/
+# Sibling OpenBao plugin repos, checked out here by the e2e workflow.
+openbao-eth-plugin/
+openbao-threshold-plugin/

@@ -25,7 +25,7 @@ func newTestPlugin(t *testing.T, handler http.HandlerFunc) (*Plugin, *httptest.S
 		CreditsPerUnit:    1,
 		HTTPTimeoutSecs:   5,
 	}
-	tokens := staticTokens{value: "test-token"}
+	tokens := &staticTokens{value: "test-token"}
 	return &Plugin{
 		cfg:    cfg,
 		client: newDashboardClient(cfg, tokens),

@@ -186,3 +186,42 @@ func TestTokenManager_RefreshCount(t *testing.T) {
 	require.NoError(t, tm.refresh(context.Background()))
 	require.Equal(t, int32(2), atomic.LoadInt32(&calls))
 }
+
+// Regression: expiresAt must carry no monotonic clock reading, which does not
+// advance while the host is suspended and leaves an expired token looking fresh.
+func TestTokenManager_ExpiryHasNoMonotonicReading(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"access_token":"abc","expires_in":3600,"token_type":"Bearer"}`))
+	}))
+	defer srv.Close()
+
+	tm := newTestTokenManager(t, srv)
+	require.NoError(t, tm.refresh(context.Background()))
+
+	exp := tm.cache.Get().expiresAt
+	// `==` is deliberate: Equal() ignores the monotonic reading, so it would
+	// pass whether or not the bug is present.
+	//nolint:staticcheck // QF1009: comparing the monotonic reading is the point
+	require.True(t, exp == exp.Round(0), "expiresAt must be wall-clock only, got monotonic reading: %v", exp)
+}
+
+// invalidate() drops an unexpired cached token so the next call refetches.
+func TestTokenManager_InvalidateForcesRefetch(t *testing.T) {
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		_, _ = w.Write([]byte(`{"access_token":"abc","expires_in":3600,"token_type":"Bearer"}`))
+	}))
+	defer srv.Close()
+
+	tm := newTestTokenManager(t, srv)
+	_, err := tm.token(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int32(1), atomic.LoadInt32(&calls))
+
+	tm.invalidate()
+
+	_, err = tm.token(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int32(2), atomic.LoadInt32(&calls))
+}
