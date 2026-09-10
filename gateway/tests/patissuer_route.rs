@@ -379,7 +379,7 @@ async fn issue_route_rejects_get_method() {
 }
 
 #[tokio::test]
-async fn issue_route_surfaces_issuer_failure_without_a_token() {
+async fn issue_route_surfaces_issuer_failure_without_leaking_a_token() {
     let (addr, issue_calls) = start_mock_issuer().await;
     let (auth_addr, _) = start_mock_auth().await;
     let route = internal_routes(connect(addr).await, connect_auth(auth_addr).await);
