@@ -146,6 +146,9 @@ func (p *Plugin) ValidateToken(ctx context.Context, req *proto.TokenValidationRe
 	validatedClaims, err := p.validateAuth0Token(ctx, req.Token)
 	if err != nil {
 		logger.Warnf("Encountered error while validating JWT: %v", err)
+		if errors.Is(err, errAuth0JWKSUnavailable) {
+			return nil, status.Error(codes.Unavailable, "Auth0 JWKS unavailable")
+		}
 		return nil, fmt.Errorf("failed to validate JWT token: %w", err)
 	}
 	clientID := validatedClaims.RegisteredClaims.Subject

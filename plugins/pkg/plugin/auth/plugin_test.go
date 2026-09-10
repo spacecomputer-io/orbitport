@@ -384,6 +384,33 @@ func TestValidateServiceToken_ReportsAuth0JWKSErrorsAsUnavailable(t *testing.T) 
 	require.Equal(t, codes.Unavailable, st.Code())
 }
 
+// Same outage, customer path: an Auth0 JWKS failure is not a bad token and
+// must surface as Unavailable so the gateway answers 503 rather than 401.
+func TestValidateToken_ReportsAuth0JWKSErrorsAsUnavailable(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	jwtValidator, err := auth0validator.New(
+		wrapAuth0KeyFunc(func(context.Context) (interface{}, error) {
+			return nil, errors.New("JWKS request failed")
+		}),
+		auth0validator.RS256,
+		testAuth0Iss,
+		[]string{testPatAud},
+		auth0validator.WithCustomClaims(func() auth0validator.CustomClaims {
+			return &serviceClaims{}
+		}),
+	)
+	require.NoError(t, err)
+	p := &Plugin{jwtValidator: jwtValidator}
+
+	_, err = p.ValidateToken(context.Background(), &proto.TokenValidationRequest{
+		Token: mintServiceToken(t, key, "some-customer@clients", ""),
+	})
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error, got %v", err)
+	require.Equal(t, codes.Unavailable, st.Code())
+}
+
 func TestValidateServiceToken_ScopeMatching(t *testing.T) {
 	p, key := newServiceTestPlugin(t)
 
