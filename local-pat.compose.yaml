@@ -16,15 +16,16 @@
 # authenticate with the literal "test_access_token" that only authnoop accepts.
 #
 # Ports (unchanged by this overlay):
-#   8080  public API + GET /.well-known/jwks.json
+#   8080  public API
 #   8090  internal listener -> container 8081, POST /internal/pat/issue
+#   8091  jwks plugin -> GET /.well-known/jwks.json
 #
 # The dashboard backend pairs with this via:
 #   ORBITPORT_PATISSUER_URL=http://host.docker.internal:8090
-#   ORBITPORT_PATISSUER_SHARED_SECRET=<must match the gateway's>
+#   Auth0 M2M token for https://op-dev.spacecomputer.io/api with pat:issue.
 
 services:
-  # Auth0 vars serve the legacy-token path only.
+  # Auth0 validates legacy client tokens and dashboard M2M service tokens.
   plugin-auth:
     environment:
       - ORBITPORT_PLUGIN=auth
@@ -33,5 +34,6 @@ services:
       - ORBITPORT_AUTH_PAT_ISS=${ORBITPORT_PATISSUER_ISS:-https://auth.orbitport.local}
       - ORBITPORT_AUTH_PAT_AUDIENCE=${ORBITPORT_PATISSUER_AUD:-https://op-dev.spacecomputer.io/api}
       - ORBITPORT_AUTH_PATISSUER_PLUGIN=plugin-patissuer:50006
+      - ORBITPORT_AUTH_SERVICE_CLIENT_IDS=${ORBITPORT_AUTH_SERVICE_CLIENT_IDS}
     depends_on:
       - plugin-patissuer

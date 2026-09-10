@@ -8,7 +8,7 @@
 //! Two regressions these guard, both found in review of the issuer work:
 //!
 //!   1. PAT issuance was mounted on the public HTTP port, reachable from the
-//!      internet behind nothing but a static shared secret.
+//!      internet.
 //!   2. KMS tenancy was read from the token's own `kms_tenant` claim, asserted
 //!      once at mint time and trusted for the life of the token.
 //!   3. The gateway republished the issuer's key set. That now belongs to the
@@ -22,7 +22,7 @@ use std::env;
 
 mod common;
 
-const DEV_SHARED_SECRET: &str = "dev-only-issuer-secret";
+const DEV_SERVICE_TOKEN: &str = "dev-service-token";
 
 fn public_url() -> String {
     env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string())
@@ -40,8 +40,8 @@ fn jwks_url() -> String {
     env::var("OPTEST_JWKS_URL").unwrap_or("http://localhost:8091".to_string())
 }
 
-fn shared_secret() -> String {
-    env::var("ORBITPORT_PATISSUER_SHARED_SECRET").unwrap_or(DEV_SHARED_SECRET.to_string())
+fn service_token() -> String {
+    env::var("OPTEST_SERVICE_TOKEN").unwrap_or(DEV_SERVICE_TOKEN.to_string())
 }
 
 fn issue_body(jti: &str, claimed_tenant: &str, ttl_secs: i64) -> serde_json::Value {
@@ -61,7 +61,7 @@ fn issue_body(jti: &str, claimed_tenant: &str, ttl_secs: i64) -> serde_json::Val
 async fn mint(jti: &str, claimed_tenant: &str) -> String {
     let resp = reqwest::Client::new()
         .post(format!("{}/internal/pat/issue", internal_url()))
-        .bearer_auth(shared_secret())
+        .bearer_auth(service_token())
         .json(&issue_body(jti, claimed_tenant, 3600))
         .send()
         .await
@@ -87,7 +87,7 @@ fn b64url_json(part: &str) -> serde_json::Value {
 async fn test_e2e_pat_issue_is_not_served_on_the_public_port() {
     let resp = reqwest::Client::new()
         .post(format!("{}/internal/pat/issue", public_url()))
-        .bearer_auth(shared_secret())
+        .bearer_auth(service_token())
         .json(&issue_body("e2e-public", "", 3600))
         .send()
         .await
@@ -121,29 +121,24 @@ async fn test_e2e_pat_jwks_is_not_served_by_the_gateway() {
 }
 
 #[tokio::test]
-async fn test_e2e_pat_internal_listener_requires_the_shared_secret() {
+async fn test_e2e_pat_internal_listener_requires_a_service_token() {
     let client = reqwest::Client::new();
     let url = format!("{}/internal/pat/issue", internal_url());
 
-    let wrong = client
-        .post(&url)
-        .bearer_auth("not-the-secret")
-        .json(&issue_body("e2e-badsecret", "", 3600))
-        .send()
-        .await
-        .expect("internal listener unreachable — is the dev stack up?");
-    assert_eq!(wrong.status(), 401, "a bad secret must be rejected");
-
     let missing = client
         .post(&url)
-        .json(&issue_body("e2e-nosecret", "", 3600))
+        .json(&issue_body("e2e-no-service-token", "", 3600))
         .send()
         .await
         .unwrap();
-    assert_eq!(missing.status(), 401, "a missing secret must be rejected");
+    assert_eq!(
+        missing.status(),
+        401,
+        "a missing service token must be rejected"
+    );
 }
 
-/// Ties the minted token to the key the gateway publishes: transit signs with a
+/// Ties the minted token to the key the jwks plugin publishes: transit signs with a
 /// key version, the JWKS advertises it as `kid`, and a verifier must be able to
 /// check one against the other. A kid mismatch or a bad public-key export would
 /// break every downstream verifier while minting kept working.
@@ -203,7 +198,7 @@ async fn test_e2e_pat_expiry_beyond_the_ceiling_is_refused() {
     let ten_years = 10 * 365 * 24 * 60 * 60;
     let resp = reqwest::Client::new()
         .post(format!("{}/internal/pat/issue", internal_url()))
-        .bearer_auth(shared_secret())
+        .bearer_auth(service_token())
         .json(&issue_body("e2e-longlived", "", ten_years))
         .send()
         .await

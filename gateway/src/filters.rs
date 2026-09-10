@@ -1,7 +1,8 @@
 use crate::metrics;
 use crate::proto::plugins::account::{HoldRequest, account_plugin_client::AccountPluginClient};
 use crate::proto::plugins::auth::{
-    TokenValidationRequest, TokenValidationResponse, auth_plugin_client::AuthPluginClient,
+    ServiceTokenValidationRequest, TokenValidationRequest, TokenValidationResponse,
+    auth_plugin_client::AuthPluginClient,
 };
 use crate::types::GatewayError;
 use sha2::{Digest, Sha256};
@@ -45,6 +46,12 @@ pub struct AuthContextWithHold {
     pub kms_tenant: String,
 }
 
+/// Identity of an Auth0 M2M principal authorized for an internal capability.
+#[derive(Clone, Debug)]
+pub struct ServiceAuthContext {
+    pub client_id: String,
+}
+
 /// Rate limit structure
 pub type RateLimit = (u32, Instant);
 /// Rate limit items
@@ -75,6 +82,18 @@ pub fn with_auth(
     headers_cloned()
         .map(move |headers: HeaderMap<HeaderValue>| (headers, auth_client.clone()))
         .and_then(authorize)
+}
+
+/// Creates a filter that authorizes an Auth0 M2M token for a specific internal
+/// capability. It intentionally calls a different auth-plugin RPC from
+/// `with_auth`, so user and PAT validation cannot authorize service routes.
+pub fn with_service_auth(
+    auth_client: AuthPluginClient<Channel>,
+    required_scopes: &'static [&'static str],
+) -> impl Filter<Extract = (ServiceAuthContext,), Error = warp::Rejection> + Clone {
+    headers_cloned()
+        .map(move |headers: HeaderMap<HeaderValue>| (headers, auth_client.clone(), required_scopes))
+        .and_then(authorize_service)
 }
 
 type ApiResult<T> = std::result::Result<T, warp::Rejection>;
@@ -158,6 +177,64 @@ async fn authorize(
             Err(warp::reject::custom(e))
         }
     }
+}
+
+async fn authorize_service(
+    (headers, mut auth_client, required_scopes): (
+        HeaderMap<HeaderValue>,
+        AuthPluginClient<Channel>,
+        &'static [&'static str],
+    ),
+) -> ApiResult<ServiceAuthContext> {
+    let timer = Instant::now();
+    let jwt = jwt_from_header(&headers)?;
+    let request = tonic::Request::new(ServiceTokenValidationRequest {
+        token: jwt,
+        required_scopes: required_scopes
+            .iter()
+            .map(|scope| (*scope).to_string())
+            .collect(),
+    });
+    let validated = tokio::time::timeout(
+        AUTH_VALIDATE_TIMEOUT,
+        auth_client.validate_service_token(request),
+    )
+    .await
+    .map_err(|_| {
+        metrics::record_auth("service_plugin_timeout", timer.elapsed().as_secs_f64());
+        tracing::error!("Auth plugin service-token validation timed out");
+        warp::reject::custom(GatewayError::AuthPluginConnectionError(
+            "timeout".to_string(),
+        ))
+    })?
+    .map_err(|e| match e.code() {
+        tonic::Code::Unavailable | tonic::Code::NotFound | tonic::Code::Unimplemented => {
+            metrics::record_auth("service_plugin_unavailable", timer.elapsed().as_secs_f64());
+            tracing::error!("Auth plugin service-token validation unavailable: {e}");
+            warp::reject::custom(GatewayError::AuthPluginConnectionError(
+                "unavailable".to_string(),
+            ))
+        }
+        tonic::Code::PermissionDenied => {
+            metrics::record_auth("service_forbidden", timer.elapsed().as_secs_f64());
+            warp::reject::custom(GatewayError::ServiceAuthorizationDenied)
+        }
+        _ => {
+            metrics::record_auth("service_failed", timer.elapsed().as_secs_f64());
+            warp::reject::custom(GatewayError::AuthenticationFailed)
+        }
+    })?
+    .into_inner();
+
+    if !validated.ok || validated.client_id.trim().is_empty() {
+        metrics::record_auth("service_failed", timer.elapsed().as_secs_f64());
+        return Err(warp::reject::custom(GatewayError::AuthenticationFailed));
+    }
+
+    metrics::record_auth("service_ok", timer.elapsed().as_secs_f64());
+    Ok(ServiceAuthContext {
+        client_id: validated.client_id,
+    })
 }
 
 fn jwt_from_header(headers: &HeaderMap<HeaderValue>) -> Result<String, GatewayError> {

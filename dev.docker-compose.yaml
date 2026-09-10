@@ -519,12 +519,11 @@ services:
       - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
       - ORBITPORT_PATISSUER_PLUGIN=http://plugin-patissuer:50006
       - ORBITPORT_INTERNAL_PORT=8081
-      # Dev-only fixed value so the e2e suite can mint without a shared export.
-      - ORBITPORT_PATISSUER_SHARED_SECRET=${ORBITPORT_PATISSUER_SHARED_SECRET:-dev-only-issuer-secret}
     ports:
       - 8080:8080
-      # Internal listener. Host 8090 because ipfs-node already takes 8081.
-      - 8090:8081
+      # The no-op auth plugin is development-only, so never expose issuance
+      # beyond localhost. Host 8090 avoids ipfs-node's 8081 binding.
+      - 127.0.0.1:8090:8081
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 10s

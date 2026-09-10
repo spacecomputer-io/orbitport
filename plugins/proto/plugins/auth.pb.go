@@ -138,6 +138,113 @@ func (x *TokenValidationResponse) GetKmsTenant() string {
 	return ""
 }
 
+// Validates an Auth0 M2M token for a gateway-internal capability. The caller
+// supplies the scopes required by the route it is protecting.
+type ServiceTokenValidationRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Token          string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	RequiredScopes []string               `protobuf:"bytes,2,rep,name=required_scopes,json=requiredScopes,proto3" json:"required_scopes,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ServiceTokenValidationRequest) Reset() {
+	*x = ServiceTokenValidationRequest{}
+	mi := &file_proto_plugins_auth_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceTokenValidationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceTokenValidationRequest) ProtoMessage() {}
+
+func (x *ServiceTokenValidationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_auth_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceTokenValidationRequest.ProtoReflect.Descriptor instead.
+func (*ServiceTokenValidationRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_auth_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ServiceTokenValidationRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *ServiceTokenValidationRequest) GetRequiredScopes() []string {
+	if x != nil {
+		return x.RequiredScopes
+	}
+	return nil
+}
+
+type ServiceTokenValidationResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Ok    bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`
+	// The Auth0 M2M client ID, without the @clients suffix.
+	ClientId      string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceTokenValidationResponse) Reset() {
+	*x = ServiceTokenValidationResponse{}
+	mi := &file_proto_plugins_auth_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceTokenValidationResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceTokenValidationResponse) ProtoMessage() {}
+
+func (x *ServiceTokenValidationResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_auth_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceTokenValidationResponse.ProtoReflect.Descriptor instead.
+func (*ServiceTokenValidationResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_auth_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ServiceTokenValidationResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+func (x *ServiceTokenValidationResponse) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
 var File_proto_plugins_auth_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_auth_proto_rawDesc = "" +
@@ -150,10 +257,17 @@ const file_proto_plugins_auth_proto_rawDesc = "" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x10\n" +
 	"\x03jti\x18\x03 \x01(\tR\x03jti\x12\x1d\n" +
 	"\n" +
-	"kms_tenant\x18\x04 \x01(\tR\tkmsTenant2Z\n" +
+	"kms_tenant\x18\x04 \x01(\tR\tkmsTenant\"^\n" +
+	"\x1dServiceTokenValidationRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12'\n" +
+	"\x0frequired_scopes\x18\x02 \x03(\tR\x0erequiredScopes\"M\n" +
+	"\x1eServiceTokenValidationResponse\x12\x0e\n" +
+	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId2\xbd\x01\n" +
 	"\n" +
 	"AuthPlugin\x12L\n" +
-	"\rValidateToken\x12\x1c.auth.TokenValidationRequest\x1a\x1d.auth.TokenValidationResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
+	"\rValidateToken\x12\x1c.auth.TokenValidationRequest\x1a\x1d.auth.TokenValidationResponse\x12a\n" +
+	"\x14ValidateServiceToken\x12#.auth.ServiceTokenValidationRequest\x1a$.auth.ServiceTokenValidationResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
 
 var (
 	file_proto_plugins_auth_proto_rawDescOnce sync.Once
@@ -167,16 +281,20 @@ func file_proto_plugins_auth_proto_rawDescGZIP() []byte {
 	return file_proto_plugins_auth_proto_rawDescData
 }
 
-var file_proto_plugins_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_proto_plugins_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_proto_plugins_auth_proto_goTypes = []any{
-	(*TokenValidationRequest)(nil),  // 0: auth.TokenValidationRequest
-	(*TokenValidationResponse)(nil), // 1: auth.TokenValidationResponse
+	(*TokenValidationRequest)(nil),         // 0: auth.TokenValidationRequest
+	(*TokenValidationResponse)(nil),        // 1: auth.TokenValidationResponse
+	(*ServiceTokenValidationRequest)(nil),  // 2: auth.ServiceTokenValidationRequest
+	(*ServiceTokenValidationResponse)(nil), // 3: auth.ServiceTokenValidationResponse
 }
 var file_proto_plugins_auth_proto_depIdxs = []int32{
 	0, // 0: auth.AuthPlugin.ValidateToken:input_type -> auth.TokenValidationRequest
-	1, // 1: auth.AuthPlugin.ValidateToken:output_type -> auth.TokenValidationResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: auth.AuthPlugin.ValidateServiceToken:input_type -> auth.ServiceTokenValidationRequest
+	1, // 2: auth.AuthPlugin.ValidateToken:output_type -> auth.TokenValidationResponse
+	3, // 3: auth.AuthPlugin.ValidateServiceToken:output_type -> auth.ServiceTokenValidationResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -193,7 +311,7 @@ func file_proto_plugins_auth_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_plugins_auth_proto_rawDesc), len(file_proto_plugins_auth_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

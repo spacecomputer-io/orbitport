@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthPlugin_ValidateToken_FullMethodName = "/auth.AuthPlugin/ValidateToken"
+	AuthPlugin_ValidateToken_FullMethodName        = "/auth.AuthPlugin/ValidateToken"
+	AuthPlugin_ValidateServiceToken_FullMethodName = "/auth.AuthPlugin/ValidateServiceToken"
 )
 
 // AuthPluginClient is the client API for AuthPlugin service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type AuthPluginClient interface {
 	ValidateToken(ctx context.Context, in *TokenValidationRequest, opts ...grpc.CallOption) (*TokenValidationResponse, error)
+	ValidateServiceToken(ctx context.Context, in *ServiceTokenValidationRequest, opts ...grpc.CallOption) (*ServiceTokenValidationResponse, error)
 }
 
 type authPluginClient struct {
@@ -47,11 +49,22 @@ func (c *authPluginClient) ValidateToken(ctx context.Context, in *TokenValidatio
 	return out, nil
 }
 
+func (c *authPluginClient) ValidateServiceToken(ctx context.Context, in *ServiceTokenValidationRequest, opts ...grpc.CallOption) (*ServiceTokenValidationResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ServiceTokenValidationResponse)
+	err := c.cc.Invoke(ctx, AuthPlugin_ValidateServiceToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AuthPluginServer is the server API for AuthPlugin service.
 // All implementations must embed UnimplementedAuthPluginServer
 // for forward compatibility.
 type AuthPluginServer interface {
 	ValidateToken(context.Context, *TokenValidationRequest) (*TokenValidationResponse, error)
+	ValidateServiceToken(context.Context, *ServiceTokenValidationRequest) (*ServiceTokenValidationResponse, error)
 	mustEmbedUnimplementedAuthPluginServer()
 }
 
@@ -64,6 +77,9 @@ type UnimplementedAuthPluginServer struct{}
 
 func (UnimplementedAuthPluginServer) ValidateToken(context.Context, *TokenValidationRequest) (*TokenValidationResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ValidateToken not implemented")
+}
+func (UnimplementedAuthPluginServer) ValidateServiceToken(context.Context, *ServiceTokenValidationRequest) (*ServiceTokenValidationResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ValidateServiceToken not implemented")
 }
 func (UnimplementedAuthPluginServer) mustEmbedUnimplementedAuthPluginServer() {}
 func (UnimplementedAuthPluginServer) testEmbeddedByValue()                    {}
@@ -104,6 +120,24 @@ func _AuthPlugin_ValidateToken_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AuthPlugin_ValidateServiceToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ServiceTokenValidationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthPluginServer).ValidateServiceToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AuthPlugin_ValidateServiceToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthPluginServer).ValidateServiceToken(ctx, req.(*ServiceTokenValidationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AuthPlugin_ServiceDesc is the grpc.ServiceDesc for AuthPlugin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -114,6 +148,10 @@ var AuthPlugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ValidateToken",
 			Handler:    _AuthPlugin_ValidateToken_Handler,
+		},
+		{
+			MethodName: "ValidateServiceToken",
+			Handler:    _AuthPlugin_ValidateServiceToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
