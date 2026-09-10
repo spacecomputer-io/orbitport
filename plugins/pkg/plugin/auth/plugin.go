@@ -179,6 +179,13 @@ func (p *Plugin) ValidateServiceToken(
 	ctx context.Context,
 	req *proto.ServiceTokenValidationRequest,
 ) (*proto.ServiceTokenValidationResponse, error) {
+	// A service token authorizes one named capability. An empty list satisfies
+	// the scope check vacuously, so a route that forgets to name its scope
+	// fails closed instead of authorizing every allowlisted client.
+	if len(req.GetRequiredScopes()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "required_scopes must not be empty")
+	}
+
 	validatedClaims, err := p.validateAuth0Token(ctx, req.GetToken())
 	if err != nil {
 		if errors.Is(err, errAuth0JWKSUnavailable) {

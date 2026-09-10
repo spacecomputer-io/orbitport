@@ -421,10 +421,12 @@ func TestValidateServiceToken_ScopeMatching(t *testing.T) {
 		wantCode       codes.Code
 	}{
 		{
-			name:           "empty required scopes pass the scope check",
-			scope:          "",
+			// A route that names no capability authorizes nothing, otherwise
+			// any allowlisted client would pass the scope check vacuously.
+			name:           "empty required scopes are refused",
+			scope:          "pat:issue",
 			requiredScopes: nil,
-			wantCode:       codes.OK,
+			wantCode:       codes.InvalidArgument,
 		},
 		{
 			name:           "irregular whitespace between scopes",
@@ -738,4 +740,38 @@ func TestValidateTokenRejectsServiceCredentials(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Ok)
 	require.Equal(t, "some-customer@clients", resp.ClientId)
+}
+
+// The two RPCs partition credentials: a client is either allowlisted for
+// gateway-internal capabilities or a customer on the metered API, never both.
+// Each half is asserted elsewhere; this pins the invariant that spans them.
+func TestServiceAndCustomerCredentialsArePartitioned(t *testing.T) {
+	plugin, key := newServiceTestPlugin(t)
+
+	service := mintServiceToken(t, key, "dashboard-service@clients", "pat:issue")
+	customer := mintServiceToken(t, key, "some-customer@clients", "pat:issue")
+
+	serviceResp, err := plugin.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+		Token:          service,
+		RequiredScopes: []string{"pat:issue"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "dashboard-service", serviceResp.ClientId)
+
+	_, err = plugin.ValidateToken(context.Background(), &proto.TokenValidationRequest{Token: service})
+	require.Error(t, err, "the PAT-minting credential must not authenticate on the metered API")
+
+	// The customer is the exact mirror, and holding pat:issue does not help:
+	// the allowlist is the gate, not the scope.
+	customerResp, err := plugin.ValidateToken(context.Background(), &proto.TokenValidationRequest{Token: customer})
+	require.NoError(t, err)
+	require.Equal(t, "some-customer@clients", customerResp.ClientId)
+
+	_, err = plugin.ValidateServiceToken(context.Background(), &proto.ServiceTokenValidationRequest{
+		Token:          customer,
+		RequiredScopes: []string{"pat:issue"},
+	})
+	st, ok := status.FromError(err)
+	require.True(t, ok, "expected gRPC status error, got %v", err)
+	require.Equal(t, codes.PermissionDenied, st.Code())
 }
