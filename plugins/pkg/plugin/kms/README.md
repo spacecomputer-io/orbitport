@@ -2,12 +2,13 @@
 
 Multi-tenant Key Management Service. Wraps an OpenBao backend behind a small,
 provider-agnostic gRPC contract so the gateway can offer encrypt / decrypt /
-sign / key-agreement / data-key / key-rotation operations to clients without
-leaking the underlying engine.
+sign / key-agreement / data-key / key-rotation operations and a simple
+agent-oriented key-store to clients without leaking the underlying engine.
 
 ## Overview
 
-Implements `KmsPlugin` (`proto/plugins/kms.proto`) with eight RPCs:
+Implements `KmsPlugin` (`proto/plugins/kms.proto`) with crypto RPCs and
+key-store RPCs:
 
 - `CreateKey(alias, scheme, key_spec, key_usage, …)` — provisions a new key
   in the chosen provider and persists its metadata. Returns a stable
@@ -35,6 +36,15 @@ Implements `KmsPlugin` (`proto/plugins/kms.proto`) with eight RPCs:
   fresh data key as `{plaintext, ciphertext_blob}` so callers can do
   envelope encryption (Transit only).
 - `RotateKey(key_id)` — bumps the OpenBao key version (Transit only).
+- `Import(name, secret)` — stores arbitrary JSON key material in the KMS
+  key-store under the authenticated client.
+- `Export(name, wrap_ttl_seconds)` — returns a short-lived one-time OpenBao
+  wrapping token for the named key-store entry. It does not return raw secret
+  material directly.
+- `Unwrap(name, wrap_token)` — redeems a wrapping token once and returns the
+  stored JSON object if the token belongs to that key-store entry.
+- `List(prefix)` / `Delete(name)` — list or delete key-store entries owned by
+  the authenticated client.
 
 The gateway-facing service proto (`proto/services/kms.proto`) mirrors these
 RPCs and adds `GetCapabilities`, which the gateway answers locally without a
@@ -109,6 +119,32 @@ Aliases are user-chosen, validated to `[A-Za-z0-9._-]{1,128}`, and may not
 start with the reserved `kms:` prefix. The canonical external identifier is
 always `kms:<alias>`; both forms resolve to the same backend key.
 
+## Key-store
+
+The key-store is for agentic workloads that need a simple place to persist and
+retrieve arbitrary key material or secrets through Orbitport KMS. It is
+separate from operational KMS metadata:
+
+- **Storage path** — OpenBao KV v2 mount `ORBITPORT_KMS_KEY_STORE_MOUNT`
+  (default `key-store`) under `owners/<tenant>/<name>`.
+- **Tenant scope** — the same authenticated `client_id` model as the existing
+  KMS. The plugin hashes it into `tenant_<sha256(client_id)[:16]>`.
+- **Names** — slash-separated paths such as `github/prod`; each segment must
+  match `[A-Za-z0-9._-]+`. `.` and `..` are rejected.
+- **Export safety** — `Export` asks OpenBao to response-wrap the read response
+  and returns only `WrapToken`, `TtlSeconds`, and `ExpiresAt`. `Unwrap` first
+  checks the token's OpenBao wrapping lookup path, then redeems it once.
+- **TTL semantics** — the TTL applies only to the temporary wrap token. The
+  stored key-store entry remains durable until overwritten or deleted.
+
+Authorization is enforced in the KMS plugin with Cedar. The default policy
+is embedded from `cedar/key_store_default.cedar` and permits the authenticated
+owner to call `kms.Import`, `kms.Export`, `kms.Unwrap`, `kms.List`, and
+`kms.Delete` on their own key-store namespace. Operators can append Cedar policies with
+`ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH`; Cedar `forbid` policies override
+the default permit and can be used to block operations such as deleting
+production entries.
+
 ## Capabilities
 
 `GetCapabilities` (gateway-side) advertises the supported scheme matrix:
@@ -124,8 +160,8 @@ Clients should call this once at startup to discover what they can ask for.
 ## Dependencies
 
 This plugin requires a reachable OpenBao instance with the Transit, KV v2,
-Ethereum, and PQC mounts already provisioned for the schemes you use. Both
-compose stacks (`docker-compose.yaml`, `dev.docker-compose.yaml`) ship the full stack:
+key-store KV v2, Ethereum, and PQC mounts already provisioned for the schemes
+you use. Both compose stacks (`docker-compose.yaml`, `dev.docker-compose.yaml`) ship the full stack:
 `openbao` (dev mode), `openbao-bootstrap` (one-shot init of mounts and
 tokens), `openbao-proxy` (handles auth headers in front of OpenBao), and
 this plugin as `plugin-kms`. The compose stacks build the Ethereum plugin and

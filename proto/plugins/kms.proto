@@ -17,6 +17,11 @@ service KmsPlugin {
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+  rpc Import(KeyStoreImportRequest) returns (KeyStoreImportResponse);
+  rpc Export(KeyStoreExportRequest) returns (KeyStoreExportResponse);
+  rpc Unwrap(KeyStoreUnwrapRequest) returns (KeyStoreUnwrapResponse);
+  rpc List(KeyStoreListRequest) returns (KeyStoreListResponse);
+  rpc Delete(KeyStoreDeleteRequest) returns (KeyStoreDeleteResponse);
 }
 
 message Tag {
@@ -137,4 +142,58 @@ message RotateKeyRequest {
 
 message RotateKeyResponse {
   KeyMetadata key_metadata = 1;
+}
+
+message KeyStoreImportRequest {
+  string name = 1;
+  string secret_json = 2;
+  string client_id = 3;
+}
+
+message KeyStoreImportResponse {
+  string name = 1;
+  uint32 version = 2;
+}
+
+message KeyStoreExportRequest {
+  string name = 1;
+  string client_id = 2;
+  optional uint32 wrap_ttl_seconds = 3;
+}
+
+message KeyStoreExportResponse {
+  string name = 1;
+  string wrap_token = 2;
+  uint32 ttl_seconds = 3;
+  string expires_at = 4;
+}
+
+message KeyStoreUnwrapRequest {
+  string name = 1;
+  string wrap_token = 2;
+  string client_id = 3;
+}
+
+message KeyStoreUnwrapResponse {
+  string name = 1;
+  string secret_json = 2;
+}
+
+message KeyStoreListRequest {
+  string client_id = 1;
+  optional string prefix = 2;
+}
+
+message KeyStoreListResponse {
+  repeated string names = 1;
+}
+
+message KeyStoreDeleteRequest {
+  string name = 1;
+  string client_id = 2;
+}
+
+message KeyStoreDeleteResponse {
+  string name = 1;
+  bool deleted = 2;
 }

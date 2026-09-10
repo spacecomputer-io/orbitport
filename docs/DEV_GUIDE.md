@@ -51,6 +51,7 @@ This will start the gateway and all plugins in docker containers, as well as moc
 - a one-shot bootstrap that enables:
   - `transit`
   - `orbitport-kv` (KV v2)
+  - `key-store` (KV v2 for KMS key-store import/export)
   - `ethereum-secrets-plugin` at `ethereum`
 
 The dev stack expects a plugin repo to exist at `../openbao-eth-plugin` by default. If your checkout lives elsewhere, set:
@@ -122,6 +123,62 @@ curl -X POST http://localhost:8080/api/v1/rpc \
       "Message": "Hello Orbitport",
       "SigningAlgorithm": "ETHEREUM_SECP256K1",
       "MessageType": "EIP191"
+    }
+  }'
+```
+
+Store arbitrary key material in the KMS key-store:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 51,
+    "method": "kms.Import",
+    "params": {
+      "Name": "github/prod",
+      "Secret": {
+        "api_key": "replace-me"
+      }
+    }
+  }'
+```
+
+Export returns a short-lived one-time wrap token, not the raw secret:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 52,
+    "method": "kms.Export",
+    "params": {
+      "Name": "github/prod",
+      "WrapTtlSeconds": 60
+    }
+  }'
+```
+
+Unwrap the returned `WrapToken` once before it expires:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 53,
+    "method": "kms.Unwrap",
+    "params": {
+      "Name": "github/prod",
+      "WrapToken": "REPLACE_ME"
     }
   }'
 ```

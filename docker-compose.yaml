@@ -97,6 +97,7 @@ services:
       - OPENBAO_PQC_MOUNT=pqc
       - OPENBAO_TRANSIT_MOUNT=transit
       - OPENBAO_KV_MOUNT=orbitport-kv
+      - OPENBAO_KEY_STORE_MOUNT=key-store
     volumes:
       - openbao-plugins:/openbao/plugins
       - ./docker/openbao:/orbitport/docker/openbao:ro
@@ -171,6 +172,9 @@ services:
       - ORBITPORT_KMS_OPENBAO_PROXY_URL=http://openbao-proxy:8200
       - ORBITPORT_KMS_TRANSIT_MOUNT=transit
       - ORBITPORT_KMS_KV_MOUNT=orbitport-kv
+      - ORBITPORT_KMS_KEY_STORE_MOUNT=key-store
+      - ORBITPORT_KMS_KEY_STORE_WRAP_TTL_SECS=60
+      - ORBITPORT_KMS_KEY_STORE_MAX_WRAP_TTL_SECS=300
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
       - ORBITPORT_KMS_PQC_MOUNT=pqc
     depends_on:
@@ -231,6 +235,7 @@ services:
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
+      - ORBITPORT_RPC_BODY_MAX_BYTES=65536
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
       - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005

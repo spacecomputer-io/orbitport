@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/auth0/go-jwt-middleware/v2 v2.3.0
+	github.com/cedar-policy/cedar-go v1.8.0
 	github.com/docker/docker v28.0.1+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/hashicorp/golang-lru v1.0.2

@@ -9,7 +9,10 @@ use crate::proto::services::kms::{
 use crate::proto::services::threshold::DkgRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
-use crate::services::kms::{KmsRpcCall, KmsService};
+use crate::services::kms::{
+    KeyStoreDeleteRequest, KeyStoreExportRequest, KeyStoreImportRequest, KeyStoreListRequest,
+    KeyStoreUnwrapRequest, KmsRpcCall, KmsService,
+};
 use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
 #[derive(Serialize)]
@@ -88,6 +91,16 @@ pub enum RpcCall {
     GenerateDataKey(GenerateDataKeyRequest),
     #[serde(rename = "kms.RotateKey")]
     RotateKey(RotateKeyRequest),
+    #[serde(rename = "kms.Import")]
+    Import(KeyStoreImportRequest),
+    #[serde(rename = "kms.Export")]
+    Export(KeyStoreExportRequest),
+    #[serde(rename = "kms.Unwrap")]
+    Unwrap(KeyStoreUnwrapRequest),
+    #[serde(rename = "kms.List")]
+    List(KeyStoreListRequest),
+    #[serde(rename = "kms.Delete")]
+    Delete(KeyStoreDeleteRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
     #[serde(rename = "kms.Encapsulate")]
@@ -121,6 +134,11 @@ impl RpcCall {
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
+            RpcCall::Import(req) => KmsService::validate_key_store_import(req)?,
+            RpcCall::Export(req) => KmsService::validate_key_store_export(req)?,
+            RpcCall::Unwrap(req) => KmsService::validate_key_store_unwrap(req)?,
+            RpcCall::List(req) => KmsService::validate_key_store_list(req)?,
+            RpcCall::Delete(req) => KmsService::validate_key_store_delete(req)?,
             RpcCall::CoordinateDKG(req) => {
                 ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
             }
@@ -205,6 +223,21 @@ impl RpcCall {
                     KmsRpcCall::RotateKey(req),
                 )
                 .await
+            }
+            RpcCall::Import(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Import(req)).await
+            }
+            RpcCall::Export(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Export(req)).await
+            }
+            RpcCall::Unwrap(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Unwrap(req)).await
+            }
+            RpcCall::List(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::List(req)).await
+            }
+            RpcCall::Delete(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Delete(req)).await
             }
             RpcCall::CoordinateDKG(req) => {
                 execute_threshold(
@@ -329,6 +362,76 @@ mod test {
             }
             _ => panic!("expected kms.Decapsulate"),
         }
+    }
+
+    #[test]
+    fn test_deserialize_kms_key_store_import_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "kms.Import",
+            "params": {
+                "Name": "github/prod",
+                "Secret": {
+                    "api_key": "secret-value"
+                }
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::Import(params) => {
+                assert_eq!(params.name, "github/prod");
+                assert_eq!(
+                    params
+                        .secret
+                        .get("api_key")
+                        .and_then(|value| value.as_str()),
+                    Some("secret-value")
+                );
+            }
+            _ => panic!("expected kms.Import"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_key_store_export_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "kms.Export",
+            "params": {
+                "Name": "github/prod",
+                "WrapTtlSeconds": 120
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::Export(params) => {
+                assert_eq!(params.name, "github/prod");
+                assert_eq!(params.wrap_ttl_seconds, Some(120));
+            }
+            _ => panic!("expected kms.Export"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_key_store_unwrap_redacts_debug() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 12,
+            "method": "kms.Unwrap",
+            "params": {
+                "Name": "github/prod",
+                "WrapToken": "token-secret"
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        let debug = format!("{req:?}");
+        assert!(debug.contains("<redacted>"));
+        assert!(!debug.contains("token-secret"));
     }
 
     #[test]

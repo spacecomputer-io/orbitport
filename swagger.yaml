@@ -79,3 +79,251 @@ paths:
                     description: Error message
               example:
                 message: "Internal Server Error"
+  /api/v1/rpc:
+    post:
+      summary: JSON-RPC endpoint
+      description: |
+        Authenticated JSON-RPC endpoint for Orbitport services. KMS key-store
+        methods use the existing `/api/v1/rpc` path with methods
+        `kms.Import`, `kms.Export`, `kms.Unwrap`, `kms.List`, and `kms.Delete`.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonRpcRequest'
+            examples:
+              kmsImport:
+                summary: Store key material
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: kms.Import
+                  params:
+                    Name: github/prod
+                    Secret:
+                      api_key: replace-me
+              kmsExport:
+                summary: Export a wrapped key-store secret
+                value:
+                  jsonrpc: "2.0"
+                  id: 2
+                  method: kms.Export
+                  params:
+                    Name: github/prod
+                    WrapTtlSeconds: 60
+              kmsUnwrap:
+                summary: Redeem a wrap token once
+                value:
+                  jsonrpc: "2.0"
+                  id: 3
+                  method: kms.Unwrap
+                  params:
+                    Name: github/prod
+                    WrapToken: REPLACE_ME
+      responses:
+        '200':
+          description: JSON-RPC response. Application errors are returned in the JSON-RPC `error` object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+              examples:
+                kmsImport:
+                  summary: Import response
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      Name: github/prod
+                      Version: 1
+                kmsExport:
+                  summary: Export response
+                  value:
+                    jsonrpc: "2.0"
+                    id: 2
+                    result:
+                      Name: github/prod
+                      WrapToken: hvs.REDACTED
+                      TtlSeconds: 60
+                      ExpiresAt: "2026-01-01T00:01:00Z"
+                kmsUnwrap:
+                  summary: Unwrap response
+                  value:
+                    jsonrpc: "2.0"
+                    id: 3
+                    result:
+                      Name: github/prod
+                      Secret:
+                        api_key: replace-me
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    JsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - id
+        - method
+        - params
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          type: integer
+          format: int64
+        method:
+          type: string
+          enum:
+            - ctrng.Get
+            - kms.GetCapabilities
+            - kms.CreateKey
+            - kms.Encrypt
+            - kms.Decrypt
+            - kms.Sign
+            - kms.Encapsulate
+            - kms.Decapsulate
+            - kms.GenerateDataKey
+            - kms.RotateKey
+            - kms.Import
+            - kms.Export
+            - kms.Unwrap
+            - kms.List
+            - kms.Delete
+            - kms_threshold.CoordinateDKG
+        params:
+          type: object
+          additionalProperties: true
+          description: Method-specific params. See examples and key-store param schemas below.
+          nullable: true
+    JsonRpcResponse:
+      type: object
+      required:
+        - jsonrpc
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          type: integer
+          format: int64
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          $ref: '#/components/schemas/JsonRpcError'
+    JsonRpcError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          nullable: true
+    KmsImportParams:
+      type: object
+      required:
+        - Name
+        - Secret
+      properties:
+        Name:
+          $ref: '#/components/schemas/KmsKeyStoreName'
+        Secret:
+          type: object
+          additionalProperties: true
+          description: Arbitrary JSON object stored durably in the KMS key-store.
+    KmsExportParams:
+      type: object
+      required:
+        - Name
+      properties:
+        Name:
+          $ref: '#/components/schemas/KmsKeyStoreName'
+        WrapTtlSeconds:
+          type: integer
+          minimum: 1
+          maximum: 300
+          default: 60
+          description: TTL for the one-time OpenBao wrapping token. The stored secret remains durable.
+    KmsUnwrapParams:
+      type: object
+      required:
+        - Name
+        - WrapToken
+      properties:
+        Name:
+          $ref: '#/components/schemas/KmsKeyStoreName'
+        WrapToken:
+          type: string
+          description: One-time token returned by `kms.Export`.
+    KmsListParams:
+      type: object
+      properties:
+        Prefix:
+          type: string
+          maxLength: 256
+          description: Optional key-store name prefix to list.
+    KmsDeleteParams:
+      type: object
+      required:
+        - Name
+      properties:
+        Name:
+          $ref: '#/components/schemas/KmsKeyStoreName'
+    KmsImportResult:
+      type: object
+      properties:
+        Name:
+          type: string
+        Version:
+          type: integer
+    KmsExportResult:
+      type: object
+      properties:
+        Name:
+          type: string
+        WrapToken:
+          type: string
+        TtlSeconds:
+          type: integer
+        ExpiresAt:
+          type: string
+          format: date-time
+    KmsUnwrapResult:
+      type: object
+      properties:
+        Name:
+          type: string
+        Secret:
+          type: object
+          additionalProperties: true
+    KmsListResult:
+      type: object
+      properties:
+        Names:
+          type: array
+          items:
+            type: string
+    KmsDeleteResult:
+      type: object
+      properties:
+        Name:
+          type: string
+        Deleted:
+          type: boolean
+    KmsKeyStoreName:
+      type: string
+      maxLength: 256
+      pattern: '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'
+      description: Slash-separated key-store name. `.` and `..` path segments are rejected.

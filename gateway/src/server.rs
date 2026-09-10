@@ -56,6 +56,7 @@ pub async fn start(
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
+    rpc_body_max_bytes: u64,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -84,7 +85,7 @@ pub async fn start(
             1,
             "rpc",
         ))
-        .and(warp::body::content_length_limit(1024))
+        .and(warp::body::content_length_limit(rpc_body_max_bytes))
         .and(warp::body::json())
         .and(warp::any().map(move || plugin_catalog.clone()))
         .and(warp::any().map(move || account_client_rpc.clone()))

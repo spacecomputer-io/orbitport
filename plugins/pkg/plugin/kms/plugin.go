@@ -19,9 +19,12 @@ import (
 type Plugin struct {
 	proto.UnimplementedKmsPluginServer
 
-	client    *openBaoClient
-	now       func() time.Time
-	providers map[string]kmsProvider
+	client                 *openBaoClient
+	now                    func() time.Time
+	providers              map[string]kmsProvider
+	keyStoreAuthorizer     *keyStoreAuthorizer
+	keyStoreWrapTTLSeconds int
+	keyStoreMaxTTLSeconds  int
 }
 
 var logger = utils.GetLogger("orbitport:kms")
@@ -30,31 +33,48 @@ var reservedKmsRe = regexp.MustCompile(`^kms:`)
 
 func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
+	cfg = withKMSConfigDefaults(cfg)
 	if cfg.OpenBaoProxyURL == "" {
 		return nil, fmt.Errorf("ORBITPORT_KMS_OPENBAO_PROXY_URL is required")
 	}
 	logger.Infof(
-		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, ethereum mount=%s, pqc mount=%s",
+		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, key-store mount=%s, ethereum mount=%s, pqc mount=%s",
 		cfg.OpenBaoProxyURL,
 		cfg.TransitMount,
 		cfg.KVMount,
+		cfg.KeyStoreMount,
 		cfg.EthereumMount,
 		cfg.PQCMount,
 	)
-	return newPlugin(cfg, newOpenBaoClient(cfg)), nil
+	return newPluginWithConfig(cfg, newOpenBaoClient(cfg))
 }
 
 func newPlugin(cfg *kmsConfig, client *openBaoClient) *Plugin {
-	_ = cfg
+	plugin, err := newPluginWithConfig(cfg, client)
+	if err != nil {
+		panic(err)
+	}
+	return plugin
+}
+
+func newPluginWithConfig(cfg *kmsConfig, client *openBaoClient) (*Plugin, error) {
+	cfg = withKMSConfigDefaults(cfg)
+	authorizer, err := newKeyStoreAuthorizer(cfg)
+	if err != nil {
+		return nil, err
+	}
 	return &Plugin{
-		client: client,
-		now:    time.Now,
+		client:                 client,
+		now:                    time.Now,
+		keyStoreAuthorizer:     authorizer,
+		keyStoreWrapTTLSeconds: cfg.KeyStoreWrapTTLSecs,
+		keyStoreMaxTTLSeconds:  cfg.KeyStoreMaxWrapTTLSecs,
 		providers: map[string]kmsProvider{
 			schemeTransit:  newTransitProvider(client),
 			schemeEthereum: newEthereumProvider(client),
 			schemePQC:      newPQCProvider(client),
 		},
-	}
+	}, nil
 }
 
 func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto.EncryptResponse, error) {

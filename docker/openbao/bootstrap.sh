@@ -13,6 +13,7 @@ OPENBAO_THRESHOLD_PLUGIN_NAME="${OPENBAO_THRESHOLD_PLUGIN_NAME:-openbao-threshol
 OPENBAO_THRESHOLD_MOUNTS="${OPENBAO_THRESHOLD_MOUNTS:-threshold}"
 OPENBAO_TRANSIT_MOUNT="${OPENBAO_TRANSIT_MOUNT:-transit}"
 OPENBAO_KV_MOUNT="${OPENBAO_KV_MOUNT:-orbitport-kv}"
+OPENBAO_KEY_STORE_MOUNT="${OPENBAO_KEY_STORE_MOUNT:-key-store}"
 
 export BAO_ADDR="${OPENBAO_ADDR}"
 export BAO_TOKEN="${OPENBAO_TOKEN}"
@@ -37,6 +38,7 @@ enable_mount_if_missing() {
 
 enable_mount_if_missing "${OPENBAO_TRANSIT_MOUNT}" transit
 enable_mount_if_missing "${OPENBAO_KV_MOUNT}" kv-v2
+enable_mount_if_missing "${OPENBAO_KEY_STORE_MOUNT}" kv-v2
 
 if [ -f "${eth_plugin_path}" ]; then
     plugin_sha="$(sha256sum "${eth_plugin_path}" | cut -d' ' -f1)"

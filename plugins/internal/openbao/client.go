@@ -56,7 +56,30 @@ func (c *Client) Post(ctx context.Context, target string, payload any, into any)
 }
 
 func (c *Client) Get(ctx context.Context, target string, into any) error {
+	return c.GetWithHeaders(ctx, target, nil, into)
+}
+
+func (c *Client) GetWithHeaders(ctx context.Context, target string, headers map[string]string, into any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return fmt.Errorf("create openbao request: %w", err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	return c.do(req, into)
+}
+
+func (c *Client) Delete(ctx context.Context, target string, into any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, target, nil)
+	if err != nil {
+		return fmt.Errorf("create openbao request: %w", err)
+	}
+	return c.do(req, into)
+}
+
+func (c *Client) List(ctx context.Context, target string, into any) error {
+	req, err := http.NewRequestWithContext(ctx, "LIST", target, nil)
 	if err != nil {
 		return fmt.Errorf("create openbao request: %w", err)
 	}

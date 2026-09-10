@@ -48,7 +48,7 @@ beacons.yaml                Public beacon registry
 | [`ipfs`](plugins/pkg/plugin/ipfs/README.md) | Kubo wrapper with LRU cache, size ceilings, and IPNS publishing | Backs the beacon |
 | [`masterseed`](plugins/pkg/plugin/masterseed/README.md) | Rolling pool of satellite seeds with offset-reserved derivation | Serves cTRNG to the gateway |
 | [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS | No RPC; consumes the others |
-| [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate) backed by OpenBao | Wraps Transit + Ethereum secrets engines |
+| [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate / key-store) backed by OpenBao | Wraps Transit, Ethereum, PQC, and KV-v2 key-store engines |
 | [`account`](plugins/pkg/plugin/account/README.md) | Per-request credit gating against the dashboard backend account service | Holds credits before serving compute; settles on success, releases on failure |
 
 ## Configuration
@@ -69,6 +69,7 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
+| `ORBITPORT_RPC_BODY_MAX_BYTES` | `65536` | Max JSON-RPC request body size |
 
 ### Plugin dispatcher
 
@@ -143,6 +144,11 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | `ORBITPORT_KMS_ETHEREUM_MOUNT` | `ethereum` | Mount path of the Ethereum Secrets Engine |
 | `ORBITPORT_KMS_PQC_MOUNT` | `pqc` | Mount path of the PQC Secrets Engine |
 | `ORBITPORT_KMS_KV_MOUNT` | `secret` | KV v2 mount used to persist key metadata |
+| `ORBITPORT_KMS_KEY_STORE_MOUNT` | `key-store` | KV v2 mount used by KMS key-store import/export |
+| `ORBITPORT_KMS_KEY_STORE_WRAP_TTL_SECS` | `60` | Default TTL for key-store export wrap tokens |
+| `ORBITPORT_KMS_KEY_STORE_MAX_WRAP_TTL_SECS` | `300` | Maximum accepted TTL for key-store export wrap tokens |
+| `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Optional Cedar policy document appended to the default key-store owner policy |
+| `ORBITPORT_KMS_KEY_STORE_CEDAR_DEFAULT_OWNER_POLICY` | `true` | Enables the built-in Cedar policy permitting an owner to access their own key-store namespace |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 
 ### Plugin: `account`
