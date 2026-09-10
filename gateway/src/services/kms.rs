@@ -1484,7 +1484,7 @@ mod test {
             name: "github/prod".to_string(),
             secret: serde_json::Map::from_iter([(
                 "api_key".to_string(),
-                serde_json::Value::String("secret".to_string()),
+                serde_json::json!("secret"),
             )]),
         };
 
@@ -1508,7 +1508,7 @@ mod test {
             name: "github/prod".to_string(),
             secret: serde_json::Map::from_iter([(
                 "api_key".to_string(),
-                serde_json::Value::String("super-sensitive".to_string()),
+                serde_json::json!("super-sensitive"),
             )]),
         };
 
