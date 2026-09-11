@@ -24,7 +24,7 @@ async fn test_e2e_offline() {
         let n = 1;
         for _ in 0..n {
             let resp = common::get_trng(&base_url, &access_token, None, None, None).await?;
-            assert!(resp.data.len() > 0, "Response data is empty");
+            assert!(!resp.data.is_empty(), "Response data is empty");
         }
         tracing::info!("All requests completed successfully");
         Ok::<(), common::E2EError>(())

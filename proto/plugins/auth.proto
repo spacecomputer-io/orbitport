@@ -5,7 +5,8 @@ option go_package = "github.com/spacecomputer-io/orbitport/plugins/proto";
 package auth;
 
 service AuthPlugin {
-    rpc ValidateToken(TokenValidationRequest) returns (TokenValidationResponse); 
+    rpc ValidateToken(TokenValidationRequest) returns (TokenValidationResponse);
+    rpc ValidateServiceToken(ServiceTokenValidationRequest) returns (ServiceTokenValidationResponse);
 }
 
 message TokenValidationRequest {
@@ -14,5 +15,25 @@ message TokenValidationRequest {
 
 message TokenValidationResponse {
     bool ok = 1;
+    string client_id = 2;
+    // Non-empty jti = the token was a PAT (dual-validation discriminator);
+    // empty = legacy Auth0 M2M.
+    string jti = 3;
+    // KMS tenancy (D9), legacy Auth0 only: the RAW sub including any @clients
+    // suffix. On the PAT path this is the self-asserted claim, which the
+    // gateway ignores in favour of HoldResponse.kms_tenant.
+    string kms_tenant = 4;
+}
+
+// Validates an Auth0 M2M token for a gateway-internal capability. The caller
+// supplies the scopes required by the route it is protecting.
+message ServiceTokenValidationRequest {
+    string token = 1;
+    repeated string required_scopes = 2;
+}
+
+message ServiceTokenValidationResponse {
+    bool ok = 1;
+    // The Auth0 M2M client ID, without the @clients suffix.
     string client_id = 2;
 }

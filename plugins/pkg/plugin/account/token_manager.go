@@ -93,6 +93,13 @@ func (t *tokenManager) token(ctx context.Context) (string, error) {
 	return t.cache.Get().accessToken, nil
 }
 
+// invalidate drops the cached token so the next token() call refetches.
+// Expiry-based freshness cannot see a token the server rejects early, so the
+// dashboard client calls this when it gets a 401.
+func (t *tokenManager) invalidate() {
+	t.cache.Set(cachedToken{})
+}
+
 // fresh reports whether the cached token is non-empty and still outside the
 // refreshLead window before expiry.
 func (t *tokenManager) fresh(c cachedToken) (string, bool) {
@@ -143,7 +150,10 @@ func (t *tokenManager) refresh(ctx context.Context) error {
 
 	t.cache.Set(cachedToken{
 		accessToken: parsed.AccessToken,
-		expiresAt:   time.Now().Add(time.Duration(parsed.ExpiresIn) * time.Second),
+		// .Round(0) strips the monotonic clock reading, which does not advance
+		// while the host is suspended — without it a token stays "fresh"
+		// across a laptop sleep and every dashboard call 401s.
+		expiresAt: time.Now().Add(time.Duration(parsed.ExpiresIn) * time.Second).Round(0),
 	})
 
 	t.logger.Debugf("Auth0 M2M token refreshed, expires_in=%ds", parsed.ExpiresIn)

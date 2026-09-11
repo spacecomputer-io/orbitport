@@ -8,15 +8,20 @@ use crate::metrics;
 use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
+use crate::auth::pat_issue_route;
 use crate::filters::{
     AuthContextWithHold, RateLimiter, account_release, account_settle, with_account_hold,
     with_auth, with_rate_limiter,
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
+use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
+use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
 use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
 use crate::trng::SRC_DERIVED_TRNG;
 use tonic::transport::Channel;
+use warp::filters::BoxedFilter;
+use warp::reply::Response;
 
 impl Reject for GatewayError {}
 
@@ -49,8 +54,10 @@ struct PostBody {
 
 /// Starts the gateway server, returns a future that resolves when the server stops or fails
 /// It exposes the following enpoints:
+#[allow(clippy::too_many_arguments)]
 pub async fn start(
     http_port: u16,
+    internal_port: u16,
     service_manager: Arc<ServiceManager>,
     plugin_catalog: Arc<PluginCatalog>,
     limit: u32,
@@ -65,6 +72,8 @@ pub async fn start(
 
     let account_client: Option<AccountPluginClient<Channel>> =
         plugin_catalog.get_account_client().await.ok();
+    let patissuer_client: Option<PatIssuerPluginClient<Channel>> =
+        plugin_catalog.get_patissuer_client().await.ok();
     let account_client_rpc = account_client.clone();
     let account_client_get = account_client.clone();
     let account_client_post = account_client.clone();
@@ -138,15 +147,76 @@ pub async fn start(
         }))
     });
 
-    let routes = get_route
+    let routes: BoxedFilter<(Response,)> = get_route
         .or(post_route)
         .or(rpc_route)
         .or(health_route.with(warp::log("health_check")))
-        .recover(handle_rejection);
+        .map(warp::reply::Reply::into_response)
+        .boxed();
+
+    // The public key set is published by the jwks plugin, not here. The
+    // gateway routes and meters the API rather than republishing another
+    // service's keys.
+    let mut internal_task = None;
+    if let Some(client) = patissuer_client {
+        let internal = internal_routes(client, service_manager.get_auth_client());
+        tracing::info!("Starting internal http server on: 0.0.0.0:{internal_port}");
+        let server = warp::serve(internal)
+            .bind(([0, 0, 0, 0], internal_port))
+            .await
+            .graceful(shutdown_signal());
+        internal_task = Some(tokio::spawn(server.run()));
+    }
+
+    let routes = routes.recover(handle_rejection);
 
     tracing::info!("Starting http server on: 0.0.0.0:{}", http_port);
 
-    warp::serve(routes).run(([0, 0, 0, 0], http_port)).await;
+    let server = warp::serve(routes)
+        .bind(([0, 0, 0, 0], http_port))
+        .await
+        .graceful(shutdown_signal());
+
+    server.run().await;
+
+    if let Some(task) = internal_task {
+        let _ = task.await;
+    }
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut signal) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            signal.recv().await;
+        } else {
+            std::future::pending().await
+        }
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+    tracing::info!("Shutdown signal received, draining requests...");
+}
+
+/// Everything served on the internal listener. PAT issuance lives here and
+/// nowhere else, so no configuration can expose it on the public port.
+pub fn internal_routes(
+    client: PatIssuerPluginClient<Channel>,
+    auth_client: AuthPluginClient<Channel>,
+) -> impl Filter<Extract = (impl Reply,), Error = Infallible> + Clone {
+    pat_issue_route(client, auth_client).recover(handle_rejection)
 }
 
 /// Maps gateway-specific custom rejections to HTTP responses. Without this,
@@ -173,6 +243,24 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
             GatewayError::AuthenticationFailed => (
                 StatusCode::UNAUTHORIZED,
                 serde_json::json!({"error": "authentication_failed"}),
+            ),
+            GatewayError::ServiceAuthorizationDenied => (
+                StatusCode::FORBIDDEN,
+                serde_json::json!({"error": "service_authorization_denied"}),
+            ),
+            GatewayError::PatExpired => (
+                StatusCode::UNAUTHORIZED,
+                serde_json::json!({
+                    "error": "token_expired",
+                    "message": "Personal access token expired — create a new one in the dashboard"
+                }),
+            ),
+            GatewayError::InvalidCredential => (
+                StatusCode::UNAUTHORIZED,
+                serde_json::json!({
+                    "error": "invalid_credential",
+                    "message": "Unknown or revoked credential"
+                }),
             ),
             GatewayError::AuthPluginConnectionError(_) => (
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -241,7 +329,7 @@ async fn handle_rpc(
         return Ok(warp::reply::json(&res));
     }
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-    let client_id = ctx.auth.client_id;
+    let client_id = ctx.kms_tenant;
 
     match timeout(
         REQUEST_TIMEOUT,
@@ -468,4 +556,24 @@ fn new_req_id() -> u64 {
     use rand::Rng;
     let mut rng = rand::rng();
     rng.random_range(1..u64::MAX)
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[tokio::test]
+    async fn pat_expired_rejection_maps_to_401_token_expired() {
+        let route = warp::any()
+            .and_then(|| async {
+                Err::<warp::reply::Json, Rejection>(warp::reject::custom(GatewayError::PatExpired))
+            })
+            .recover(handle_rejection);
+
+        let resp = warp::test::request().reply(&route).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+        assert_eq!(body["error"], "token_expired");
+        assert!(body["message"].as_str().unwrap().contains("expired"));
+    }
 }
