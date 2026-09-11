@@ -1,7 +1,6 @@
 package kms
 
 import (
-	_ "embed"
 	"fmt"
 	"os"
 
@@ -11,15 +10,11 @@ import (
 )
 
 const (
-	defaultKeyStorePolicyName = "key-store-default.cedar"
-	keyStorePrincipalType     = "KmsClient"
-	keyStoreKeyType           = "KeyStoreKey"
-	keyStoreNamespaceType     = "KeyStoreNamespace"
-	keyStoreActionType        = "Action"
+	keyStorePrincipalType = "KmsClient"
+	keyStoreKeyType       = "KeyStoreKey"
+	keyStoreNamespaceType = "KeyStoreNamespace"
+	keyStoreActionType    = "Action"
 )
-
-//go:embed cedar/key_store_default.cedar
-var defaultKeyStorePolicy []byte
 
 type keyStoreAuthorizer struct {
 	policies *cedar.PolicySet
@@ -27,11 +22,6 @@ type keyStoreAuthorizer struct {
 
 func newKeyStoreAuthorizer(cfg *kmsConfig) (*keyStoreAuthorizer, error) {
 	policies := cedar.NewPolicySet()
-	if cfg.KeyStoreCedarDefaultOwnerPolicy {
-		if err := addPolicyDocument(policies, defaultKeyStorePolicyName, defaultKeyStorePolicy); err != nil {
-			return nil, err
-		}
-	}
 	if cfg.KeyStoreCedarPolicyPath != "" {
 		document, err := os.ReadFile(cfg.KeyStoreCedarPolicyPath)
 		if err != nil {

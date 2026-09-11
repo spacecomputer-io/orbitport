@@ -149,14 +149,16 @@ separate from operational KMS metadata:
 - **List depth** — recursive `List` traversal is bounded by the same configured
   maximum name depth so listing cannot recurse through an unbounded hierarchy.
 
-Authorization is enforced in the KMS plugin with Cedar. The default policy
-is embedded from `cedar/key_store_default.cedar` and adds policy control on top
-of path-based tenant isolation. It permits the authenticated owner to call
+Authorization is enforced in the KMS plugin with Cedar. Docker images include
+the default owner policy file at `/etc/orbitport/kms/key_store_default.cedar`;
+configure `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` to point at that file or a
+custom policy file. If the path is unset, key-store requests are denied by the
+empty policy set. The default policy adds policy control on top of path-based
+tenant isolation and permits the authenticated owner to call
 `kms_keystore.Put`, `kms_keystore.Export`, `kms_keystore.Unwrap`,
 `kms_keystore.List`, and `kms_keystore.Delete` on their own key-store
-namespace. Operators can append Cedar policies with
-`ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH`; Cedar `forbid` policies override
-the default permit and can be used to block operations such as deleting
+namespace. Operators can copy the default policy and add Cedar `forbid`
+policies, which override permits, to block operations such as deleting
 production entries.
 
 ## Capabilities

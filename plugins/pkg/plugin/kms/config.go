@@ -3,49 +3,46 @@ package kms
 import "github.com/spf13/viper"
 
 const (
-	defaultKMSEthereumMount                   = "ethereum"
-	defaultKMSPQCMount                        = "pqc"
-	defaultKMSTransitMount                    = "transit"
-	defaultKMSKVMount                         = "secret"
-	defaultKMSKeyStoreMount                   = "key-store"
-	defaultKMSKeyStoreWrapTTLSecs             = 60
-	defaultKMSKeyStoreMaxWrapTTLSecs          = 300
-	defaultKMSKeyStoreMaxDepth                = 3
-	defaultKMSKeyStoreCedarDefaultOwnerPolicy = true
-	defaultKMSTimeoutSecs                     = 10
+	defaultKMSEthereumMount          = "ethereum"
+	defaultKMSPQCMount               = "pqc"
+	defaultKMSTransitMount           = "transit"
+	defaultKMSKVMount                = "secret"
+	defaultKMSKeyStoreMount          = "key-store"
+	defaultKMSKeyStoreWrapTTLSecs    = 60
+	defaultKMSKeyStoreMaxWrapTTLSecs = 300
+	defaultKMSKeyStoreMaxDepth       = 3
+	defaultKMSTimeoutSecs            = 10
 )
 
 type kmsConfig struct {
-	OpenBaoProxyURL                 string
-	EthereumMount                   string
-	PQCMount                        string
-	TransitMount                    string
-	KVMount                         string
-	KeyStoreMount                   string
-	KeyStoreWrapTTLSecs             int
-	KeyStoreMaxWrapTTLSecs          int
-	KeyStoreMaxDepth                int
-	KeyStoreCedarPolicyPath         string
-	KeyStoreCedarDefaultOwnerPolicy bool
-	TimeoutSecs                     int
+	OpenBaoProxyURL         string
+	EthereumMount           string
+	PQCMount                string
+	TransitMount            string
+	KVMount                 string
+	KeyStoreMount           string
+	KeyStoreWrapTTLSecs     int
+	KeyStoreMaxWrapTTLSecs  int
+	KeyStoreMaxDepth        int
+	KeyStoreCedarPolicyPath string
+	TimeoutSecs             int
 }
 
 func readFromEnv() *kmsConfig {
 	setDefaults()
 
 	return &kmsConfig{
-		OpenBaoProxyURL:                 viper.GetString("KMS_OPENBAO_PROXY_URL"),
-		EthereumMount:                   viper.GetString("KMS_ETHEREUM_MOUNT"),
-		PQCMount:                        viper.GetString("KMS_PQC_MOUNT"),
-		TransitMount:                    viper.GetString("KMS_TRANSIT_MOUNT"),
-		KVMount:                         viper.GetString("KMS_KV_MOUNT"),
-		KeyStoreMount:                   viper.GetString("KMS_KEY_STORE_MOUNT"),
-		KeyStoreWrapTTLSecs:             viper.GetInt("KMS_KEY_STORE_WRAP_TTL_SECS"),
-		KeyStoreMaxWrapTTLSecs:          viper.GetInt("KMS_KEY_STORE_MAX_WRAP_TTL_SECS"),
-		KeyStoreMaxDepth:                viper.GetInt("KMS_KEY_STORE_MAX_DEPTH"),
-		KeyStoreCedarPolicyPath:         viper.GetString("KMS_KEY_STORE_CEDAR_POLICY_PATH"),
-		KeyStoreCedarDefaultOwnerPolicy: viper.GetBool("KMS_KEY_STORE_CEDAR_DEFAULT_OWNER_POLICY"),
-		TimeoutSecs:                     viper.GetInt("KMS_TIMEOUT_SECS"),
+		OpenBaoProxyURL:         viper.GetString("KMS_OPENBAO_PROXY_URL"),
+		EthereumMount:           viper.GetString("KMS_ETHEREUM_MOUNT"),
+		PQCMount:                viper.GetString("KMS_PQC_MOUNT"),
+		TransitMount:            viper.GetString("KMS_TRANSIT_MOUNT"),
+		KVMount:                 viper.GetString("KMS_KV_MOUNT"),
+		KeyStoreMount:           viper.GetString("KMS_KEY_STORE_MOUNT"),
+		KeyStoreWrapTTLSecs:     viper.GetInt("KMS_KEY_STORE_WRAP_TTL_SECS"),
+		KeyStoreMaxWrapTTLSecs:  viper.GetInt("KMS_KEY_STORE_MAX_WRAP_TTL_SECS"),
+		KeyStoreMaxDepth:        viper.GetInt("KMS_KEY_STORE_MAX_DEPTH"),
+		KeyStoreCedarPolicyPath: viper.GetString("KMS_KEY_STORE_CEDAR_POLICY_PATH"),
+		TimeoutSecs:             viper.GetInt("KMS_TIMEOUT_SECS"),
 	}
 }
 
@@ -59,7 +56,6 @@ func setDefaults() {
 	viper.SetDefault("KMS_KEY_STORE_MAX_WRAP_TTL_SECS", defaultKMSKeyStoreMaxWrapTTLSecs)
 	viper.SetDefault("KMS_KEY_STORE_MAX_DEPTH", defaultKMSKeyStoreMaxDepth)
 	viper.SetDefault("KMS_KEY_STORE_CEDAR_POLICY_PATH", "")
-	viper.SetDefault("KMS_KEY_STORE_CEDAR_DEFAULT_OWNER_POLICY", defaultKMSKeyStoreCedarDefaultOwnerPolicy)
 	viper.SetDefault("KMS_TIMEOUT_SECS", defaultKMSTimeoutSecs)
 }
 

@@ -16,7 +16,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const testKeyStoreName = "github/prod"
+const (
+	testKeyStoreName              = "github/prod"
+	testKeyStoreDefaultPolicyPath = "cedar/key_store_default.cedar"
+)
 
 func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	clientID := "client-a"
@@ -442,7 +445,13 @@ func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
 }
 
 func TestKeyStoreCedarForbidOverridesDefaultOwnerPermit(t *testing.T) {
-	policyFile := writeTempKeyStorePolicy(t, `forbid (
+	defaultPolicy, err := os.ReadFile(testKeyStoreDefaultPolicyPath)
+	if err != nil {
+		t.Fatalf("read default key-store policy: %v", err)
+	}
+	policyFile := writeTempKeyStorePolicy(t, string(defaultPolicy)+`
+
+forbid (
 		principal,
 		action == Action::"kms_keystore.Delete",
 		resource
@@ -453,7 +462,7 @@ func TestKeyStoreCedarForbidOverridesDefaultOwnerPermit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
+	_, err = plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
 		ClientId: "client-a",
 		Name:     testKeyStoreName,
 	})
@@ -470,18 +479,20 @@ func newKeyStoreTestPlugin(t *testing.T, handler http.Handler) (*Plugin, *httpte
 func newKeyStoreTestPluginWithPolicy(t *testing.T, policyPath string, handler http.Handler) (*Plugin, *httptest.Server) {
 	t.Helper()
 	server := httptest.NewServer(handler)
+	if policyPath == "" {
+		policyPath = testKeyStoreDefaultPolicyPath
+	}
 	cfg := &kmsConfig{
-		OpenBaoProxyURL:                 server.URL,
-		EthereumMount:                   "ethereum",
-		TransitMount:                    "transit",
-		KVMount:                         "secret",
-		KeyStoreMount:                   "key-store",
-		KeyStoreWrapTTLSecs:             60,
-		KeyStoreMaxWrapTTLSecs:          300,
-		KeyStoreMaxDepth:                3,
-		KeyStoreCedarPolicyPath:         policyPath,
-		KeyStoreCedarDefaultOwnerPolicy: true,
-		TimeoutSecs:                     10,
+		OpenBaoProxyURL:         server.URL,
+		EthereumMount:           "ethereum",
+		TransitMount:            "transit",
+		KVMount:                 "secret",
+		KeyStoreMount:           "key-store",
+		KeyStoreWrapTTLSecs:     60,
+		KeyStoreMaxWrapTTLSecs:  300,
+		KeyStoreMaxDepth:        3,
+		KeyStoreCedarPolicyPath: policyPath,
+		TimeoutSecs:             10,
 	}
 	return newPlugin(cfg, newOpenBaoClient(cfg)), server
 }

@@ -148,8 +148,7 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | `ORBITPORT_KMS_KEY_STORE_WRAP_TTL_SECS` | `60` | Default TTL for key-store export wrap tokens |
 | `ORBITPORT_KMS_KEY_STORE_MAX_WRAP_TTL_SECS` | `300` | Maximum accepted TTL for key-store export wrap tokens |
 | `ORBITPORT_KMS_KEY_STORE_MAX_DEPTH` | `3` | Maximum slash-separated key-store name depth accepted by put/export/unwrap/delete and recursive list |
-| `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Optional Cedar policy document appended to the default key-store owner policy |
-| `ORBITPORT_KMS_KEY_STORE_CEDAR_DEFAULT_OWNER_POLICY` | `true` | Enables the built-in Cedar policy permitting an owner to access their own key-store namespace |
+| `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Cedar policy document loaded for key-store authorization; Docker images include the default owner policy at `/etc/orbitport/kms/key_store_default.cedar` |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 
 ### Plugin: `account`
