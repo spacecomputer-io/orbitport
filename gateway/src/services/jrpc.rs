@@ -10,8 +10,8 @@ use crate::proto::services::threshold::DkgRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{
-    KeyStoreDeleteRequest, KeyStoreExportRequest, KeyStoreListRequest, KeyStorePutRequest,
-    KeyStoreUnwrapRequest, KmsRpcCall, KmsService,
+    KeyStoreDeleteRequest, KeyStoreGetRequest, KeyStoreListRequest, KeyStorePutRequest, KmsRpcCall,
+    KmsService,
 };
 use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
@@ -93,10 +93,8 @@ pub enum RpcCall {
     RotateKey(RotateKeyRequest),
     #[serde(rename = "kms_keystore.Put")]
     Put(KeyStorePutRequest),
-    #[serde(rename = "kms_keystore.Export")]
-    Export(KeyStoreExportRequest),
-    #[serde(rename = "kms_keystore.Unwrap")]
-    Unwrap(KeyStoreUnwrapRequest),
+    #[serde(rename = "kms_keystore.Get")]
+    Get(KeyStoreGetRequest),
     #[serde(rename = "kms_keystore.List")]
     List(KeyStoreListRequest),
     #[serde(rename = "kms_keystore.Delete")]
@@ -135,8 +133,7 @@ impl RpcCall {
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
             RpcCall::Put(req) => KmsService::validate_key_store_put(req)?,
-            RpcCall::Export(req) => KmsService::validate_key_store_export(req)?,
-            RpcCall::Unwrap(req) => KmsService::validate_key_store_unwrap(req)?,
+            RpcCall::Get(req) => KmsService::validate_key_store_get(req)?,
             RpcCall::List(req) => KmsService::validate_key_store_list(req)?,
             RpcCall::Delete(req) => KmsService::validate_key_store_delete(req)?,
             RpcCall::CoordinateDKG(req) => {
@@ -227,11 +224,8 @@ impl RpcCall {
             RpcCall::Put(req) => {
                 execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Put(req)).await
             }
-            RpcCall::Export(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Export(req)).await
-            }
-            RpcCall::Unwrap(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Unwrap(req)).await
+            RpcCall::Get(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Get(req)).await
             }
             RpcCall::List(req) => {
                 execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::List(req)).await
@@ -395,48 +389,22 @@ mod test {
     }
 
     #[test]
-    fn test_deserialize_kms_key_store_export_pascal_case() {
+    fn test_deserialize_kms_key_store_get_pascal_case() {
         let raw = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 11,
-            "method": "kms_keystore.Export",
+            "method": "kms_keystore.Get",
             "params": {
-                "Name": "github/prod",
-                "WrapTtlSeconds": 120
+                "Name": "github/prod"
             }
         });
 
         let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
         match req.call {
-            RpcCall::Export(params) => {
-                assert_eq!(params.name, "github/prod");
-                assert_eq!(params.wrap_ttl_seconds, Some(120));
-            }
-            _ => panic!("expected kms_keystore.Export"),
-        }
-    }
-
-    #[test]
-    fn test_deserialize_kms_key_store_unwrap_redacts_debug() {
-        let raw = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 12,
-            "method": "kms_keystore.Unwrap",
-            "params": {
-                "Name": "github/prod",
-                "WrapToken": "token-secret"
-            }
-        });
-
-        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
-        let debug = format!("{req:?}");
-        assert!(debug.contains("<redacted>"));
-        assert!(!debug.contains("token-secret"));
-        match req.call {
-            RpcCall::Unwrap(params) => {
+            RpcCall::Get(params) => {
                 assert_eq!(params.name, "github/prod");
             }
-            _ => panic!("expected kms_keystore.Unwrap"),
+            _ => panic!("expected kms_keystore.Get"),
         }
     }
 

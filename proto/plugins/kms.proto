@@ -18,8 +18,7 @@ service KmsPlugin {
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
   rpc Put(KeyStorePutRequest) returns (KeyStorePutResponse);
-  rpc Export(KeyStoreExportRequest) returns (KeyStoreExportResponse);
-  rpc Unwrap(KeyStoreUnwrapRequest) returns (KeyStoreUnwrapResponse);
+  rpc Get(KeyStoreGetRequest) returns (KeyStoreGetResponse);
   rpc List(KeyStoreListRequest) returns (KeyStoreListResponse);
   rpc Delete(KeyStoreDeleteRequest) returns (KeyStoreDeleteResponse);
 }
@@ -155,26 +154,12 @@ message KeyStorePutResponse {
   uint32 version = 2;
 }
 
-message KeyStoreExportRequest {
+message KeyStoreGetRequest {
   string name = 1;
   string client_id = 2;
-  optional uint32 wrap_ttl_seconds = 3;
 }
 
-message KeyStoreExportResponse {
-  string name = 1;
-  string wrap_token = 2;
-  uint32 ttl_seconds = 3;
-  string expires_at = 4;
-}
-
-message KeyStoreUnwrapRequest {
-  string name = 1;
-  string wrap_token = 2;
-  string client_id = 3;
-}
-
-message KeyStoreUnwrapResponse {
+message KeyStoreGetResponse {
   string name = 1;
   string secret_json = 2;
 }

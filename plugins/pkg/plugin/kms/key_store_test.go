@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -65,84 +64,13 @@ func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	}
 }
 
-func TestKeyStoreExportReturnsWrapToken(t *testing.T) {
+func TestKeyStoreGetReturnsSecret(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/key-store/data/owners/"+owner+"/"+testKeyStoreName:
-			if got := r.Header.Get(wrapTTLHeader); got != "60s" {
-				t.Fatalf("expected wrap header 60s, got %q", got)
-			}
-			writeKeyStoreJSON(t, w, map[string]any{
-				"wrap_info": map[string]any{
-					"token":         "wrap-token",
-					"ttl":           60,
-					"creation_time": "2026-01-01T00:00:00Z",
-				},
-			})
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	resp, err := plugin.Export(context.Background(), &proto.KeyStoreExportRequest{
-		ClientId: clientID,
-		Name:     testKeyStoreName,
-	})
-	if err != nil {
-		t.Fatalf("Export returned error: %v", err)
-	}
-	if resp.WrapToken != "wrap-token" || resp.TtlSeconds != 60 {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-	if resp.ExpiresAt != "2026-01-01T00:01:00Z" {
-		t.Fatalf("unexpected expiry: %s", resp.ExpiresAt)
-	}
-}
-
-func TestKeyStoreExportRejectsTTLAboveMax(t *testing.T) {
-	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-	}))
-	defer server.Close()
-
-	ttl := uint32(301)
-	_, err := plugin.Export(context.Background(), &proto.KeyStoreExportRequest{
-		ClientId:       "client-a",
-		Name:           testKeyStoreName,
-		WrapTtlSeconds: &ttl,
-	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
-	}
-}
-
-func TestKeyStoreUnwrapVerifiesCreationPath(t *testing.T) {
-	clientID := "client-a"
-	owner := tenantNamespace(clientID)
-	lookupPath := "key-store/data/owners/" + owner + "/" + testKeyStoreName
-
-	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/sys/wrapping/lookup":
-			var body map[string]string
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode lookup body: %v", err)
-			}
-			if body["token"] != "wrap-token" {
-				t.Fatalf("unexpected lookup token body: %+v", body)
-			}
-			writeKeyStoreJSON(t, w, map[string]any{
-				"data": map[string]any{
-					"creation_path": lookupPath,
-					"creation_ttl":  60,
-					"creation_time": "2026-01-01T00:00:00Z",
-				},
-			})
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/sys/wrapping/unwrap":
 			writeKeyStoreJSON(t, w, map[string]any{
 				"data": map[string]any{
 					"data": map[string]any{
@@ -159,52 +87,45 @@ func TestKeyStoreUnwrapVerifiesCreationPath(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := plugin.Unwrap(context.Background(), &proto.KeyStoreUnwrapRequest{
-		ClientId:  clientID,
-		Name:      testKeyStoreName,
-		WrapToken: "wrap-token",
+	resp, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
+		ClientId: clientID,
+		Name:     testKeyStoreName,
 	})
 	if err != nil {
-		t.Fatalf("Unwrap returned error: %v", err)
+		t.Fatalf("Get returned error: %v", err)
 	}
-	if !strings.Contains(resp.SecretJson, `"api_key":"secret-value"`) {
+	if resp.Name != testKeyStoreName || resp.SecretJson != `{"api_key":"secret-value"}` {
 		t.Fatalf("unexpected secret json: %s", resp.SecretJson)
 	}
 }
 
-func TestKeyStoreUnwrapRejectsTokenForDifferentPath(t *testing.T) {
+func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 	clientID := "client-a"
-	owner := tenantNamespace(clientID)
-	unwrapCalled := false
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/sys/wrapping/lookup":
+		case r.Method == http.MethodGet:
 			writeKeyStoreJSON(t, w, map[string]any{
 				"data": map[string]any{
-					"creation_path": "key-store/data/owners/" + owner + "/other/key",
-					"creation_ttl":  60,
+					"data": map[string]any{
+						"name":   testKeyStoreName,
+						"owner":  tenantNamespace("client-b"),
+						"secret": map[string]any{"api_key": "secret-value"},
+					},
 				},
 			})
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/sys/wrapping/unwrap":
-			unwrapCalled = true
-			t.Fatalf("unwrap should not be called after path mismatch")
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
 	}))
 	defer server.Close()
 
-	_, err := plugin.Unwrap(context.Background(), &proto.KeyStoreUnwrapRequest{
-		ClientId:  clientID,
-		Name:      testKeyStoreName,
-		WrapToken: "wrap-token",
+	_, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
+		ClientId: clientID,
+		Name:     testKeyStoreName,
 	})
 	if status.Code(err) != codes.PermissionDenied {
 		t.Fatalf("expected PermissionDenied, got %v (%v)", status.Code(err), err)
-	}
-	if unwrapCalled {
-		t.Fatal("unwrap was called")
 	}
 }
 
@@ -259,22 +180,11 @@ func TestKeyStoreRejectsNamesAboveConfiguredDepth(t *testing.T) {
 			},
 		},
 		{
-			name: "Export",
+			name: "Get",
 			call: func() error {
-				_, err := plugin.Export(context.Background(), &proto.KeyStoreExportRequest{
+				_, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
 					ClientId: "client-a",
 					Name:     deepName,
-				})
-				return err
-			},
-		},
-		{
-			name: "Unwrap",
-			call: func() error {
-				_, err := plugin.Unwrap(context.Background(), &proto.KeyStoreUnwrapRequest{
-					ClientId:  "client-a",
-					Name:      deepName,
-					WrapToken: "wrap-token",
 				})
 				return err
 			},
@@ -416,7 +326,7 @@ func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) 
 	}))
 	defer server.Close()
 
-	_, err := plugin.Export(context.Background(), &proto.KeyStoreExportRequest{
+	_, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
 		ClientId: "client-a",
 		Name:     "../tenant_b/github/prod",
 	})
@@ -488,8 +398,6 @@ func newKeyStoreTestPluginWithPolicy(t *testing.T, policyPath string, handler ht
 		TransitMount:            "transit",
 		KVMount:                 "secret",
 		KeyStoreMount:           "key-store",
-		KeyStoreWrapTTLSecs:     60,
-		KeyStoreMaxWrapTTLSecs:  300,
 		KeyStoreMaxDepth:        3,
 		KeyStoreCedarPolicyPath: policyPath,
 		TimeoutSecs:             10,

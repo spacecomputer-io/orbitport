@@ -19,13 +19,11 @@ import (
 type Plugin struct {
 	proto.UnimplementedKmsPluginServer
 
-	client                 *openBaoClient
-	now                    func() time.Time
-	providers              map[string]kmsProvider
-	keyStoreAuthorizer     *keyStoreAuthorizer
-	keyStoreWrapTTLSeconds int
-	keyStoreMaxTTLSeconds  int
-	keyStoreMaxDepth       int
+	client             *openBaoClient
+	now                func() time.Time
+	providers          map[string]kmsProvider
+	keyStoreAuthorizer *keyStoreAuthorizer
+	keyStoreMaxDepth   int
 }
 
 var logger = utils.GetLogger("orbitport:kms")
@@ -66,12 +64,10 @@ func newPluginWithConfig(cfg *kmsConfig, client *openBaoClient) (*Plugin, error)
 		return nil, err
 	}
 	return &Plugin{
-		client:                 client,
-		now:                    time.Now,
-		keyStoreAuthorizer:     authorizer,
-		keyStoreWrapTTLSeconds: cfg.KeyStoreWrapTTLSecs,
-		keyStoreMaxTTLSeconds:  cfg.KeyStoreMaxWrapTTLSecs,
-		keyStoreMaxDepth:       cfg.KeyStoreMaxDepth,
+		client:             client,
+		now:                time.Now,
+		keyStoreAuthorizer: authorizer,
+		keyStoreMaxDepth:   cfg.KeyStoreMaxDepth,
 		providers: map[string]kmsProvider{
 			schemeTransit:  newTransitProvider(client),
 			schemeEthereum: newEthereumProvider(client),

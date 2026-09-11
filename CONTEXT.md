@@ -144,10 +144,8 @@ Applies to every `op-plugin` container regardless of which plugin it dispatches 
 | `ORBITPORT_KMS_ETHEREUM_MOUNT` | `ethereum` | Mount path of the Ethereum Secrets Engine |
 | `ORBITPORT_KMS_PQC_MOUNT` | `pqc` | Mount path of the PQC Secrets Engine |
 | `ORBITPORT_KMS_KV_MOUNT` | `secret` | KV v2 mount used to persist key metadata |
-| `ORBITPORT_KMS_KEY_STORE_MOUNT` | `key-store` | KV v2 mount used by KMS key-store put/export/unwrap storage |
-| `ORBITPORT_KMS_KEY_STORE_WRAP_TTL_SECS` | `60` | Default TTL for key-store export wrap tokens |
-| `ORBITPORT_KMS_KEY_STORE_MAX_WRAP_TTL_SECS` | `300` | Maximum accepted TTL for key-store export wrap tokens |
-| `ORBITPORT_KMS_KEY_STORE_MAX_DEPTH` | `3` | Maximum slash-separated key-store name depth accepted by put/export/unwrap/delete and recursive list |
+| `ORBITPORT_KMS_KEY_STORE_MOUNT` | `key-store` | KV v2 mount used by KMS key-store put/get/delete storage |
+| `ORBITPORT_KMS_KEY_STORE_MAX_DEPTH` | `3` | Maximum slash-separated key-store name depth accepted by put/get/delete and recursive list |
 | `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Cedar policy document loaded for key-store authorization; Docker images include the default owner policy at `/etc/orbitport/kms/key_store_default.cedar` |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 

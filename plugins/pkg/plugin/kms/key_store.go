@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
@@ -21,8 +20,7 @@ import (
 const (
 	maxKeyStoreNameLen   = 256
 	keyStoreActionPut    = "kms_keystore.Put"
-	keyStoreActionExport = "kms_keystore.Export"
-	keyStoreActionUnwrap = "kms_keystore.Unwrap"
+	keyStoreActionGet    = "kms_keystore.Get"
 	keyStoreActionList   = "kms_keystore.List"
 	keyStoreActionDelete = "kms_keystore.Delete"
 )
@@ -56,7 +54,7 @@ func (p *Plugin) Put(ctx context.Context, req *proto.KeyStorePutRequest) (*proto
 	return &proto.KeyStorePutResponse{Name: name, Version: version}, nil
 }
 
-func (p *Plugin) Export(ctx context.Context, req *proto.KeyStoreExportRequest) (*proto.KeyStoreExportResponse, error) {
+func (p *Plugin) Get(ctx context.Context, req *proto.KeyStoreGetRequest) (*proto.KeyStoreGetResponse, error) {
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
@@ -64,73 +62,24 @@ func (p *Plugin) Export(ctx context.Context, req *proto.KeyStoreExportRequest) (
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	ttlSeconds, err := p.keyStoreWrapTTL(req.WrapTtlSeconds)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	if err := p.keyStoreAuthorizer.authorize(req.ClientId, keyStoreActionExport, keyStoreKeyType, name, ""); err != nil {
+	if err := p.keyStoreAuthorizer.authorize(req.ClientId, keyStoreActionGet, keyStoreKeyType, name, ""); err != nil {
 		return nil, err
 	}
 
-	wrapInfo, err := p.client.wrapKeyStoreSecret(ctx, req.ClientId, name, ttlSeconds)
+	record, err := p.client.getKeyStoreSecret(ctx, req.ClientId, name)
 	if err != nil {
 		return nil, keyStoreOpenBaoStatus(err, "key-store entry not found")
 	}
-	expiresAt := keyStoreTokenExpiry(wrapInfo.CreationTime, wrapInfo.TTLSeconds, p.now)
-	logger.Debugf("key-store export completed name=%s owner=%s ttl_seconds=%d", name, tenantNamespace(req.ClientId), wrapInfo.TTLSeconds)
-	return &proto.KeyStoreExportResponse{
-		Name:       name,
-		WrapToken:  wrapInfo.Token,
-		TtlSeconds: uint32(wrapInfo.TTLSeconds),
-		ExpiresAt:  expiresAt,
-	}, nil
-}
-
-func (p *Plugin) Unwrap(ctx context.Context, req *proto.KeyStoreUnwrapRequest) (*proto.KeyStoreUnwrapResponse, error) {
-	if err := requireClientID(req.ClientId); err != nil {
-		return nil, err
-	}
-	name, err := normalizeKeyStoreName(req.Name, p.keyStoreMaxDepth)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	wrapToken := strings.TrimSpace(req.WrapToken)
-	if wrapToken == "" {
-		return nil, status.Error(codes.InvalidArgument, "WrapToken is required")
-	}
-	if err := p.keyStoreAuthorizer.authorize(req.ClientId, keyStoreActionUnwrap, keyStoreKeyType, name, ""); err != nil {
-		return nil, err
-	}
-
-	lookup, err := p.client.lookupWrappingToken(ctx, wrapToken)
-	if err != nil {
-		return nil, keyStoreOpenBaoStatus(err, "wrap token is invalid or expired")
-	}
-	expectedPath, err := p.client.keyStoreCreationPath(req.ClientId, name)
-	if err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
-	}
-	expectedPath = normalizeOpenBaoCreationPath(expectedPath)
-	actualPath := normalizeOpenBaoCreationPath(lookup.CreationPath)
-	if actualPath != expectedPath {
-		logger.Warnf("key-store unwrap rejected path mismatch owner=%s expected=%s actual=%s", tenantNamespace(req.ClientId), expectedPath, actualPath)
-		return nil, status.Error(codes.PermissionDenied, "wrap token does not belong to the requested key")
-	}
-
-	record, err := p.client.unwrapKeyStoreSecret(ctx, wrapToken)
-	if err != nil {
-		return nil, keyStoreOpenBaoStatus(err, "wrap token is invalid or expired")
-	}
 	if record == nil || record.Owner != tenantNamespace(req.ClientId) || record.Name != name || record.Secret == nil {
-		logger.Warnf("key-store unwrap rejected invalid wrapped payload owner=%s name=%s", tenantNamespace(req.ClientId), name)
-		return nil, status.Error(codes.PermissionDenied, "wrap token payload does not belong to the requested key")
+		logger.Warnf("key-store get rejected invalid stored payload owner=%s name=%s", tenantNamespace(req.ClientId), name)
+		return nil, status.Error(codes.PermissionDenied, "key-store entry does not belong to the requested key")
 	}
 	secretJSON, err := encodeKeyStoreSecretJSON(record.Secret)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	logger.Debugf("key-store unwrap completed name=%s owner=%s", name, tenantNamespace(req.ClientId))
-	return &proto.KeyStoreUnwrapResponse{Name: name, SecretJson: secretJSON}, nil
+	logger.Debugf("key-store get completed name=%s owner=%s", name, tenantNamespace(req.ClientId))
+	return &proto.KeyStoreGetResponse{Name: name, SecretJson: secretJSON}, nil
 }
 
 func (p *Plugin) List(ctx context.Context, req *proto.KeyStoreListRequest) (*proto.KeyStoreListResponse, error) {
@@ -173,20 +122,6 @@ func (p *Plugin) Delete(ctx context.Context, req *proto.KeyStoreDeleteRequest) (
 	}
 	logger.Debugf("key-store delete completed name=%s owner=%s", name, tenantNamespace(req.ClientId))
 	return &proto.KeyStoreDeleteResponse{Name: name, Deleted: true}, nil
-}
-
-func (p *Plugin) keyStoreWrapTTL(requested *uint32) (int, error) {
-	ttlSeconds := p.keyStoreWrapTTLSeconds
-	if requested != nil {
-		ttlSeconds = int(*requested)
-	}
-	if ttlSeconds <= 0 {
-		return 0, fmt.Errorf("wrap_ttl_seconds must be greater than 0")
-	}
-	if ttlSeconds > p.keyStoreMaxTTLSeconds {
-		return 0, fmt.Errorf("wrap_ttl_seconds must be at most %d", p.keyStoreMaxTTLSeconds)
-	}
-	return ttlSeconds, nil
 }
 
 func normalizeKeyStoreName(value string, maxDepth int) (string, error) {
@@ -282,14 +217,6 @@ func encodeKeyStoreSecretJSON(value map[string]any) (string, error) {
 	return string(encoded), nil
 }
 
-func keyStoreTokenExpiry(creationTime string, ttlSeconds int, now func() time.Time) string {
-	createdAt, err := time.Parse(time.RFC3339Nano, creationTime)
-	if err != nil {
-		createdAt = now().UTC()
-	}
-	return createdAt.UTC().Add(time.Duration(ttlSeconds) * time.Second).Format(time.RFC3339)
-}
-
 func keyStoreOpenBaoStatus(err error, notFoundMessage string) error {
 	if errors.Is(err, errKeyStoreMaxDepthExceeded) {
 		return status.Error(codes.InvalidArgument, err.Error())
@@ -300,9 +227,6 @@ func keyStoreOpenBaoStatus(err error, notFoundMessage string) error {
 		case http.StatusNotFound:
 			return status.Error(codes.NotFound, notFoundMessage)
 		case http.StatusBadRequest, http.StatusForbidden:
-			if strings.HasPrefix(notFoundMessage, "wrap token ") {
-				return status.Error(codes.PermissionDenied, notFoundMessage)
-			}
 			return status.Error(codes.PermissionDenied, "key-store request denied by OpenBao")
 		default:
 			return status.Error(codes.Internal, err.Error())

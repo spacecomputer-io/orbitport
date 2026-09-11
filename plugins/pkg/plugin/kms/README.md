@@ -38,11 +38,8 @@ key-store RPCs:
 - `RotateKey(key_id)` — bumps the OpenBao key version (Transit only).
 - `Put(name, secret)` — stores or overwrites arbitrary JSON key material in the
   KMS key-store under the authenticated client.
-- `Export(name, wrap_ttl_seconds)` — returns a short-lived one-time OpenBao
-  wrapping token for the named key-store entry. It does not return raw secret
-  material directly.
-- `Unwrap(name, wrap_token)` — redeems a wrapping token once and returns the
-  stored JSON object if the token belongs to that key-store entry.
+- `Get(name)` — returns the stored JSON object for a key-store entry owned by
+  the authenticated client.
 - `List(prefix)` / `Delete(name)` — list or delete key-store entries owned by
   the authenticated client.
 
@@ -138,11 +135,8 @@ separate from operational KMS metadata:
 - **Tenant isolation** — enforced by the authenticated `client_id`, validated
   slash-separated names, and OpenBao paths constructed as
   `owners/<tenant>/<name>` after each path segment is revalidated.
-- **Export safety** — `Export` asks OpenBao to response-wrap the read response
-  and returns only `WrapToken`, `TtlSeconds`, and `ExpiresAt`. `Unwrap` first
-  checks the token's OpenBao wrapping lookup path, then redeems it once.
-- **TTL semantics** — the TTL applies only to the temporary wrap token. The
-  stored key-store entry remains durable until overwritten or deleted.
+- **Retrieval** — `Get` reads the stored JSON object directly from the
+  authenticated client's key-store namespace.
 - **Versioning** — `Put` uses KV v2 and returns the new version. A second `Put`
   with the same name intentionally overwrites the stored value with a new
   version.
@@ -155,8 +149,8 @@ configure `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` to point at that file or a
 custom policy file. If the path is unset, key-store requests are denied by the
 empty policy set. The default policy adds policy control on top of path-based
 tenant isolation and permits the authenticated owner to call
-`kms_keystore.Put`, `kms_keystore.Export`, `kms_keystore.Unwrap`,
-`kms_keystore.List`, and `kms_keystore.Delete` on their own key-store
+`kms_keystore.Put`, `kms_keystore.Get`, `kms_keystore.List`, and
+`kms_keystore.Delete` on their own key-store
 namespace. Operators can copy the default policy and add Cedar `forbid`
 policies, which override permits, to block operations such as deleting
 production entries.

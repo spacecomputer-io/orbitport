@@ -12,10 +12,9 @@ use crate::proto::plugins::kms::{
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
     GenerateDataKeyResponse as PluginGenerateDataKeyResponse,
     KeyStoreDeleteRequest as PluginDeleteRequest, KeyStoreDeleteResponse as PluginDeleteResponse,
-    KeyStoreExportRequest as PluginExportRequest, KeyStoreExportResponse as PluginExportResponse,
+    KeyStoreGetRequest as PluginGetRequest, KeyStoreGetResponse as PluginGetResponse,
     KeyStoreListRequest as PluginListRequest, KeyStoreListResponse as PluginListResponse,
     KeyStorePutRequest as PluginPutRequest, KeyStorePutResponse as PluginPutResponse,
-    KeyStoreUnwrapRequest as PluginUnwrapRequest, KeyStoreUnwrapResponse as PluginUnwrapResponse,
     RotateKeyRequest as PluginRotateKeyRequest, RotateKeyResponse as PluginRotateKeyResponse,
     SignRequest as PluginSignRequest, SignResponse as PluginSignResponse, Tag as PluginTag,
     kms_plugin_client::KmsPluginClient,
@@ -329,26 +328,8 @@ impl fmt::Debug for KeyStorePutRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct KeyStoreExportRequest {
+pub struct KeyStoreGetRequest {
     pub name: String,
-    #[serde(default)]
-    pub wrap_ttl_seconds: Option<u32>,
-}
-
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreUnwrapRequest {
-    pub name: String,
-    pub wrap_token: String,
-}
-
-impl fmt::Debug for KeyStoreUnwrapRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("KeyStoreUnwrapRequest")
-            .field("name", &self.name)
-            .field("wrap_token", &"<redacted>")
-            .finish()
-    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -373,16 +354,7 @@ pub struct KeyStorePutResponse {
 
 #[derive(Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct KeyStoreExportResponse {
-    pub name: String,
-    pub wrap_token: String,
-    pub ttl_seconds: u32,
-    pub expires_at: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreUnwrapResponse {
+pub struct KeyStoreGetResponse {
     pub name: String,
     pub secret: KeyStoreSecret,
 }
@@ -411,8 +383,7 @@ pub enum KmsRpcCall {
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
     Put(KeyStorePutRequest),
-    Export(KeyStoreExportRequest),
-    Unwrap(KeyStoreUnwrapRequest),
+    Get(KeyStoreGetRequest),
     List(KeyStoreListRequest),
     Delete(KeyStoreDeleteRequest),
 }
@@ -429,8 +400,7 @@ impl KmsRpcCall {
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
             Self::Put(req) => KmsService::validate_key_store_put(req),
-            Self::Export(req) => KmsService::validate_key_store_export(req),
-            Self::Unwrap(req) => KmsService::validate_key_store_unwrap(req),
+            Self::Get(req) => KmsService::validate_key_store_get(req),
             Self::List(req) => KmsService::validate_key_store_list(req),
             Self::Delete(req) => KmsService::validate_key_store_delete(req),
         }
@@ -488,16 +458,9 @@ impl KmsRpcCall {
                     req.name
                 )
             }
-            Self::Export(req) => {
+            Self::Get(req) => {
                 tracing::debug!(
-                    "Executing KMS key-store Export RPC [id={} name={}]",
-                    req_id,
-                    req.name
-                )
-            }
-            Self::Unwrap(req) => {
-                tracing::debug!(
-                    "Executing KMS key-store Unwrap RPC [id={} name={}]",
+                    "Executing KMS key-store Get RPC [id={} name={}]",
                     req_id,
                     req.name
                 )
@@ -530,8 +493,7 @@ pub enum KmsRpcResult {
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
     Put(KeyStorePutResponse),
-    Export(KeyStoreExportResponse),
-    Unwrap(KeyStoreUnwrapResponse),
+    Get(KeyStoreGetResponse),
     List(KeyStoreListResponse),
     Delete(KeyStoreDeleteResponse),
 }
@@ -598,14 +560,8 @@ impl KmsRpcResult {
                 result.name,
                 result.version
             ),
-            Self::Export(result) => tracing::debug!(
-                "KMS key-store Export RPC succeeded [id={} name={} ttl_seconds={}]",
-                req_id,
-                result.name,
-                result.ttl_seconds
-            ),
-            Self::Unwrap(result) => tracing::debug!(
-                "KMS key-store Unwrap RPC succeeded [id={} name={}]",
+            Self::Get(result) => tracing::debug!(
+                "KMS key-store Get RPC succeeded [id={} name={}]",
                 req_id,
                 result.name
             ),
@@ -740,19 +696,8 @@ impl KmsService {
         validate_key_store_name("Name", &req.name)
     }
 
-    pub fn validate_key_store_export(req: &KeyStoreExportRequest) -> Result<(), String> {
-        validate_key_store_name("Name", &req.name)?;
-        if let Some(ttl) = req.wrap_ttl_seconds
-            && ttl == 0
-        {
-            return Err("WrapTtlSeconds must be greater than 0".to_string());
-        }
-        Ok(())
-    }
-
-    pub fn validate_key_store_unwrap(req: &KeyStoreUnwrapRequest) -> Result<(), String> {
-        validate_key_store_name("Name", &req.name)?;
-        validate_required("WrapToken", &req.wrap_token)
+    pub fn validate_key_store_get(req: &KeyStoreGetRequest) -> Result<(), String> {
+        validate_key_store_name("Name", &req.name)
     }
 
     pub fn validate_key_store_list(req: &KeyStoreListRequest) -> Result<(), String> {
@@ -804,8 +749,7 @@ impl KmsService {
                 KmsRpcResult::RotateKey(self.rotate_key(client_id, req).await?)
             }
             KmsRpcCall::Put(req) => KmsRpcResult::Put(self.put(client_id, req).await?),
-            KmsRpcCall::Export(req) => KmsRpcResult::Export(self.export(client_id, req).await?),
-            KmsRpcCall::Unwrap(req) => KmsRpcResult::Unwrap(self.unwrap(client_id, req).await?),
+            KmsRpcCall::Get(req) => KmsRpcResult::Get(self.get(client_id, req).await?),
             KmsRpcCall::List(req) => KmsRpcResult::List(self.list(client_id, req).await?),
             KmsRpcCall::Delete(req) => KmsRpcResult::Delete(self.delete(client_id, req).await?),
         };
@@ -1024,39 +968,15 @@ impl KmsService {
         })
     }
 
-    pub async fn export(
+    pub async fn get(
         &mut self,
         client_id: &str,
-        req: KeyStoreExportRequest,
-    ) -> Result<KeyStoreExportResponse, tonic::Status> {
-        let response: PluginExportResponse = self
+        req: KeyStoreGetRequest,
+    ) -> Result<KeyStoreGetResponse, tonic::Status> {
+        let response: PluginGetResponse = self
             .client
-            .export(tonic::Request::new(PluginExportRequest {
+            .get(tonic::Request::new(PluginGetRequest {
                 name: req.name,
-                client_id: client_id.to_string(),
-                wrap_ttl_seconds: req.wrap_ttl_seconds,
-            }))
-            .await?
-            .into_inner();
-
-        Ok(KeyStoreExportResponse {
-            name: response.name,
-            wrap_token: response.wrap_token,
-            ttl_seconds: response.ttl_seconds,
-            expires_at: response.expires_at,
-        })
-    }
-
-    pub async fn unwrap(
-        &mut self,
-        client_id: &str,
-        req: KeyStoreUnwrapRequest,
-    ) -> Result<KeyStoreUnwrapResponse, tonic::Status> {
-        let response: PluginUnwrapResponse = self
-            .client
-            .unwrap(tonic::Request::new(PluginUnwrapRequest {
-                name: req.name,
-                wrap_token: req.wrap_token,
                 client_id: client_id.to_string(),
             }))
             .await?
@@ -1064,7 +984,7 @@ impl KmsService {
         let secret = serde_json::from_str::<KeyStoreSecret>(&response.secret_json)
             .map_err(|e| tonic::Status::internal(format!("Failed to decode secret: {e}")))?;
 
-        Ok(KeyStoreUnwrapResponse {
+        Ok(KeyStoreGetResponse {
             name: response.name,
             secret,
         })
@@ -1509,12 +1429,11 @@ mod test {
 
     #[test]
     fn test_validate_key_store_name_rejects_traversal() {
-        let req = KeyStoreExportRequest {
+        let req = KeyStoreGetRequest {
             name: "github/../prod".to_string(),
-            wrap_ttl_seconds: None,
         };
 
-        let err = KmsService::validate_key_store_export(&req).unwrap_err();
+        let err = KmsService::validate_key_store_get(&req).unwrap_err();
         assert!(err.contains("invalid path segment"));
     }
 
@@ -1531,18 +1450,6 @@ mod test {
         let debug = format!("{req:?}");
         assert!(debug.contains("<redacted>"));
         assert!(!debug.contains("super-sensitive"));
-    }
-
-    #[test]
-    fn test_key_store_unwrap_debug_redacts_token() {
-        let req = KeyStoreUnwrapRequest {
-            name: "github/prod".to_string(),
-            wrap_token: "token-secret".to_string(),
-        };
-
-        let debug = format!("{req:?}");
-        assert!(debug.contains("<redacted>"));
-        assert!(!debug.contains("token-secret"));
     }
 
     #[test]

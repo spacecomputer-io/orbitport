@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
-	"path"
 	"sort"
 	"strings"
 	"time"
@@ -14,25 +12,11 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 )
 
-const wrapTTLHeader = "X-Vault-Wrap-TTL"
-
 type keyStoreRecord struct {
 	Name      string         `json:"name"`
 	Owner     string         `json:"owner"`
 	Secret    map[string]any `json:"secret"`
 	UpdatedAt string         `json:"updated_at"`
-}
-
-type keyStoreWrapInfo struct {
-	Token        string
-	TTLSeconds   int
-	CreationTime string
-}
-
-type keyStoreWrappingLookupInfo struct {
-	CreationPath string
-	CreationTTL  int
-	CreationTime string
 }
 
 func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name string, secret map[string]any, updatedAt time.Time) (uint32, error) {
@@ -57,63 +41,17 @@ func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name st
 	return resp.Data.Version, nil
 }
 
-func (c *openBaoClient) wrapKeyStoreSecret(ctx context.Context, clientID, name string, ttlSeconds int) (*keyStoreWrapInfo, error) {
-	var resp struct {
-		WrapInfo struct {
-			Token        string `json:"token"`
-			TTL          int    `json:"ttl"`
-			CreationTime string `json:"creation_time"`
-		} `json:"wrap_info"`
-	}
-	target, err := c.keyStoreDataPath(clientID, name)
-	if err != nil {
-		return nil, err
-	}
-	headers := map[string]string{
-		wrapTTLHeader: fmt.Sprintf("%ds", ttlSeconds),
-	}
-	if err := c.GetWithHeaders(ctx, target, headers, &resp); err != nil {
-		return nil, err
-	}
-	if resp.WrapInfo.Token == "" {
-		return nil, fmt.Errorf("OpenBao did not return a wrapping token")
-	}
-	ttl := resp.WrapInfo.TTL
-	if ttl == 0 {
-		ttl = ttlSeconds
-	}
-	return &keyStoreWrapInfo{
-		Token:        resp.WrapInfo.Token,
-		TTLSeconds:   ttl,
-		CreationTime: resp.WrapInfo.CreationTime,
-	}, nil
-}
-
-func (c *openBaoClient) lookupWrappingToken(ctx context.Context, token string) (*keyStoreWrappingLookupInfo, error) {
-	var resp struct {
-		Data struct {
-			CreationPath string `json:"creation_path"`
-			CreationTTL  int    `json:"creation_ttl"`
-			CreationTime string `json:"creation_time"`
-		} `json:"data"`
-	}
-	if err := c.Post(ctx, c.systemPath("wrapping", "lookup"), map[string]any{"token": token}, &resp); err != nil {
-		return nil, err
-	}
-	return &keyStoreWrappingLookupInfo{
-		CreationPath: resp.Data.CreationPath,
-		CreationTTL:  resp.Data.CreationTTL,
-		CreationTime: resp.Data.CreationTime,
-	}, nil
-}
-
-func (c *openBaoClient) unwrapKeyStoreSecret(ctx context.Context, token string) (*keyStoreRecord, error) {
+func (c *openBaoClient) getKeyStoreSecret(ctx context.Context, clientID, name string) (*keyStoreRecord, error) {
 	var resp struct {
 		Data struct {
 			Data keyStoreRecord `json:"data"`
 		} `json:"data"`
 	}
-	if err := c.Post(ctx, c.systemPath("wrapping", "unwrap"), map[string]any{"token": token}, &resp); err != nil {
+	target, err := c.keyStoreDataPath(clientID, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.Get(ctx, target, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data.Data, nil
@@ -217,21 +155,6 @@ func (c *openBaoClient) keyStoreMetadataPath(clientID, prefix string) (string, e
 	return c.joinPath(parts...), nil
 }
 
-func (c *openBaoClient) keyStoreCreationPath(clientID, name string) (string, error) {
-	parts := []string{c.keyStoreMount, "data", "owners", tenantNamespace(clientID)}
-	nameParts, err := keyStorePathParts(name, c.keyStoreMaxDepth)
-	if err != nil {
-		return "", err
-	}
-	parts = append(parts, nameParts...)
-	return path.Join(parts...), nil
-}
-
-func (c *openBaoClient) systemPath(parts ...string) string {
-	all := append([]string{"v1", "sys"}, parts...)
-	return c.joinPath(all...)
-}
-
 func keyStorePathParts(value string, maxDepth int) ([]string, error) {
 	value = strings.Trim(value, "/")
 	if value == "" {
@@ -259,13 +182,4 @@ func joinKeyStoreName(prefix, name string) string {
 		return prefix
 	}
 	return prefix + "/" + name
-}
-
-func normalizeOpenBaoCreationPath(value string) string {
-	value = strings.Trim(value, "/")
-	value = strings.TrimPrefix(value, "v1/")
-	if decoded, err := url.PathUnescape(value); err == nil {
-		value = decoded
-	}
-	return value
 }
