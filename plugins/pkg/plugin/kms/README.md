@@ -36,8 +36,8 @@ key-store RPCs:
   fresh data key as `{plaintext, ciphertext_blob}` so callers can do
   envelope encryption (Transit only).
 - `RotateKey(key_id)` — bumps the OpenBao key version (Transit only).
-- `Import(name, secret)` — stores arbitrary JSON key material in the KMS
-  key-store under the authenticated client.
+- `Put(name, secret)` — stores or overwrites arbitrary JSON key material in the
+  KMS key-store under the authenticated client.
 - `Export(name, wrap_ttl_seconds)` — returns a short-lived one-time OpenBao
   wrapping token for the named key-store entry. It does not return raw secret
   material directly.
@@ -46,9 +46,11 @@ key-store RPCs:
 - `List(prefix)` / `Delete(name)` — list or delete key-store entries owned by
   the authenticated client.
 
-The gateway-facing service proto (`proto/services/kms.proto`) mirrors these
-RPCs and adds `GetCapabilities`, which the gateway answers locally without a
-plugin round-trip — it advertises the static capability matrix below.
+The gateway-facing service proto (`proto/services/kms.proto`) covers the
+consumer-facing crypto message shapes and adds `GetCapabilities`, which the
+gateway answers locally without a plugin round-trip. Key-store JSON-RPC request
+shapes live in the gateway adapter, while the internal plugin gRPC contract is
+defined in `proto/plugins/kms.proto`.
 
 ## Providers
 
@@ -131,16 +133,24 @@ separate from operational KMS metadata:
   KMS. The plugin hashes it into `tenant_<sha256(client_id)[:16]>`.
 - **Names** — slash-separated paths such as `github/prod`; each segment must
   match `[A-Za-z0-9._-]+`. `.` and `..` are rejected.
+- **Tenant isolation** — enforced by the authenticated `client_id`, validated
+  slash-separated names, and OpenBao paths constructed as
+  `owners/<tenant>/<name>` after each path segment is revalidated.
 - **Export safety** — `Export` asks OpenBao to response-wrap the read response
   and returns only `WrapToken`, `TtlSeconds`, and `ExpiresAt`. `Unwrap` first
   checks the token's OpenBao wrapping lookup path, then redeems it once.
 - **TTL semantics** — the TTL applies only to the temporary wrap token. The
   stored key-store entry remains durable until overwritten or deleted.
+- **Versioning** — `Put` uses KV v2 and returns the new version. A second `Put`
+  with the same name intentionally overwrites the stored value with a new
+  version.
 
 Authorization is enforced in the KMS plugin with Cedar. The default policy
-is embedded from `cedar/key_store_default.cedar` and permits the authenticated
-owner to call `kms.Import`, `kms.Export`, `kms.Unwrap`, `kms.List`, and
-`kms.Delete` on their own key-store namespace. Operators can append Cedar policies with
+is embedded from `cedar/key_store_default.cedar` and adds policy control on top
+of path-based tenant isolation. It permits the authenticated owner to call
+`kms_keystore.Put`, `kms_keystore.Export`, `kms_keystore.Unwrap`,
+`kms_keystore.List`, and `kms_keystore.Delete` on their own key-store
+namespace. Operators can append Cedar policies with
 `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH`; Cedar `forbid` policies override
 the default permit and can be used to block operations such as deleting
 production entries.

@@ -85,7 +85,11 @@ paths:
       description: |
         Authenticated JSON-RPC endpoint for Orbitport services. KMS key-store
         methods use the existing `/api/v1/rpc` path with methods
-        `kms.Import`, `kms.Export`, `kms.Unwrap`, `kms.List`, and `kms.Delete`.
+        `kms_keystore.Put`, `kms_keystore.Export`, `kms_keystore.Unwrap`,
+        `kms_keystore.List`, and `kms_keystore.Delete`. Key-store tenant isolation is enforced by the
+        authenticated `client_id`, validated names, and OpenBao path
+        construction under the caller's tenant namespace; Cedar adds policy
+        control on top of that isolation boundary.
       security:
         - BearerAuth: []
       requestBody:
@@ -95,31 +99,31 @@ paths:
             schema:
               $ref: '#/components/schemas/JsonRpcRequest'
             examples:
-              kmsImport:
+              kmsKeyStorePut:
                 summary: Store key material
                 value:
                   jsonrpc: "2.0"
                   id: 1
-                  method: kms.Import
+                  method: kms_keystore.Put
                   params:
                     Name: github/prod
                     Secret:
                       api_key: replace-me
-              kmsExport:
+              kmsKeyStoreExport:
                 summary: Export a wrapped key-store secret
                 value:
                   jsonrpc: "2.0"
                   id: 2
-                  method: kms.Export
+                  method: kms_keystore.Export
                   params:
                     Name: github/prod
                     WrapTtlSeconds: 60
-              kmsUnwrap:
+              kmsKeyStoreUnwrap:
                 summary: Redeem a wrap token once
                 value:
                   jsonrpc: "2.0"
                   id: 3
-                  method: kms.Unwrap
+                  method: kms_keystore.Unwrap
                   params:
                     Name: github/prod
                     WrapToken: REPLACE_ME
@@ -131,15 +135,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/JsonRpcResponse'
               examples:
-                kmsImport:
-                  summary: Import response
+                kmsKeyStorePut:
+                  summary: Put response
                   value:
                     jsonrpc: "2.0"
                     id: 1
                     result:
                       Name: github/prod
                       Version: 1
-                kmsExport:
+                kmsKeyStoreExport:
                   summary: Export response
                   value:
                     jsonrpc: "2.0"
@@ -149,7 +153,7 @@ paths:
                       WrapToken: hvs.REDACTED
                       TtlSeconds: 60
                       ExpiresAt: "2026-01-01T00:01:00Z"
-                kmsUnwrap:
+                kmsKeyStoreUnwrap:
                   summary: Unwrap response
                   value:
                     jsonrpc: "2.0"
@@ -191,11 +195,11 @@ components:
             - kms.Decapsulate
             - kms.GenerateDataKey
             - kms.RotateKey
-            - kms.Import
-            - kms.Export
-            - kms.Unwrap
-            - kms.List
-            - kms.Delete
+            - kms_keystore.Put
+            - kms_keystore.Export
+            - kms_keystore.Unwrap
+            - kms_keystore.List
+            - kms_keystore.Delete
             - kms_threshold.CoordinateDKG
         params:
           type: object
@@ -231,7 +235,7 @@ components:
           type: string
         data:
           nullable: true
-    KmsImportParams:
+    KmsKeyStorePutParams:
       type: object
       required:
         - Name
@@ -243,7 +247,7 @@ components:
           type: object
           additionalProperties: true
           description: Arbitrary JSON object stored durably in the KMS key-store.
-    KmsExportParams:
+    KmsKeyStoreExportParams:
       type: object
       required:
         - Name
@@ -256,7 +260,7 @@ components:
           maximum: 300
           default: 60
           description: TTL for the one-time OpenBao wrapping token. The stored secret remains durable.
-    KmsUnwrapParams:
+    KmsKeyStoreUnwrapParams:
       type: object
       required:
         - Name
@@ -266,29 +270,29 @@ components:
           $ref: '#/components/schemas/KmsKeyStoreName'
         WrapToken:
           type: string
-          description: One-time token returned by `kms.Export`.
-    KmsListParams:
+          description: One-time token returned by `kms_keystore.Export`.
+    KmsKeyStoreListParams:
       type: object
       properties:
         Prefix:
           type: string
           maxLength: 256
           description: Optional key-store name prefix to list.
-    KmsDeleteParams:
+    KmsKeyStoreDeleteParams:
       type: object
       required:
         - Name
       properties:
         Name:
           $ref: '#/components/schemas/KmsKeyStoreName'
-    KmsImportResult:
+    KmsKeyStorePutResult:
       type: object
       properties:
         Name:
           type: string
         Version:
           type: integer
-    KmsExportResult:
+    KmsKeyStoreExportResult:
       type: object
       properties:
         Name:
@@ -300,7 +304,7 @@ components:
         ExpiresAt:
           type: string
           format: date-time
-    KmsUnwrapResult:
+    KmsKeyStoreUnwrapResult:
       type: object
       properties:
         Name:
@@ -308,14 +312,14 @@ components:
         Secret:
           type: object
           additionalProperties: true
-    KmsListResult:
+    KmsKeyStoreListResult:
       type: object
       properties:
         Names:
           type: array
           items:
             type: string
-    KmsDeleteResult:
+    KmsKeyStoreDeleteResult:
       type: object
       properties:
         Name:

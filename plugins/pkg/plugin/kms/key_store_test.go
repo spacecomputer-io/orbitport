@@ -18,7 +18,7 @@ import (
 
 const testKeyStoreName = "github/prod"
 
-func TestKeyStoreImportStoresSecretInTenantPath(t *testing.T) {
+func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 	var body map[string]any
@@ -37,13 +37,13 @@ func TestKeyStoreImportStoresSecretInTenantPath(t *testing.T) {
 	defer server.Close()
 	plugin.now = func() time.Time { return time.Unix(1, 0).UTC() }
 
-	resp, err := plugin.Import(context.Background(), &proto.KeyStoreImportRequest{
+	resp, err := plugin.Put(context.Background(), &proto.KeyStorePutRequest{
 		ClientId:   clientID,
 		Name:       testKeyStoreName,
 		SecretJson: `{"api_key":"secret-value","metadata":{"env":"prod"}}`,
 	})
 	if err != nil {
-		t.Fatalf("Import returned error: %v", err)
+		t.Fatalf("Put returned error: %v", err)
 	}
 	if resp.Name != testKeyStoreName || resp.Version != 2 {
 		t.Fatalf("unexpected response: %+v", resp)
@@ -233,13 +233,15 @@ func TestKeyStoreListRecursesTenantNamespace(t *testing.T) {
 	}
 }
 
-func TestKeyStoreDeleteUsesMetadataPath(t *testing.T) {
+func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 	deleteCalled := false
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+testKeyStoreName:
+			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"version": 1}})
 		case r.Method == http.MethodDelete && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+testKeyStoreName:
 			deleteCalled = true
 			writeKeyStoreJSON(t, w, map[string]any{})
@@ -261,10 +263,72 @@ func TestKeyStoreDeleteUsesMetadataPath(t *testing.T) {
 	}
 }
 
+func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
+	clientID := "client-a"
+	owner := tenantNamespace(clientID)
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+testKeyStoreName:
+			http.NotFound(w, r)
+		case r.Method == http.MethodDelete:
+			t.Fatalf("delete should not be called when metadata is missing")
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, err := plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
+		ClientId: clientID,
+		Name:     testKeyStoreName,
+	})
+	if status.Code(err) != codes.NotFound {
+		t.Fatalf("expected NotFound, got %v (%v)", status.Code(err), err)
+	}
+}
+
+func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) {
+	policyFile := writeTempKeyStorePolicy(t, `permit (
+		principal,
+		action,
+		resource
+	);`)
+
+	plugin, server := newKeyStoreTestPluginWithPolicy(t, policyFile, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("OpenBao should not be called for an unsafe key-store name: %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	_, err := plugin.Export(context.Background(), &proto.KeyStoreExportRequest{
+		ClientId: "client-a",
+		Name:     "../tenant_b/github/prod",
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
+	}
+}
+
+func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
+	cfg := &kmsConfig{
+		OpenBaoProxyURL: "http://openbao",
+		KeyStoreMount:   "key-store",
+		TimeoutSecs:     10,
+	}
+	client := newOpenBaoClient(cfg)
+
+	if _, err := client.keyStoreDataPath("client-a", "../tenant_b/github/prod"); err == nil {
+		t.Fatal("expected key-store data path builder to reject traversal")
+	}
+	if _, err := client.keyStoreMetadataPath("client-a", "github/../prod"); err == nil {
+		t.Fatal("expected key-store metadata path builder to reject traversal")
+	}
+}
+
 func TestKeyStoreCedarForbidOverridesDefaultOwnerPermit(t *testing.T) {
 	policyFile := writeTempKeyStorePolicy(t, `forbid (
 		principal,
-		action == Action::"kms.Delete",
+		action == Action::"kms_keystore.Delete",
 		resource
 	);`)
 

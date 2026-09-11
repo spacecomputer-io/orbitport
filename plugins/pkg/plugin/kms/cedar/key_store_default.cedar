@@ -1,11 +1,11 @@
 permit (
 	principal,
 	action in [
-		Action::"kms.Import",
-		Action::"kms.Export",
-		Action::"kms.Unwrap",
-		Action::"kms.List",
-		Action::"kms.Delete"
+		Action::"kms_keystore.Put",
+		Action::"kms_keystore.Export",
+		Action::"kms_keystore.Unwrap",
+		Action::"kms_keystore.List",
+		Action::"kms_keystore.Delete"
 	],
 	resource
 ) when {

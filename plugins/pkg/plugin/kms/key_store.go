@@ -20,16 +20,16 @@ import (
 
 const (
 	maxKeyStoreNameLen   = 256
-	keyStoreActionImport = "kms.Import"
-	keyStoreActionExport = "kms.Export"
-	keyStoreActionUnwrap = "kms.Unwrap"
-	keyStoreActionList   = "kms.List"
-	keyStoreActionDelete = "kms.Delete"
+	keyStoreActionPut    = "kms_keystore.Put"
+	keyStoreActionExport = "kms_keystore.Export"
+	keyStoreActionUnwrap = "kms_keystore.Unwrap"
+	keyStoreActionList   = "kms_keystore.List"
+	keyStoreActionDelete = "kms_keystore.Delete"
 )
 
 var keyStoreSegmentRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
-func (p *Plugin) Import(ctx context.Context, req *proto.KeyStoreImportRequest) (*proto.KeyStoreImportResponse, error) {
+func (p *Plugin) Put(ctx context.Context, req *proto.KeyStorePutRequest) (*proto.KeyStorePutResponse, error) {
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
@@ -41,16 +41,16 @@ func (p *Plugin) Import(ctx context.Context, req *proto.KeyStoreImportRequest) (
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if err := p.keyStoreAuthorizer.authorize(req.ClientId, keyStoreActionImport, keyStoreKeyType, name, ""); err != nil {
+	if err := p.keyStoreAuthorizer.authorize(req.ClientId, keyStoreActionPut, keyStoreKeyType, name, ""); err != nil {
 		return nil, err
 	}
 
 	version, err := p.client.putKeyStoreSecret(ctx, req.ClientId, name, secret, p.now().UTC())
 	if err != nil {
-		return nil, keyStoreOpenBaoStatus(err, "key-store key not found")
+		return nil, keyStoreOpenBaoStatus(err, "key-store entry not found")
 	}
-	logger.Debugf("key-store import completed name=%s owner=%s version=%d", name, tenantNamespace(req.ClientId), version)
-	return &proto.KeyStoreImportResponse{Name: name, Version: version}, nil
+	logger.Debugf("key-store put completed name=%s owner=%s version=%d", name, tenantNamespace(req.ClientId), version)
+	return &proto.KeyStorePutResponse{Name: name, Version: version}, nil
 }
 
 func (p *Plugin) Export(ctx context.Context, req *proto.KeyStoreExportRequest) (*proto.KeyStoreExportResponse, error) {
@@ -71,7 +71,7 @@ func (p *Plugin) Export(ctx context.Context, req *proto.KeyStoreExportRequest) (
 
 	wrapInfo, err := p.client.wrapKeyStoreSecret(ctx, req.ClientId, name, ttlSeconds)
 	if err != nil {
-		return nil, keyStoreOpenBaoStatus(err, "key-store key not found")
+		return nil, keyStoreOpenBaoStatus(err, "key-store entry not found")
 	}
 	expiresAt := keyStoreTokenExpiry(wrapInfo.CreationTime, wrapInfo.TTLSeconds, p.now)
 	logger.Debugf("key-store export completed name=%s owner=%s ttl_seconds=%d", name, tenantNamespace(req.ClientId), wrapInfo.TTLSeconds)
@@ -103,7 +103,11 @@ func (p *Plugin) Unwrap(ctx context.Context, req *proto.KeyStoreUnwrapRequest) (
 	if err != nil {
 		return nil, keyStoreOpenBaoStatus(err, "wrap token is invalid or expired")
 	}
-	expectedPath := normalizeOpenBaoCreationPath(p.client.keyStoreCreationPath(req.ClientId, name))
+	expectedPath, err := p.client.keyStoreCreationPath(req.ClientId, name)
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	expectedPath = normalizeOpenBaoCreationPath(expectedPath)
 	actualPath := normalizeOpenBaoCreationPath(lookup.CreationPath)
 	if actualPath != expectedPath {
 		logger.Warnf("key-store unwrap rejected path mismatch owner=%s expected=%s actual=%s", tenantNamespace(req.ClientId), expectedPath, actualPath)
@@ -158,8 +162,11 @@ func (p *Plugin) Delete(ctx context.Context, req *proto.KeyStoreDeleteRequest) (
 		return nil, err
 	}
 
+	if err := p.client.ensureKeyStoreSecretExists(ctx, req.ClientId, name); err != nil {
+		return nil, keyStoreOpenBaoStatus(err, "key-store entry not found")
+	}
 	if err := p.client.deleteKeyStoreSecret(ctx, req.ClientId, name); err != nil {
-		return nil, keyStoreOpenBaoStatus(err, "key-store key not found")
+		return nil, keyStoreOpenBaoStatus(err, "key-store entry not found")
 	}
 	logger.Debugf("key-store delete completed name=%s owner=%s", name, tenantNamespace(req.ClientId))
 	return &proto.KeyStoreDeleteResponse{Name: name, Deleted: true}, nil

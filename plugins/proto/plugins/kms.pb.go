@@ -1202,7 +1202,7 @@ func (x *RotateKeyResponse) GetKeyMetadata() *KeyMetadata {
 	return nil
 }
 
-type KeyStoreImportRequest struct {
+type KeyStorePutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	SecretJson    string                 `protobuf:"bytes,2,opt,name=secret_json,json=secretJson,proto3" json:"secret_json,omitempty"`
@@ -1211,20 +1211,20 @@ type KeyStoreImportRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *KeyStoreImportRequest) Reset() {
-	*x = KeyStoreImportRequest{}
+func (x *KeyStorePutRequest) Reset() {
+	*x = KeyStorePutRequest{}
 	mi := &file_proto_plugins_kms_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *KeyStoreImportRequest) String() string {
+func (x *KeyStorePutRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*KeyStoreImportRequest) ProtoMessage() {}
+func (*KeyStorePutRequest) ProtoMessage() {}
 
-func (x *KeyStoreImportRequest) ProtoReflect() protoreflect.Message {
+func (x *KeyStorePutRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_plugins_kms_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1236,33 +1236,33 @@ func (x *KeyStoreImportRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use KeyStoreImportRequest.ProtoReflect.Descriptor instead.
-func (*KeyStoreImportRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use KeyStorePutRequest.ProtoReflect.Descriptor instead.
+func (*KeyStorePutRequest) Descriptor() ([]byte, []int) {
 	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{18}
 }
 
-func (x *KeyStoreImportRequest) GetName() string {
+func (x *KeyStorePutRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *KeyStoreImportRequest) GetSecretJson() string {
+func (x *KeyStorePutRequest) GetSecretJson() string {
 	if x != nil {
 		return x.SecretJson
 	}
 	return ""
 }
 
-func (x *KeyStoreImportRequest) GetClientId() string {
+func (x *KeyStorePutRequest) GetClientId() string {
 	if x != nil {
 		return x.ClientId
 	}
 	return ""
 }
 
-type KeyStoreImportResponse struct {
+type KeyStorePutResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
@@ -1270,20 +1270,20 @@ type KeyStoreImportResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *KeyStoreImportResponse) Reset() {
-	*x = KeyStoreImportResponse{}
+func (x *KeyStorePutResponse) Reset() {
+	*x = KeyStorePutResponse{}
 	mi := &file_proto_plugins_kms_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *KeyStoreImportResponse) String() string {
+func (x *KeyStorePutResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*KeyStoreImportResponse) ProtoMessage() {}
+func (*KeyStorePutResponse) ProtoMessage() {}
 
-func (x *KeyStoreImportResponse) ProtoReflect() protoreflect.Message {
+func (x *KeyStorePutResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_plugins_kms_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1295,19 +1295,19 @@ func (x *KeyStoreImportResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use KeyStoreImportResponse.ProtoReflect.Descriptor instead.
-func (*KeyStoreImportResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use KeyStorePutResponse.ProtoReflect.Descriptor instead.
+func (*KeyStorePutResponse) Descriptor() ([]byte, []int) {
 	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *KeyStoreImportResponse) GetName() string {
+func (x *KeyStorePutResponse) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *KeyStoreImportResponse) GetVersion() uint32 {
+func (x *KeyStorePutResponse) GetVersion() uint32 {
 	if x != nil {
 		return x.Version
 	}
@@ -1860,13 +1860,13 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"K\n" +
 	"\x11RotateKeyResponse\x126\n" +
-	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"i\n" +
-	"\x15KeyStoreImportRequest\x12\x12\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"f\n" +
+	"\x12KeyStorePutRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vsecret_json\x18\x02 \x01(\tR\n" +
 	"secretJson\x12\x1b\n" +
-	"\tclient_id\x18\x03 \x01(\tR\bclientId\"F\n" +
-	"\x16KeyStoreImportResponse\x12\x12\n" +
+	"\tclient_id\x18\x03 \x01(\tR\bclientId\"C\n" +
+	"\x13KeyStorePutResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\"\x8c\x01\n" +
 	"\x15KeyStoreExportRequest\x12\x12\n" +
@@ -1902,7 +1902,7 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"F\n" +
 	"\x16KeyStoreDeleteResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\adeleted\x18\x02 \x01(\bR\adeleted2\x85\a\n" +
+	"\adeleted\x18\x02 \x01(\bR\adeleted2\xfc\x06\n" +
 	"\tKmsPlugin\x12:\n" +
 	"\aEncrypt\x12\x16.kmsapi.EncryptRequest\x1a\x17.kmsapi.EncryptResponse\x12:\n" +
 	"\aDecrypt\x12\x16.kmsapi.DecryptRequest\x1a\x17.kmsapi.DecryptResponse\x121\n" +
@@ -1911,8 +1911,8 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\vDecapsulate\x12\x1a.kmsapi.DecapsulateRequest\x1a\x1b.kmsapi.DecapsulateResponse\x12@\n" +
 	"\tCreateKey\x12\x18.kmsapi.CreateKeyRequest\x1a\x19.kmsapi.CreateKeyResponse\x12R\n" +
 	"\x0fGenerateDataKey\x12\x1e.kmsapi.GenerateDataKeyRequest\x1a\x1f.kmsapi.GenerateDataKeyResponse\x12@\n" +
-	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponse\x12G\n" +
-	"\x06Import\x12\x1d.kmsapi.KeyStoreImportRequest\x1a\x1e.kmsapi.KeyStoreImportResponse\x12G\n" +
+	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponse\x12>\n" +
+	"\x03Put\x12\x1a.kmsapi.KeyStorePutRequest\x1a\x1b.kmsapi.KeyStorePutResponse\x12G\n" +
 	"\x06Export\x12\x1d.kmsapi.KeyStoreExportRequest\x1a\x1e.kmsapi.KeyStoreExportResponse\x12G\n" +
 	"\x06Unwrap\x12\x1d.kmsapi.KeyStoreUnwrapRequest\x1a\x1e.kmsapi.KeyStoreUnwrapResponse\x12A\n" +
 	"\x04List\x12\x1b.kmsapi.KeyStoreListRequest\x1a\x1c.kmsapi.KeyStoreListResponse\x12G\n" +
@@ -1950,8 +1950,8 @@ var file_proto_plugins_kms_proto_goTypes = []any{
 	(*GenerateDataKeyResponse)(nil), // 15: kmsapi.GenerateDataKeyResponse
 	(*RotateKeyRequest)(nil),        // 16: kmsapi.RotateKeyRequest
 	(*RotateKeyResponse)(nil),       // 17: kmsapi.RotateKeyResponse
-	(*KeyStoreImportRequest)(nil),   // 18: kmsapi.KeyStoreImportRequest
-	(*KeyStoreImportResponse)(nil),  // 19: kmsapi.KeyStoreImportResponse
+	(*KeyStorePutRequest)(nil),      // 18: kmsapi.KeyStorePutRequest
+	(*KeyStorePutResponse)(nil),     // 19: kmsapi.KeyStorePutResponse
 	(*KeyStoreExportRequest)(nil),   // 20: kmsapi.KeyStoreExportRequest
 	(*KeyStoreExportResponse)(nil),  // 21: kmsapi.KeyStoreExportResponse
 	(*KeyStoreUnwrapRequest)(nil),   // 22: kmsapi.KeyStoreUnwrapRequest
@@ -1974,7 +1974,7 @@ var file_proto_plugins_kms_proto_depIdxs = []int32{
 	12, // 9: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
 	14, // 10: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
 	16, // 11: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
-	18, // 12: kmsapi.KmsPlugin.Import:input_type -> kmsapi.KeyStoreImportRequest
+	18, // 12: kmsapi.KmsPlugin.Put:input_type -> kmsapi.KeyStorePutRequest
 	20, // 13: kmsapi.KmsPlugin.Export:input_type -> kmsapi.KeyStoreExportRequest
 	22, // 14: kmsapi.KmsPlugin.Unwrap:input_type -> kmsapi.KeyStoreUnwrapRequest
 	24, // 15: kmsapi.KmsPlugin.List:input_type -> kmsapi.KeyStoreListRequest
@@ -1987,7 +1987,7 @@ var file_proto_plugins_kms_proto_depIdxs = []int32{
 	13, // 22: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
 	15, // 23: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
 	17, // 24: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
-	19, // 25: kmsapi.KmsPlugin.Import:output_type -> kmsapi.KeyStoreImportResponse
+	19, // 25: kmsapi.KmsPlugin.Put:output_type -> kmsapi.KeyStorePutResponse
 	21, // 26: kmsapi.KmsPlugin.Export:output_type -> kmsapi.KeyStoreExportResponse
 	23, // 27: kmsapi.KmsPlugin.Unwrap:output_type -> kmsapi.KeyStoreUnwrapResponse
 	25, // 28: kmsapi.KmsPlugin.List:output_type -> kmsapi.KeyStoreListResponse

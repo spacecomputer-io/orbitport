@@ -13,8 +13,8 @@ use crate::proto::plugins::kms::{
     GenerateDataKeyResponse as PluginGenerateDataKeyResponse,
     KeyStoreDeleteRequest as PluginDeleteRequest, KeyStoreDeleteResponse as PluginDeleteResponse,
     KeyStoreExportRequest as PluginExportRequest, KeyStoreExportResponse as PluginExportResponse,
-    KeyStoreImportRequest as PluginImportRequest, KeyStoreImportResponse as PluginImportResponse,
     KeyStoreListRequest as PluginListRequest, KeyStoreListResponse as PluginListResponse,
+    KeyStorePutRequest as PluginPutRequest, KeyStorePutResponse as PluginPutResponse,
     KeyStoreUnwrapRequest as PluginUnwrapRequest, KeyStoreUnwrapResponse as PluginUnwrapResponse,
     RotateKeyRequest as PluginRotateKeyRequest, RotateKeyResponse as PluginRotateKeyResponse,
     SignRequest as PluginSignRequest, SignResponse as PluginSignResponse, Tag as PluginTag,
@@ -313,14 +313,14 @@ type KeyStoreSecret = serde_json::Map<String, serde_json::Value>;
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct KeyStoreImportRequest {
+pub struct KeyStorePutRequest {
     pub name: String,
     pub secret: KeyStoreSecret,
 }
 
-impl fmt::Debug for KeyStoreImportRequest {
+impl fmt::Debug for KeyStorePutRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("KeyStoreImportRequest")
+        f.debug_struct("KeyStorePutRequest")
             .field("name", &self.name)
             .field("secret", &"<redacted>")
             .finish()
@@ -366,7 +366,7 @@ pub struct KeyStoreDeleteRequest {
 
 #[derive(Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct KeyStoreImportResponse {
+pub struct KeyStorePutResponse {
     pub name: String,
     pub version: u32,
 }
@@ -410,7 +410,7 @@ pub enum KmsRpcCall {
     CreateKey(CreateKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
-    Import(KeyStoreImportRequest),
+    Put(KeyStorePutRequest),
     Export(KeyStoreExportRequest),
     Unwrap(KeyStoreUnwrapRequest),
     List(KeyStoreListRequest),
@@ -428,7 +428,7 @@ impl KmsRpcCall {
             Self::CreateKey(req) => KmsService::validate_create_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
-            Self::Import(req) => KmsService::validate_key_store_import(req),
+            Self::Put(req) => KmsService::validate_key_store_put(req),
             Self::Export(req) => KmsService::validate_key_store_export(req),
             Self::Unwrap(req) => KmsService::validate_key_store_unwrap(req),
             Self::List(req) => KmsService::validate_key_store_list(req),
@@ -481,22 +481,38 @@ impl KmsRpcCall {
                 req_id,
                 req.key_id
             ),
-            Self::Import(req) => {
-                tracing::debug!("Executing KMS Import RPC [id={} name={}]", req_id, req.name)
+            Self::Put(req) => {
+                tracing::debug!(
+                    "Executing KMS key-store Put RPC [id={} name={}]",
+                    req_id,
+                    req.name
+                )
             }
             Self::Export(req) => {
-                tracing::debug!("Executing KMS Export RPC [id={} name={}]", req_id, req.name)
+                tracing::debug!(
+                    "Executing KMS key-store Export RPC [id={} name={}]",
+                    req_id,
+                    req.name
+                )
             }
             Self::Unwrap(req) => {
-                tracing::debug!("Executing KMS Unwrap RPC [id={} name={}]", req_id, req.name)
+                tracing::debug!(
+                    "Executing KMS key-store Unwrap RPC [id={} name={}]",
+                    req_id,
+                    req.name
+                )
             }
             Self::List(req) => tracing::debug!(
-                "Executing KMS List RPC [id={} prefix={}]",
+                "Executing KMS key-store List RPC [id={} prefix={}]",
                 req_id,
                 req.prefix.as_deref().unwrap_or("")
             ),
             Self::Delete(req) => {
-                tracing::debug!("Executing KMS Delete RPC [id={} name={}]", req_id, req.name)
+                tracing::debug!(
+                    "Executing KMS key-store Delete RPC [id={} name={}]",
+                    req_id,
+                    req.name
+                )
             }
         }
     }
@@ -513,7 +529,7 @@ pub enum KmsRpcResult {
     CreateKey(CreateKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
-    Import(KeyStoreImportResponse),
+    Put(KeyStorePutResponse),
     Export(KeyStoreExportResponse),
     Unwrap(KeyStoreUnwrapResponse),
     List(KeyStoreListResponse),
@@ -576,30 +592,30 @@ impl KmsRpcResult {
                     );
                 }
             }
-            Self::Import(result) => tracing::debug!(
-                "KMS Import RPC succeeded [id={} name={} version={}]",
+            Self::Put(result) => tracing::debug!(
+                "KMS key-store Put RPC succeeded [id={} name={} version={}]",
                 req_id,
                 result.name,
                 result.version
             ),
             Self::Export(result) => tracing::debug!(
-                "KMS Export RPC succeeded [id={} name={} ttl_seconds={}]",
+                "KMS key-store Export RPC succeeded [id={} name={} ttl_seconds={}]",
                 req_id,
                 result.name,
                 result.ttl_seconds
             ),
             Self::Unwrap(result) => tracing::debug!(
-                "KMS Unwrap RPC succeeded [id={} name={}]",
+                "KMS key-store Unwrap RPC succeeded [id={} name={}]",
                 req_id,
                 result.name
             ),
             Self::List(result) => tracing::debug!(
-                "KMS List RPC succeeded [id={} count={}]",
+                "KMS key-store List RPC succeeded [id={} count={}]",
                 req_id,
                 result.names.len()
             ),
             Self::Delete(result) => tracing::debug!(
-                "KMS Delete RPC succeeded [id={} name={} deleted={}]",
+                "KMS key-store Delete RPC succeeded [id={} name={} deleted={}]",
                 req_id,
                 result.name,
                 result.deleted
@@ -720,7 +736,7 @@ impl KmsService {
         validate_key_reference("KeyId", &req.key_id)
     }
 
-    pub fn validate_key_store_import(req: &KeyStoreImportRequest) -> Result<(), String> {
+    pub fn validate_key_store_put(req: &KeyStorePutRequest) -> Result<(), String> {
         validate_key_store_name("Name", &req.name)
     }
 
@@ -787,7 +803,7 @@ impl KmsService {
             KmsRpcCall::RotateKey(req) => {
                 KmsRpcResult::RotateKey(self.rotate_key(client_id, req).await?)
             }
-            KmsRpcCall::Import(req) => KmsRpcResult::Import(self.import(client_id, req).await?),
+            KmsRpcCall::Put(req) => KmsRpcResult::Put(self.put(client_id, req).await?),
             KmsRpcCall::Export(req) => KmsRpcResult::Export(self.export(client_id, req).await?),
             KmsRpcCall::Unwrap(req) => KmsRpcResult::Unwrap(self.unwrap(client_id, req).await?),
             KmsRpcCall::List(req) => KmsRpcResult::List(self.list(client_id, req).await?),
@@ -985,16 +1001,16 @@ impl KmsService {
         })
     }
 
-    pub async fn import(
+    pub async fn put(
         &mut self,
         client_id: &str,
-        req: KeyStoreImportRequest,
-    ) -> Result<KeyStoreImportResponse, tonic::Status> {
+        req: KeyStorePutRequest,
+    ) -> Result<KeyStorePutResponse, tonic::Status> {
         let secret_json = serde_json::to_string(&req.secret)
             .map_err(|e| tonic::Status::internal(format!("Failed to serialize secret: {e}")))?;
-        let response: PluginImportResponse = self
+        let response: PluginPutResponse = self
             .client
-            .import(tonic::Request::new(PluginImportRequest {
+            .put(tonic::Request::new(PluginPutRequest {
                 name: req.name,
                 secret_json,
                 client_id: client_id.to_string(),
@@ -1002,7 +1018,7 @@ impl KmsService {
             .await?
             .into_inner();
 
-        Ok(KeyStoreImportResponse {
+        Ok(KeyStorePutResponse {
             name: response.name,
             version: response.version,
         })
@@ -1479,8 +1495,8 @@ mod test {
     }
 
     #[test]
-    fn test_validate_key_store_import_allows_nested_name() {
-        let req = KeyStoreImportRequest {
+    fn test_validate_key_store_put_allows_nested_name() {
+        let req = KeyStorePutRequest {
             name: "github/prod".to_string(),
             secret: serde_json::Map::from_iter([(
                 "api_key".to_string(),
@@ -1488,7 +1504,7 @@ mod test {
             )]),
         };
 
-        KmsService::validate_key_store_import(&req).unwrap();
+        KmsService::validate_key_store_put(&req).unwrap();
     }
 
     #[test]
@@ -1503,8 +1519,8 @@ mod test {
     }
 
     #[test]
-    fn test_key_store_import_debug_redacts_secret() {
-        let req = KeyStoreImportRequest {
+    fn test_key_store_put_debug_redacts_secret() {
+        let req = KeyStorePutRequest {
             name: "github/prod".to_string(),
             secret: serde_json::Map::from_iter([(
                 "api_key".to_string(),

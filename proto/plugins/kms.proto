@@ -17,7 +17,7 @@ service KmsPlugin {
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
-  rpc Import(KeyStoreImportRequest) returns (KeyStoreImportResponse);
+  rpc Put(KeyStorePutRequest) returns (KeyStorePutResponse);
   rpc Export(KeyStoreExportRequest) returns (KeyStoreExportResponse);
   rpc Unwrap(KeyStoreUnwrapRequest) returns (KeyStoreUnwrapResponse);
   rpc List(KeyStoreListRequest) returns (KeyStoreListResponse);
@@ -144,13 +144,13 @@ message RotateKeyResponse {
   KeyMetadata key_metadata = 1;
 }
 
-message KeyStoreImportRequest {
+message KeyStorePutRequest {
   string name = 1;
   string secret_json = 2;
   string client_id = 3;
 }
 
-message KeyStoreImportResponse {
+message KeyStorePutResponse {
   string name = 1;
   uint32 version = 2;
 }

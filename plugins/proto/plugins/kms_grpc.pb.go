@@ -32,7 +32,7 @@ const (
 	KmsPlugin_CreateKey_FullMethodName       = "/kmsapi.KmsPlugin/CreateKey"
 	KmsPlugin_GenerateDataKey_FullMethodName = "/kmsapi.KmsPlugin/GenerateDataKey"
 	KmsPlugin_RotateKey_FullMethodName       = "/kmsapi.KmsPlugin/RotateKey"
-	KmsPlugin_Import_FullMethodName          = "/kmsapi.KmsPlugin/Import"
+	KmsPlugin_Put_FullMethodName             = "/kmsapi.KmsPlugin/Put"
 	KmsPlugin_Export_FullMethodName          = "/kmsapi.KmsPlugin/Export"
 	KmsPlugin_Unwrap_FullMethodName          = "/kmsapi.KmsPlugin/Unwrap"
 	KmsPlugin_List_FullMethodName            = "/kmsapi.KmsPlugin/List"
@@ -51,7 +51,7 @@ type KmsPluginClient interface {
 	CreateKey(ctx context.Context, in *CreateKeyRequest, opts ...grpc.CallOption) (*CreateKeyResponse, error)
 	GenerateDataKey(ctx context.Context, in *GenerateDataKeyRequest, opts ...grpc.CallOption) (*GenerateDataKeyResponse, error)
 	RotateKey(ctx context.Context, in *RotateKeyRequest, opts ...grpc.CallOption) (*RotateKeyResponse, error)
-	Import(ctx context.Context, in *KeyStoreImportRequest, opts ...grpc.CallOption) (*KeyStoreImportResponse, error)
+	Put(ctx context.Context, in *KeyStorePutRequest, opts ...grpc.CallOption) (*KeyStorePutResponse, error)
 	Export(ctx context.Context, in *KeyStoreExportRequest, opts ...grpc.CallOption) (*KeyStoreExportResponse, error)
 	Unwrap(ctx context.Context, in *KeyStoreUnwrapRequest, opts ...grpc.CallOption) (*KeyStoreUnwrapResponse, error)
 	List(ctx context.Context, in *KeyStoreListRequest, opts ...grpc.CallOption) (*KeyStoreListResponse, error)
@@ -146,10 +146,10 @@ func (c *kmsPluginClient) RotateKey(ctx context.Context, in *RotateKeyRequest, o
 	return out, nil
 }
 
-func (c *kmsPluginClient) Import(ctx context.Context, in *KeyStoreImportRequest, opts ...grpc.CallOption) (*KeyStoreImportResponse, error) {
+func (c *kmsPluginClient) Put(ctx context.Context, in *KeyStorePutRequest, opts ...grpc.CallOption) (*KeyStorePutResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(KeyStoreImportResponse)
-	err := c.cc.Invoke(ctx, KmsPlugin_Import_FullMethodName, in, out, cOpts...)
+	out := new(KeyStorePutResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_Put_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ type KmsPluginServer interface {
 	CreateKey(context.Context, *CreateKeyRequest) (*CreateKeyResponse, error)
 	GenerateDataKey(context.Context, *GenerateDataKeyRequest) (*GenerateDataKeyResponse, error)
 	RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error)
-	Import(context.Context, *KeyStoreImportRequest) (*KeyStoreImportResponse, error)
+	Put(context.Context, *KeyStorePutRequest) (*KeyStorePutResponse, error)
 	Export(context.Context, *KeyStoreExportRequest) (*KeyStoreExportResponse, error)
 	Unwrap(context.Context, *KeyStoreUnwrapRequest) (*KeyStoreUnwrapResponse, error)
 	List(context.Context, *KeyStoreListRequest) (*KeyStoreListResponse, error)
@@ -247,8 +247,8 @@ func (UnimplementedKmsPluginServer) GenerateDataKey(context.Context, *GenerateDa
 func (UnimplementedKmsPluginServer) RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RotateKey not implemented")
 }
-func (UnimplementedKmsPluginServer) Import(context.Context, *KeyStoreImportRequest) (*KeyStoreImportResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Import not implemented")
+func (UnimplementedKmsPluginServer) Put(context.Context, *KeyStorePutRequest) (*KeyStorePutResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Put not implemented")
 }
 func (UnimplementedKmsPluginServer) Export(context.Context, *KeyStoreExportRequest) (*KeyStoreExportResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Export not implemented")
@@ -427,20 +427,20 @@ func _KmsPlugin_RotateKey_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _KmsPlugin_Import_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(KeyStoreImportRequest)
+func _KmsPlugin_Put_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KeyStorePutRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(KmsPluginServer).Import(ctx, in)
+		return srv.(KmsPluginServer).Put(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: KmsPlugin_Import_FullMethodName,
+		FullMethod: KmsPlugin_Put_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(KmsPluginServer).Import(ctx, req.(*KeyStoreImportRequest))
+		return srv.(KmsPluginServer).Put(ctx, req.(*KeyStorePutRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -557,8 +557,8 @@ var KmsPlugin_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _KmsPlugin_RotateKey_Handler,
 		},
 		{
-			MethodName: "Import",
-			Handler:    _KmsPlugin_Import_Handler,
+			MethodName: "Put",
+			Handler:    _KmsPlugin_Put_Handler,
 		},
 		{
 			MethodName: "Export",

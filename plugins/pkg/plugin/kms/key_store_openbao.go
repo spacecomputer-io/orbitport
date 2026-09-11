@@ -47,7 +47,11 @@ func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name st
 		Secret:    secret,
 		UpdatedAt: updatedAt.UTC().Format(time.RFC3339),
 	}
-	if err := c.Post(ctx, c.keyStoreDataPath(clientID, name), map[string]any{"data": record}, &resp); err != nil {
+	target, err := c.keyStoreDataPath(clientID, name)
+	if err != nil {
+		return 0, err
+	}
+	if err := c.Post(ctx, target, map[string]any{"data": record}, &resp); err != nil {
 		return 0, err
 	}
 	return resp.Data.Version, nil
@@ -61,10 +65,14 @@ func (c *openBaoClient) wrapKeyStoreSecret(ctx context.Context, clientID, name s
 			CreationTime string `json:"creation_time"`
 		} `json:"wrap_info"`
 	}
+	target, err := c.keyStoreDataPath(clientID, name)
+	if err != nil {
+		return nil, err
+	}
 	headers := map[string]string{
 		wrapTTLHeader: fmt.Sprintf("%ds", ttlSeconds),
 	}
-	if err := c.GetWithHeaders(ctx, c.keyStoreDataPath(clientID, name), headers, &resp); err != nil {
+	if err := c.GetWithHeaders(ctx, target, headers, &resp); err != nil {
 		return nil, err
 	}
 	if resp.WrapInfo.Token == "" {
@@ -111,6 +119,17 @@ func (c *openBaoClient) unwrapKeyStoreSecret(ctx context.Context, token string) 
 	return &resp.Data.Data, nil
 }
 
+func (c *openBaoClient) ensureKeyStoreSecretExists(ctx context.Context, clientID, name string) error {
+	var resp struct {
+		Data map[string]any `json:"data"`
+	}
+	target, err := c.keyStoreMetadataPath(clientID, name)
+	if err != nil {
+		return err
+	}
+	return c.Get(ctx, target, &resp)
+}
+
 func (c *openBaoClient) listKeyStoreSecrets(ctx context.Context, clientID, prefix string) ([]string, error) {
 	names, err := c.listKeyStoreSecretsRecursive(ctx, clientID, prefix)
 	if err != nil {
@@ -130,7 +149,11 @@ func (c *openBaoClient) listKeyStoreSecretsRecursive(ctx context.Context, client
 			Keys []string `json:"keys"`
 		} `json:"data"`
 	}
-	if err := c.List(ctx, c.keyStoreMetadataPath(clientID, prefix), &resp); err != nil {
+	target, err := c.keyStoreMetadataPath(clientID, prefix)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.List(ctx, target, &resp); err != nil {
 		return nil, err
 	}
 
@@ -151,25 +174,41 @@ func (c *openBaoClient) listKeyStoreSecretsRecursive(ctx context.Context, client
 }
 
 func (c *openBaoClient) deleteKeyStoreSecret(ctx context.Context, clientID, name string) error {
-	return c.Delete(ctx, c.keyStoreMetadataPath(clientID, name), nil)
+	target, err := c.keyStoreMetadataPath(clientID, name)
+	if err != nil {
+		return err
+	}
+	return c.Delete(ctx, target, nil)
 }
 
-func (c *openBaoClient) keyStoreDataPath(clientID, name string) string {
+func (c *openBaoClient) keyStoreDataPath(clientID, name string) (string, error) {
 	parts := []string{"v1", c.keyStoreMount, "data", "owners", tenantNamespace(clientID)}
-	parts = append(parts, keyStorePathParts(name)...)
-	return c.joinPath(parts...)
+	nameParts, err := keyStorePathParts(name)
+	if err != nil {
+		return "", err
+	}
+	parts = append(parts, nameParts...)
+	return c.joinPath(parts...), nil
 }
 
-func (c *openBaoClient) keyStoreMetadataPath(clientID, prefix string) string {
+func (c *openBaoClient) keyStoreMetadataPath(clientID, prefix string) (string, error) {
 	parts := []string{"v1", c.keyStoreMount, "metadata", "owners", tenantNamespace(clientID)}
-	parts = append(parts, keyStorePathParts(prefix)...)
-	return c.joinPath(parts...)
+	prefixParts, err := keyStorePathParts(prefix)
+	if err != nil {
+		return "", err
+	}
+	parts = append(parts, prefixParts...)
+	return c.joinPath(parts...), nil
 }
 
-func (c *openBaoClient) keyStoreCreationPath(clientID, name string) string {
+func (c *openBaoClient) keyStoreCreationPath(clientID, name string) (string, error) {
 	parts := []string{c.keyStoreMount, "data", "owners", tenantNamespace(clientID)}
-	parts = append(parts, keyStorePathParts(name)...)
-	return path.Join(parts...)
+	nameParts, err := keyStorePathParts(name)
+	if err != nil {
+		return "", err
+	}
+	parts = append(parts, nameParts...)
+	return path.Join(parts...), nil
 }
 
 func (c *openBaoClient) systemPath(parts ...string) string {
@@ -177,12 +216,18 @@ func (c *openBaoClient) systemPath(parts ...string) string {
 	return c.joinPath(all...)
 }
 
-func keyStorePathParts(value string) []string {
+func keyStorePathParts(value string) ([]string, error) {
 	value = strings.Trim(value, "/")
 	if value == "" {
-		return nil
+		return nil, nil
 	}
-	return strings.Split(value, "/")
+	segments := strings.Split(value, "/")
+	for _, segment := range segments {
+		if err := validateKeyStoreSegment("path", segment); err != nil {
+			return nil, fmt.Errorf("unsafe key-store path: %w", err)
+		}
+	}
+	return segments, nil
 }
 
 func joinKeyStoreName(prefix, name string) string {
