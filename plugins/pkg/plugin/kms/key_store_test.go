@@ -233,6 +233,119 @@ func TestKeyStoreListRecursesTenantNamespace(t *testing.T) {
 	}
 }
 
+func TestKeyStoreRejectsNamesAboveConfiguredDepth(t *testing.T) {
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("OpenBao should not be called for an over-depth key-store name: %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	deepName := "a/b/c/d"
+	cases := []struct {
+		name string
+		call func() error
+	}{
+		{
+			name: "Put",
+			call: func() error {
+				_, err := plugin.Put(context.Background(), &proto.KeyStorePutRequest{
+					ClientId:   "client-a",
+					Name:       deepName,
+					SecretJson: `{}`,
+				})
+				return err
+			},
+		},
+		{
+			name: "Export",
+			call: func() error {
+				_, err := plugin.Export(context.Background(), &proto.KeyStoreExportRequest{
+					ClientId: "client-a",
+					Name:     deepName,
+				})
+				return err
+			},
+		},
+		{
+			name: "Unwrap",
+			call: func() error {
+				_, err := plugin.Unwrap(context.Background(), &proto.KeyStoreUnwrapRequest{
+					ClientId:  "client-a",
+					Name:      deepName,
+					WrapToken: "wrap-token",
+				})
+				return err
+			},
+		},
+		{
+			name: "Delete",
+			call: func() error {
+				_, err := plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
+					ClientId: "client-a",
+					Name:     deepName,
+				})
+				return err
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call()
+			if status.Code(err) != codes.InvalidArgument {
+				t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
+			}
+		})
+	}
+}
+
+func TestKeyStoreRejectsListPrefixAboveConfiguredDepth(t *testing.T) {
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatalf("OpenBao should not be called for an over-depth key-store prefix: %s %s", r.Method, r.URL.Path)
+	}))
+	defer server.Close()
+
+	_, err := plugin.List(context.Background(), &proto.KeyStoreListRequest{
+		ClientId: "client-a",
+		Prefix:   stringPtr("a/b/c/d"),
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
+	}
+}
+
+func TestKeyStoreListErrorsWhenOpenBaoHierarchyExceedsMaxDepth(t *testing.T) {
+	clientID := "client-a"
+	owner := tenantNamespace(clientID)
+	listTooDeepCalled := false
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner:
+			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"a/"}}})
+		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a":
+			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"b/"}}})
+		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a/b":
+			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"c/"}}})
+		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a/b/c":
+			listTooDeepCalled = true
+			t.Fatalf("list should not recurse past the configured key-store max depth")
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, err := plugin.List(context.Background(), &proto.KeyStoreListRequest{
+		ClientId: clientID,
+	})
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
+	}
+	if listTooDeepCalled {
+		t.Fatal("list recursed past the configured max depth")
+	}
+}
+
 func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
@@ -323,6 +436,9 @@ func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
 	if _, err := client.keyStoreMetadataPath("client-a", "github/../prod"); err == nil {
 		t.Fatal("expected key-store metadata path builder to reject traversal")
 	}
+	if _, err := client.keyStoreDataPath("client-a", "a/b/c/d"); err == nil {
+		t.Fatal("expected key-store data path builder to reject over-depth names")
+	}
 }
 
 func TestKeyStoreCedarForbidOverridesDefaultOwnerPermit(t *testing.T) {
@@ -362,6 +478,7 @@ func newKeyStoreTestPluginWithPolicy(t *testing.T, policyPath string, handler ht
 		KeyStoreMount:                   "key-store",
 		KeyStoreWrapTTLSecs:             60,
 		KeyStoreMaxWrapTTLSecs:          300,
+		KeyStoreMaxDepth:                3,
 		KeyStoreCedarPolicyPath:         policyPath,
 		KeyStoreCedarDefaultOwnerPolicy: true,
 		TimeoutSecs:                     10,

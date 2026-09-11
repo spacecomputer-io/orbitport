@@ -129,6 +129,9 @@ curl -X POST http://localhost:8080/api/v1/rpc \
 
 Store arbitrary key material in the KMS key-store:
 
+Key-store names are slash-separated and bounded by
+`ORBITPORT_KMS_KEY_STORE_MAX_DEPTH`, which defaults to `3`.
+
 ```bash
 curl -X POST http://localhost:8080/api/v1/rpc \
   -H 'Content-Type: application/json' \

@@ -27,13 +27,16 @@ const (
 	keyStoreActionDelete = "kms_keystore.Delete"
 )
 
-var keyStoreSegmentRe = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+var (
+	keyStoreSegmentRe           = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+	errKeyStoreMaxDepthExceeded = errors.New("key-store maximum depth exceeded")
+)
 
 func (p *Plugin) Put(ctx context.Context, req *proto.KeyStorePutRequest) (*proto.KeyStorePutResponse, error) {
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
-	name, err := normalizeKeyStoreName(req.Name)
+	name, err := normalizeKeyStoreName(req.Name, p.keyStoreMaxDepth)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -57,7 +60,7 @@ func (p *Plugin) Export(ctx context.Context, req *proto.KeyStoreExportRequest) (
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
-	name, err := normalizeKeyStoreName(req.Name)
+	name, err := normalizeKeyStoreName(req.Name, p.keyStoreMaxDepth)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -87,7 +90,7 @@ func (p *Plugin) Unwrap(ctx context.Context, req *proto.KeyStoreUnwrapRequest) (
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
-	name, err := normalizeKeyStoreName(req.Name)
+	name, err := normalizeKeyStoreName(req.Name, p.keyStoreMaxDepth)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -134,7 +137,7 @@ func (p *Plugin) List(ctx context.Context, req *proto.KeyStoreListRequest) (*pro
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
-	prefix, err := normalizeKeyStorePrefix(optionalString(req.Prefix))
+	prefix, err := normalizeKeyStorePrefix(optionalString(req.Prefix), p.keyStoreMaxDepth)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -154,7 +157,7 @@ func (p *Plugin) Delete(ctx context.Context, req *proto.KeyStoreDeleteRequest) (
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
-	name, err := normalizeKeyStoreName(req.Name)
+	name, err := normalizeKeyStoreName(req.Name, p.keyStoreMaxDepth)
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
@@ -186,7 +189,7 @@ func (p *Plugin) keyStoreWrapTTL(requested *uint32) (int, error) {
 	return ttlSeconds, nil
 }
 
-func normalizeKeyStoreName(value string) (string, error) {
+func normalizeKeyStoreName(value string, maxDepth int) (string, error) {
 	name := strings.TrimSpace(value)
 	if name == "" {
 		return "", fmt.Errorf("name is required")
@@ -197,7 +200,11 @@ func normalizeKeyStoreName(value string) (string, error) {
 	if strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") {
 		return "", fmt.Errorf("name must not start or end with /")
 	}
-	for _, segment := range strings.Split(name, "/") {
+	segments := strings.Split(name, "/")
+	if err := validateKeyStoreDepth("name", len(segments), maxDepth); err != nil {
+		return "", err
+	}
+	for _, segment := range segments {
 		if err := validateKeyStoreSegment("name", segment); err != nil {
 			return "", err
 		}
@@ -205,7 +212,7 @@ func normalizeKeyStoreName(value string) (string, error) {
 	return name, nil
 }
 
-func normalizeKeyStorePrefix(value string) (string, error) {
+func normalizeKeyStorePrefix(value string, maxDepth int) (string, error) {
 	prefix := strings.Trim(strings.TrimSpace(value), "/")
 	if prefix == "" {
 		return "", nil
@@ -213,12 +220,31 @@ func normalizeKeyStorePrefix(value string) (string, error) {
 	if len(prefix) > maxKeyStoreNameLen {
 		return "", fmt.Errorf("prefix must be at most %d characters", maxKeyStoreNameLen)
 	}
-	for _, segment := range strings.Split(prefix, "/") {
+	segments := strings.Split(prefix, "/")
+	if err := validateKeyStoreDepth("prefix", len(segments), maxDepth); err != nil {
+		return "", err
+	}
+	for _, segment := range segments {
 		if err := validateKeyStoreSegment("prefix", segment); err != nil {
 			return "", err
 		}
 	}
 	return prefix, nil
+}
+
+func validateKeyStoreDepth(fieldName string, depth, maxDepth int) error {
+	maxDepth = effectiveKeyStoreMaxDepth(maxDepth)
+	if depth > maxDepth {
+		return fmt.Errorf("%w: %s must contain at most %d path segments", errKeyStoreMaxDepthExceeded, fieldName, maxDepth)
+	}
+	return nil
+}
+
+func effectiveKeyStoreMaxDepth(maxDepth int) int {
+	if maxDepth <= 0 {
+		return defaultKMSKeyStoreMaxDepth
+	}
+	return maxDepth
 }
 
 func validateKeyStoreSegment(fieldName, segment string) error {
@@ -265,6 +291,9 @@ func keyStoreTokenExpiry(creationTime string, ttlSeconds int, now func() time.Ti
 }
 
 func keyStoreOpenBaoStatus(err error, notFoundMessage string) error {
+	if errors.Is(err, errKeyStoreMaxDepthExceeded) {
+		return status.Error(codes.InvalidArgument, err.Error())
+	}
 	var statusErr *openbao.StatusError
 	if errors.As(err, &statusErr) {
 		switch statusErr.StatusCode {

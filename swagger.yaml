@@ -330,4 +330,4 @@ components:
       type: string
       maxLength: 256
       pattern: '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'
-      description: Slash-separated key-store name. `.` and `..` path segments are rejected.
+      description: Slash-separated key-store name. `.` and `..` path segments are rejected. The default server-side maximum depth is 3 segments.

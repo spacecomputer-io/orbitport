@@ -132,7 +132,9 @@ separate from operational KMS metadata:
 - **Tenant scope** — the same authenticated `client_id` model as the existing
   KMS. The plugin hashes it into `tenant_<sha256(client_id)[:16]>`.
 - **Names** — slash-separated paths such as `github/prod`; each segment must
-  match `[A-Za-z0-9._-]+`. `.` and `..` are rejected.
+  match `[A-Za-z0-9._-]+`. `.` and `..` are rejected. The default maximum
+  depth is three path segments and can be changed with
+  `ORBITPORT_KMS_KEY_STORE_MAX_DEPTH`.
 - **Tenant isolation** — enforced by the authenticated `client_id`, validated
   slash-separated names, and OpenBao paths constructed as
   `owners/<tenant>/<name>` after each path segment is revalidated.
@@ -144,6 +146,8 @@ separate from operational KMS metadata:
 - **Versioning** — `Put` uses KV v2 and returns the new version. A second `Put`
   with the same name intentionally overwrites the stored value with a new
   version.
+- **List depth** — recursive `List` traversal is bounded by the same configured
+  maximum name depth so listing cannot recurse through an unbounded hierarchy.
 
 Authorization is enforced in the KMS plugin with Cedar. The default policy
 is embedded from `cedar/key_store_default.cedar` and adds policy control on top
