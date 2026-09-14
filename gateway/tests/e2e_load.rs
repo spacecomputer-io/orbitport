@@ -123,9 +123,9 @@ async fn run_test(
 
                 request_handles.push(tokio::spawn(async move {
                     sent.fetch_add(1, Ordering::SeqCst);
-                    match common::get_trng(&base_url, &access_token, None, None, None).await {
+                    match common::rpc_ctrng_get(&base_url, &access_token, 1).await {
                         Ok(resp) => {
-                            if !resp.data.is_empty() {
+                            if !resp.items.is_empty() {
                                 received.fetch_add(1, Ordering::SeqCst);
                             }
                         }

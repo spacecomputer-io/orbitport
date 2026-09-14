@@ -8,13 +8,16 @@ use tonic_health::pb::{
     health_client::HealthClient,
 };
 
-use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
-
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
+#[cfg(feature = "kms")]
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
+#[cfg(feature = "ctrng")]
+use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
+#[cfg(feature = "kms_threshold")]
 use crate::proto::plugins::threshold::threshold_plugin_client::ThresholdPluginClient;
+#[cfg(feature = "kms_threshold")]
 use crate::services::threshold::ThresholdGroupRegistry;
 
 use thiserror::Error;
@@ -120,7 +123,7 @@ pub async fn wait_for(
 
 pub struct PluginCatalog {
     urls: Arc<HashMap<String, String>>,
-    threshold_enabled: bool,
+    #[cfg(feature = "kms_threshold")]
     threshold_groups: ThresholdGroupRegistry,
 }
 
@@ -128,31 +131,36 @@ impl PluginCatalog {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_url: &str,
-        masterseed_url: &str,
-        kms_url: &str,
+        #[cfg(feature = "ctrng")] masterseed_url: &str,
+        #[cfg(feature = "kms")] kms_url: &str,
         account_url: Option<&str>,
         patissuer_url: Option<&str>,
-        threshold_enabled: bool,
-        threshold_url: &str,
-        threshold_groups: ThresholdGroupRegistry,
+        #[cfg(feature = "kms_threshold")] threshold_url: &str,
+        #[cfg(feature = "kms_threshold")] threshold_groups: ThresholdGroupRegistry,
     ) -> Self {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
-        urls.insert("kms".to_string(), kms_url.to_string());
-        urls.insert("masterseed".to_string(), masterseed_url.to_string());
+        #[cfg(feature = "kms")]
+        {
+            urls.insert("kms".to_string(), kms_url.to_string());
+            #[cfg(feature = "kms_threshold")]
+            urls.insert("threshold".to_string(), threshold_url.to_string());
+        }
+        #[cfg(feature = "ctrng")]
+        {
+            urls.insert("masterseed".to_string(), masterseed_url.to_string());
+        }
+
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
         }
         if let Some(url) = patissuer_url {
             urls.insert("patissuer".to_string(), url.to_string());
         }
-        if threshold_enabled {
-            urls.insert("threshold".to_string(), threshold_url.to_string());
-        }
 
         PluginCatalog {
             urls: Arc::new(urls),
-            threshold_enabled,
+            #[cfg(feature = "kms_threshold")]
             threshold_groups,
         }
     }
@@ -176,6 +184,7 @@ impl PluginCatalog {
         Ok(AuthPluginClient::new(channel))
     }
 
+    #[cfg(feature = "ctrng")]
     pub async fn get_masterseed_client(
         &self,
     ) -> Result<MasterSeedPluginClient<Channel>, PluginError> {
@@ -183,6 +192,7 @@ impl PluginCatalog {
         Ok(MasterSeedPluginClient::new(channel))
     }
 
+    #[cfg(feature = "kms")]
     pub async fn get_kms_client(&self) -> Result<KmsPluginClient<Channel>, PluginError> {
         let channel = self.get_client("kms").await?;
         Ok(KmsPluginClient::new(channel))
@@ -200,6 +210,7 @@ impl PluginCatalog {
         Ok(PatIssuerPluginClient::new(channel))
     }
 
+    #[cfg(feature = "kms_threshold")]
     pub async fn get_threshold_client(
         &self,
     ) -> Result<ThresholdPluginClient<Channel>, PluginError> {
@@ -210,10 +221,7 @@ impl PluginCatalog {
         Ok(ThresholdPluginClient::new(channel))
     }
 
-    pub fn threshold_enabled(&self) -> bool {
-        self.threshold_enabled
-    }
-
+    #[cfg(feature = "kms_threshold")]
     pub fn threshold_groups(&self) -> ThresholdGroupRegistry {
         self.threshold_groups.clone()
     }

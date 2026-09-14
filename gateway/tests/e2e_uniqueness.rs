@@ -1,3 +1,5 @@
+#![cfg(feature = "ctrng")]
+
 use std::collections::HashSet;
 use std::env;
 use std::time::Duration;
@@ -32,16 +34,14 @@ async fn test_e2e_uniqueness() {
             // Rate limit throttle (300ms delay) - less and we'll hit the rate limit
             sleep(Duration::from_millis(300)).await;
 
-            let resp =
-                common::get_trng(&base_url, &access_token, None, Some(bulk_size), None).await?;
-
-            if resp.bulk.is_none() {
+            let resp = common::rpc_ctrng_get(&base_url, &access_token, bulk_size as u32).await?;
+            if resp.items.is_empty() {
                 return Err(common::E2EError::AssertionFailed(format!(
                     "Request {i}: Expected bulk response, got None"
                 )));
             }
 
-            let bulk_items = resp.bulk.unwrap();
+            let bulk_items = resp.items;
 
             if bulk_items.len() != bulk_size {
                 return Err(common::E2EError::AssertionFailed(format!(
@@ -52,7 +52,7 @@ async fn test_e2e_uniqueness() {
 
             // Iterate and Print
             for (j, item) in bulk_items.iter().enumerate() {
-                let val = &item.data;
+                let val = &item.value;
 
                 if verbose {
                     println!("[Req {:03} | Item {:02}] {}", i, j, val);

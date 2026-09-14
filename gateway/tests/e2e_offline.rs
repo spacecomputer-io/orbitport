@@ -23,8 +23,16 @@ async fn test_e2e_offline() {
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
         let n = 1;
         for _ in 0..n {
-            let resp = common::get_trng(&base_url, &access_token, None, None, None).await?;
-            assert!(!resp.data.is_empty(), "Response data is empty");
+            let resp = common::rpc_ctrng_get(&base_url, &access_token, 5).await?;
+            assert_eq!(resp.items.len(), 5, "RPC response did not honor chunks=5");
+            for item in &resp.items {
+                assert!(!item.value.is_empty(), "RPC response item value is empty");
+                assert_eq!(
+                    item.src.as_deref(),
+                    Some("mixed"),
+                    "RPC response item src was not mixed"
+                );
+            }
         }
         tracing::info!("All requests completed successfully");
         Ok::<(), common::E2EError>(())
