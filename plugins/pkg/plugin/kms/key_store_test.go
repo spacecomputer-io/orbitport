@@ -197,8 +197,8 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 	clientID := "client-a"
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet:
+		switch r.Method {
+		case http.MethodGet:
 			writeKeyStoreJSON(t, w, map[string]any{
 				"data": map[string]any{
 					"data": map[string]any{
