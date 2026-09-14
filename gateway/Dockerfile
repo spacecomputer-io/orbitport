@@ -3,8 +3,11 @@
 ################################################################################
 
 ARG RUST_VERSION=1.92
+ARG RUST_FEATURES="default"
 
 FROM rust:${RUST_VERSION}-slim-trixie AS build
+
+ARG RUST_FEATURES
 
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -29,7 +32,7 @@ RUN --mount=type=bind,source=gateway/src,target=src \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
     <<EOF
 set -e
-cargo build --locked --release --bin gateway 
+cargo build --locked --release --bin gateway --features "${RUST_FEATURES}"
 cp ./target/release/gateway /bin/gateway
 EOF
 
