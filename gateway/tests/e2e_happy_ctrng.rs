@@ -1,7 +1,6 @@
 #![cfg(feature = "ctrng")]
 
 use std::env;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 mod common;
 
