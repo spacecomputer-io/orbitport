@@ -1,4 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::de;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::value::RawValue;
 use std::fmt;
 use tonic::transport::Channel;
 
@@ -311,7 +313,45 @@ const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "kms:";
 const MAX_KEY_STORE_NAME_LEN: usize = 256;
 
-type KeyStoreSecret = serde_json::Map<String, serde_json::Value>;
+#[derive(Clone)]
+pub struct KeyStoreSecret(Box<RawValue>);
+
+impl KeyStoreSecret {
+    pub(crate) fn as_json_str(&self) -> &str {
+        self.0.get()
+    }
+
+    fn from_json_string(value: String) -> Result<Self, String> {
+        let raw = RawValue::from_string(value).map_err(|_| "Secret must be valid JSON")?;
+        Self::from_raw(raw)
+    }
+
+    fn from_raw(raw: Box<RawValue>) -> Result<Self, String> {
+        if !raw.get().trim_start().starts_with('{') {
+            return Err("Secret must be a JSON object".to_string());
+        }
+        Ok(Self(raw))
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyStoreSecret {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        Self::from_raw(raw).map_err(de::Error::custom)
+    }
+}
+
+impl Serialize for KeyStoreSecret {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -959,8 +999,7 @@ impl KmsService {
         client_id: &str,
         req: KeyStorePutRequest,
     ) -> Result<KeyStorePutResponse, tonic::Status> {
-        let secret_json = serde_json::to_string(&req.secret)
-            .map_err(|e| tonic::Status::internal(format!("Failed to serialize secret: {e}")))?;
+        let secret_json = req.secret.as_json_str().to_string();
         let response: PluginKeyStorePutResponse = self
             .client
             .key_store_put(tonic::Request::new(PluginKeyStorePutRequest {
@@ -990,8 +1029,8 @@ impl KmsService {
             }))
             .await?
             .into_inner();
-        let secret = serde_json::from_str::<KeyStoreSecret>(&response.secret_json)
-            .map_err(|e| tonic::Status::internal(format!("Failed to decode secret: {e}")))?;
+        let secret = KeyStoreSecret::from_json_string(response.secret_json)
+            .map_err(|_| tonic::Status::internal("key-store backend returned invalid secret"))?;
 
         Ok(KeyStoreGetResponse {
             name: response.name,
@@ -1313,6 +1352,10 @@ fn map_key_metadata(
 mod test {
     use super::*;
 
+    fn key_store_secret(raw: &str) -> KeyStoreSecret {
+        serde_json::from_str(raw).unwrap()
+    }
+
     #[test]
     fn test_validate_create_key_usage() {
         let req = CreateKeyRequest {
@@ -1426,10 +1469,7 @@ mod test {
     fn test_validate_key_store_put_allows_nested_name() {
         let req = KeyStorePutRequest {
             name: "github/prod".to_string(),
-            secret: serde_json::Map::from_iter([(
-                "api_key".to_string(),
-                serde_json::json!("secret"),
-            )]),
+            secret: key_store_secret(r#"{"api_key":"secret"}"#),
         };
 
         KmsService::validate_key_store_put(&req).unwrap();
@@ -1449,15 +1489,23 @@ mod test {
     fn test_key_store_put_debug_redacts_secret() {
         let req = KeyStorePutRequest {
             name: "github/prod".to_string(),
-            secret: serde_json::Map::from_iter([(
-                "api_key".to_string(),
-                serde_json::json!("super-sensitive"),
-            )]),
+            secret: key_store_secret(r#"{"api_key":"super-sensitive"}"#),
         };
 
         let debug = format!("{req:?}");
         assert!(debug.contains("<redacted>"));
         assert!(!debug.contains("super-sensitive"));
+    }
+
+    #[test]
+    fn test_key_store_secret_from_plugin_preserves_precise_json_numbers() {
+        let raw = r#"{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}"#;
+
+        let secret = KeyStoreSecret::from_json_string(raw.to_string()).unwrap();
+        let serialized = serde_json::to_string(&secret).unwrap();
+
+        assert_eq!(secret.as_json_str(), raw);
+        assert_eq!(serialized, raw);
     }
 
     #[test]
