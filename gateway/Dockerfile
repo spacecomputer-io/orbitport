@@ -32,7 +32,7 @@ RUN --mount=type=bind,source=gateway/src,target=src \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
     <<EOF
 set -e
-cargo build --locked --release --bin gateway --features "${RUST_FEATURES}"
+cargo build --locked --release --bin gateway --no-default-features --features "${RUST_FEATURES}"
 cp ./target/release/gateway /bin/gateway
 EOF
 
