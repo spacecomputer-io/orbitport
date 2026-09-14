@@ -55,14 +55,11 @@ func (c *openBaoClient) getKeyStoreSecret(ctx context.Context, clientID, name st
 }
 
 func (c *openBaoClient) ensureKeyStoreSecretExists(ctx context.Context, clientID, name string) error {
-	var resp struct {
-		Data map[string]any `json:"data"`
-	}
 	target, err := c.keyStoreMetadataPath(clientID, name)
 	if err != nil {
 		return err
 	}
-	return c.Get(ctx, target, &resp)
+	return c.Get(ctx, target, nil)
 }
 
 func (c *openBaoClient) listKeyStoreSecrets(ctx context.Context, clientID, prefix string) ([]string, error) {
