@@ -73,7 +73,7 @@ func (p *Plugin) KeyStoreGet(ctx context.Context, req *proto.KeyStoreGetRequest)
 		logger.Warnf("key-store get rejected invalid stored payload owner=%s name=%s", tenantNamespace(req.ClientId), name)
 		return nil, status.Error(codes.PermissionDenied, "key-store entry does not belong to the requested key")
 	}
-	secretJSON, err := encodeKeyStoreSecretJSON(record.Secret)
+	secretJSON, err := encodeKeyStoreSecretJSON(record)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -190,18 +190,29 @@ func decodeKeyStoreSecretJSON(value string) (json.RawMessage, error) {
 	return secret, nil
 }
 
-func encodeKeyStoreSecretJSON(value json.RawMessage) (string, error) {
-	if !isKeyStoreJSONObject(value) {
-		return "", fmt.Errorf("stored key-store secret must be a JSON object")
+func encodeKeyStoreSecretJSON(record *keyStoreRecord) (string, error) {
+	if secretJSON, ok := keyStoreRecordSecretJSON(record); ok {
+		return secretJSON, nil
 	}
-	return string(value), nil
+	return "", fmt.Errorf("stored key-store secret must be a JSON object")
 }
 
 func isValidKeyStoreRecord(record *keyStoreRecord, clientID, name string) bool {
+	_, hasValidSecret := keyStoreRecordSecretJSON(record)
 	return record != nil &&
 		record.Owner == tenantNamespace(clientID) &&
 		record.Name == name &&
-		isKeyStoreJSONObject(record.Secret)
+		hasValidSecret
+}
+
+func keyStoreRecordSecretJSON(record *keyStoreRecord) (string, bool) {
+	if record == nil {
+		return "", false
+	}
+	if strings.TrimSpace(record.SecretJSON) != "" {
+		return record.SecretJSON, isKeyStoreJSONObject(json.RawMessage(record.SecretJSON))
+	}
+	return "", false
 }
 
 func isKeyStoreJSONObject(value json.RawMessage) bool {

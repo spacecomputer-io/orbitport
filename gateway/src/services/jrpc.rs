@@ -16,6 +16,8 @@ use crate::services::kms::{
 };
 use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
+type JsonRpcRawResponse = Box<serde_json::value::RawValue>;
+
 #[derive(Serialize)]
 pub struct JsonRpcError {
     code: i32,
@@ -198,7 +200,7 @@ impl RpcCall {
         req_id: u64,
         client_id: &str,
         plugin_catalog: &PluginCatalog,
-    ) -> Result<serde_json::Value, tonic::Status> {
+    ) -> Result<JsonRpcRawResponse, tonic::Status> {
         match self {
             RpcCall::GetCTRNG(req) => {
                 let grpc_client = plugin_catalog
@@ -322,9 +324,9 @@ impl RpcCall {
 fn serialize_success_response<T: Serialize>(
     req_id: u64,
     result: T,
-) -> Result<serde_json::Value, tonic::Status> {
+) -> Result<JsonRpcRawResponse, tonic::Status> {
     let res = JsonRpcResponse::success(req_id, result);
-    serde_json::to_value(res)
+    serde_json::value::to_raw_value(&res)
         .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {e}")))
 }
 
@@ -333,7 +335,7 @@ async fn execute_kms(
     client_id: &str,
     plugin_catalog: &PluginCatalog,
     call: KmsRpcCall,
-) -> Result<serde_json::Value, tonic::Status> {
+) -> Result<JsonRpcRawResponse, tonic::Status> {
     let grpc_client = plugin_catalog
         .get_kms_client()
         .await
@@ -348,7 +350,7 @@ async fn execute_threshold(
     client_id: &str,
     plugin_catalog: &PluginCatalog,
     call: ThresholdRpcCall,
-) -> Result<serde_json::Value, tonic::Status> {
+) -> Result<JsonRpcRawResponse, tonic::Status> {
     if !plugin_catalog.threshold_enabled() {
         return Err(tonic::Status::unavailable("Threshold feature disabled"));
     }
@@ -488,6 +490,31 @@ mod test {
             }
             _ => panic!("expected kms_keystore.Put"),
         }
+    }
+
+    #[test]
+    fn test_serialize_key_store_get_preserves_large_number_secret() {
+        let secret_json =
+            r#"{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}"#;
+        let secret: crate::services::kms::KeyStoreSecret =
+            serde_json::from_str(secret_json).unwrap();
+        let response = serialize_success_response(
+            11,
+            crate::services::kms::KeyStoreGetResponse {
+                name: "github/prod".to_string(),
+                secret,
+            },
+        )
+        .unwrap();
+        let response_json = response.get();
+        let http_json = serde_json::to_string(&response).unwrap();
+
+        assert_eq!(http_json, response_json);
+        assert!(response_json.contains("123456789012345678901234567890"));
+        assert!(response_json.contains("3.14159265358979323846"));
+        assert!(!response_json.contains("1.2345678901234568e29"));
+        assert!(!response_json.contains(r#""pi":3.141592653589793}"#));
+        assert!(!response_json.contains(r#""pi":3.141592653589793,"#));
     }
 
     #[test]

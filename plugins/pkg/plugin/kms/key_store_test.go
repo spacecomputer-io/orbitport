@@ -3,7 +3,6 @@ package kms
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,41 +56,47 @@ func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected KV v2 data wrapper, got %+v", body)
 	}
-	secret, ok := data["secret"].(map[string]any)
-	if !ok || secret["api_key"] != "secret-value" {
-		t.Fatalf("expected secret object in body, got %+v", data)
+	secretJSON, ok := data["secret_json"].(string)
+	if !ok || secretJSON != `{"api_key":"secret-value","metadata":{"env":"prod"}}` {
+		t.Fatalf("expected secret_json string in body, got %+v", data)
+	}
+	if _, ok := data["secret"]; ok {
+		t.Fatalf("secret must not be stored as a nested object, got %+v", data)
 	}
 	if data["owner"] != owner || data["name"] != testKeyStoreName {
 		t.Fatalf("expected tenant owner and name in body, got %+v", data)
 	}
 }
 
-func TestKeyStorePutPreservesLargeIntegerSecret(t *testing.T) {
-	var requestBody string
+func TestKeyStorePutStoresSecretAsJSONText(t *testing.T) {
+	var body map[string]any
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatalf("decode body: %v", err)
 		}
-		requestBody = string(body)
 		writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"version": 1}})
 	}))
 	defer server.Close()
 
+	secret := `{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}`
 	_, err := plugin.KeyStorePut(context.Background(), &proto.KeyStorePutRequest{
 		ClientId:   "client-a",
 		Name:       testKeyStoreName,
-		SecretJson: `{"id":9007199254740993}`,
+		SecretJson: secret,
 	})
 	if err != nil {
 		t.Fatalf("Put returned error: %v", err)
 	}
-	if !strings.Contains(requestBody, `"id":9007199254740993`) {
-		t.Fatalf("expected large integer to be preserved in OpenBao payload, got %s", requestBody)
+	data, ok := body["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected KV v2 data wrapper, got %+v", body)
 	}
-	if strings.Contains(requestBody, "9007199254740992") {
-		t.Fatalf("large integer was rounded in OpenBao payload: %s", requestBody)
+	if data["secret_json"] != secret {
+		t.Fatalf("expected exact JSON text in secret_json, got %+v", data["secret_json"])
+	}
+	if _, ok := data["secret"]; ok {
+		t.Fatalf("secret must not be stored as a nested object, got %+v", data)
 	}
 }
 
@@ -124,10 +129,10 @@ func TestKeyStoreGetReturnsSecret(t *testing.T) {
 			writeKeyStoreJSON(t, w, map[string]any{
 				"data": map[string]any{
 					"data": map[string]any{
-						"name":       testKeyStoreName,
-						"owner":      owner,
-						"secret":     map[string]any{"api_key": "secret-value"},
-						"updated_at": "2026-01-01T00:00:00Z",
+						"name":        testKeyStoreName,
+						"owner":       owner,
+						"secret_json": `{"api_key":"secret-value"}`,
+						"updated_at":  "2026-01-01T00:00:00Z",
 					},
 				},
 			})
@@ -149,14 +154,23 @@ func TestKeyStoreGetReturnsSecret(t *testing.T) {
 	}
 }
 
-func TestKeyStoreGetPreservesLargeIntegerSecret(t *testing.T) {
+func TestKeyStoreGetReturnsSecretJSONTextUnchanged(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
+	secret := `{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}`
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/key-store/data/owners/"+owner+"/"+testKeyStoreName:
-			writeKeyStoreRawJSON(t, w, `{"data":{"data":{"name":"`+testKeyStoreName+`","owner":"`+owner+`","secret":{"id":9007199254740993}}}}`)
+			writeKeyStoreJSON(t, w, map[string]any{
+				"data": map[string]any{
+					"data": map[string]any{
+						"name":        testKeyStoreName,
+						"owner":       owner,
+						"secret_json": secret,
+					},
+				},
+			})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -170,8 +184,8 @@ func TestKeyStoreGetPreservesLargeIntegerSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
-	if resp.SecretJson != `{"id":9007199254740993}` {
-		t.Fatalf("expected large integer to be preserved, got %s", resp.SecretJson)
+	if resp.SecretJson != secret {
+		t.Fatalf("expected exact secret JSON text, got %s", resp.SecretJson)
 	}
 }
 
@@ -202,9 +216,9 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 			writeKeyStoreJSON(t, w, map[string]any{
 				"data": map[string]any{
 					"data": map[string]any{
-						"name":   testKeyStoreName,
-						"owner":  tenantNamespace("client-b"),
-						"secret": map[string]any{"api_key": "secret-value"},
+						"name":        testKeyStoreName,
+						"owner":       tenantNamespace("client-b"),
+						"secret_json": `{"api_key":"secret-value"}`,
 					},
 				},
 			})
@@ -223,14 +237,14 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 	}
 }
 
-func TestKeyStoreGetRejectsNullStoredSecretPayload(t *testing.T) {
+func TestKeyStoreGetRejectsNullStoredSecretJSON(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
-			writeKeyStoreRawJSON(t, w, `{"data":{"data":{"name":"`+testKeyStoreName+`","owner":"`+owner+`","secret":null}}}`)
+			writeKeyStoreRawJSON(t, w, `{"data":{"data":{"name":"`+testKeyStoreName+`","owner":"`+owner+`","secret_json":"null"}}}`)
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}

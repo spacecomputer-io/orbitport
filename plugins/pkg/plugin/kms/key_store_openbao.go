@@ -10,10 +10,10 @@ import (
 )
 
 type keyStoreRecord struct {
-	Name      string          `json:"name"`
-	Owner     string          `json:"owner"`
-	Secret    json.RawMessage `json:"secret"`
-	UpdatedAt string          `json:"updated_at"`
+	Name       string `json:"name"`
+	Owner      string `json:"owner"`
+	SecretJSON string `json:"secret_json,omitempty"`
+	UpdatedAt  string `json:"updated_at"`
 }
 
 func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name string, secret json.RawMessage, updatedAt time.Time) (uint32, error) {
@@ -23,10 +23,10 @@ func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name st
 		} `json:"data"`
 	}
 	record := keyStoreRecord{
-		Name:      name,
-		Owner:     tenantNamespace(clientID),
-		Secret:    secret,
-		UpdatedAt: updatedAt.UTC().Format(time.RFC3339),
+		Name:       name,
+		Owner:      tenantNamespace(clientID),
+		SecretJSON: string(secret),
+		UpdatedAt:  updatedAt.UTC().Format(time.RFC3339),
 	}
 	target, err := c.keyStoreDataPath(clientID, name)
 	if err != nil {

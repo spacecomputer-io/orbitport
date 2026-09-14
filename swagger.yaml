@@ -225,7 +225,7 @@ components:
         Secret:
           type: object
           additionalProperties: true
-          description: Arbitrary JSON object stored durably in the KMS key-store.
+          description: Arbitrary JSON object stored durably in the KMS key-store. Secrets are treated as opaque JSON and returned without numeric precision loss.
     KmsKeyStoreGetParams:
       type: object
       required:

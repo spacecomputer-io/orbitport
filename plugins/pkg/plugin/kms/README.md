@@ -122,7 +122,8 @@ always `kms:<alias>`; both forms resolve to the same backend key.
 
 The key-store is for agentic workloads that need a simple place to persist and
 retrieve arbitrary JSON secrets, API tokens, and agent credentials through
-Orbitport KMS. It is separate from operational KMS metadata:
+Orbitport KMS. Secrets are treated as opaque JSON objects and are returned
+without numeric precision loss. It is separate from operational KMS metadata:
 
 - **Storage path** — OpenBao KV v2 mount `ORBITPORT_KMS_KEY_STORE_MOUNT`
   (default `key-store`) under `owners/<tenant>/<name>`.
