@@ -26,10 +26,13 @@ FROM alpine:${ALPINE_VERSION}
 ARG BUILD_TARGET=plugin
 
 RUN apk --no-cache add curl \
+    && mkdir -p /etc/orbitport/kms \
     && addgroup -S appgroup \
-    && adduser -S -G appgroup appuser
+    && adduser -S -G appgroup appuser \
+    && chown -R appuser:appgroup /etc/orbitport
 
 COPY --from=builder --chown=appuser:appgroup /app/bin/${BUILD_TARGET} /app
+COPY --from=builder --chown=appuser:appgroup /app/pkg/plugin/kms/cedar/kms_default.cedar /etc/orbitport/kms/kms_default.cedar
 
 USER appuser
 

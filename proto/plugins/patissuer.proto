@@ -25,6 +25,9 @@ message IssueTokenRequest {
   // Expiry as unix seconds. iat/exp are the issuer's responsibility to
   // stamp; the request only bounds the lifetime.
   int64 expires_at = 4;
+  // Optional OAuth-style scopes such as kms:import, kms:export, kms:delete,
+  // kms:rotate, or kms:*. Scoped KMS operations require explicit scopes.
+  repeated string scopes = 5;
 }
 
 message IssueTokenResponse {

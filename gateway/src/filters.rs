@@ -32,6 +32,8 @@ pub struct AuthContext {
     /// PATs: the token's kms_tenant claim. Legacy Auth0: the raw sub.
     /// Empty when the auth plugin predates the field.
     pub kms_tenant: String,
+    /// OAuth-style PAT scopes. Legacy Auth0 customer tokens keep this empty.
+    pub scopes: Vec<String>,
 }
 
 /// AuthContextWithHold carries the validated JWT context and the dashboard
@@ -162,6 +164,7 @@ async fn authorize(
                 client_id,
                 jti: response.jti.trim().to_string(),
                 kms_tenant: response.kms_tenant.trim().to_string(),
+                scopes: response.scopes,
             })
         }
         Err(GatewayError::NoAuthHeaderError) => {
@@ -547,6 +550,7 @@ mod test {
             client_id: "client".to_string(),
             jti: String::new(),
             kms_tenant: String::new(),
+            scopes: vec![],
         };
 
         for _i in 0..5 {

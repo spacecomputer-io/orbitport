@@ -102,6 +102,7 @@ curl -X POST http://localhost:8080/api/v1/rpc \
       "Scheme": "ETHEREUM",
       "KeySpec": "ECC_SECG_P256K1",
       "KeyUsage": "SIGN_VERIFY",
+      "Alias": "ethereum-dev-key",
       "Tags": [{ "TagKey": "test", "TagValue": "e2e" }]
     }
   }'
@@ -125,3 +126,55 @@ curl -X POST http://localhost:8080/api/v1/rpc \
     }
   }'
 ```
+
+### BYOK import/export
+
+Transit BYOK support is exposed through the same JSON-RPC endpoint. Orbitport
+does not accept plaintext key material: first call `kms.GetImportParameters`,
+wrap the key locally with the returned Transit wrapping public key, then send
+only the wrapped ciphertext to `kms.ImportKeyMaterial`.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 43,
+    "method": "kms.GetImportParameters",
+    "params": {
+      "Scheme": "TRANSIT",
+      "KeySpec": "AES_256_GCM96",
+      "KeyUsage": "ENCRYPT_DECRYPT",
+      "HashFunction": "SHA256"
+    }
+  }'
+```
+
+After local wrapping, import the ciphertext:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 44,
+    "method": "kms.ImportKeyMaterial",
+    "params": {
+      "Alias": "imported-aes",
+      "Scheme": "TRANSIT",
+      "KeySpec": "AES_256_GCM96",
+      "KeyUsage": "ENCRYPT_DECRYPT",
+      "HashFunction": "SHA256",
+      "Ciphertext": "REPLACE_WITH_TRANSIT_WRAPPED_KEY_MATERIAL"
+    }
+  }'
+```
+
+`kms.ImportKeyMaterial` defaults `Exportable` to `true` when the field is
+omitted. Send `"Exportable": false` only if the key should be permanently
+non-exportable and usable only through KMS operations such as `Sign`,
+`Encrypt`, or `Decrypt`.

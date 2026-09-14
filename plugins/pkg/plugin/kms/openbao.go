@@ -2,10 +2,12 @@ package kms
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +36,11 @@ type keyMetadataRecord struct {
 	Enabled        bool         `json:"enabled"`
 	PrimaryVersion uint32       `json:"primary_version"`
 	CreatedAt      string       `json:"created_at"`
+	Origin         string       `json:"origin,omitempty"`
+	PublicOnly     bool         `json:"public_only,omitempty"`
+	Exportable     bool         `json:"exportable"`
+	Status         string       `json:"status,omitempty"`
+	DeletedAt      string       `json:"deleted_at,omitempty"`
 	PublicKey      string       `json:"public_key,omitempty"`
 	Address        string       `json:"address,omitempty"`
 	Tags           []*pluginTag `json:"tags"`
@@ -48,6 +55,11 @@ type transitKeyInfo struct {
 	LatestVersion uint32 `json:"latest_version"`
 	Type          string `json:"type"`
 	PublicKey     string `json:"public_key"`
+}
+
+type byokExportInfo struct {
+	Name string            `json:"name"`
+	Keys map[string]string `json:"keys"`
 }
 
 type ethereumKeyInfo struct {
@@ -85,6 +97,7 @@ type pqcDecapsulateInfo struct {
 }
 
 func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
+	cfg = withKMSConfigDefaults(cfg)
 	logger.Infof(
 		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
 		strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
@@ -112,6 +125,19 @@ func (m *keyMetadataRecord) normalize() {
 	}
 	if m.ProviderKey == "" {
 		m.ProviderKey = m.TransitKey
+	}
+	if m.Origin == "" {
+		m.Origin = metadataOriginGenerated
+	}
+	if m.Status == "" {
+		switch {
+		case m.DeletedAt != "":
+			m.Status = metadataStatusDeleted
+		case m.Enabled:
+			m.Status = metadataStatusEnabled
+		default:
+			m.Status = metadataStatusDisabled
+		}
 	}
 }
 
@@ -213,6 +239,103 @@ func (c *openBaoClient) rotateTransitKey(ctx context.Context, transitKey string)
 	return c.readTransitKey(ctx, transitKey)
 }
 
+func (c *openBaoClient) getTransitWrappingKey(ctx context.Context) (string, error) {
+	var resp struct {
+		Data struct {
+			PublicKey string `json:"public_key"`
+		} `json:"data"`
+	}
+	if err := c.Get(ctx, c.transitPath("wrapping_key"), &resp); err != nil {
+		return "", err
+	}
+	return resp.Data.PublicKey, nil
+}
+
+func (c *openBaoClient) importTransitKey(ctx context.Context, name, keyType, ciphertext, hashFunction string, exportable bool) (*transitKeyInfo, error) {
+	if err := c.Post(ctx, c.transitPath("keys", name, "import"), map[string]any{
+		"type":                   keyType,
+		"ciphertext":             ciphertext,
+		"hash_function":          hashFunction,
+		"exportable":             exportable,
+		"allow_plaintext_backup": false,
+		"allow_rotation":         false,
+	}, nil); err != nil {
+		return nil, err
+	}
+	return c.readTransitKey(ctx, name)
+}
+
+func (c *openBaoClient) importTransitKeyVersion(ctx context.Context, name, ciphertext, hashFunction string, version uint32) (*transitKeyInfo, error) {
+	body := map[string]any{
+		"ciphertext":    ciphertext,
+		"hash_function": hashFunction,
+	}
+	if version > 0 {
+		body["version"] = version
+	}
+	if err := c.Post(ctx, c.transitPath("keys", name, "import_version"), body, nil); err != nil {
+		return nil, err
+	}
+	return c.readTransitKey(ctx, name)
+}
+
+func (c *openBaoClient) importTransitPublicKey(ctx context.Context, name, keyType, publicKey string) (*transitKeyInfo, error) {
+	if err := c.Post(ctx, c.transitPath("keys", name, "import"), map[string]any{
+		"type":                   keyType,
+		"public_key":             publicKey,
+		"exportable":             false,
+		"allow_plaintext_backup": false,
+		"allow_rotation":         false,
+	}, nil); err != nil {
+		return nil, err
+	}
+	return c.readTransitKey(ctx, name)
+}
+
+func (c *openBaoClient) byokExportTransitKey(ctx context.Context, destinationKey, sourceKey string, version uint32, hashFunction string) (*byokExportInfo, error) {
+	parts := []string{"byok-export", destinationKey, sourceKey}
+	if version > 0 {
+		parts = append(parts, strconv.FormatUint(uint64(version), 10))
+	}
+	target := c.transitPath(parts...)
+	if hashFunction != "" {
+		u, err := url.Parse(target)
+		if err != nil {
+			return nil, err
+		}
+		q := u.Query()
+		q.Set("hash", hashFunction)
+		u.RawQuery = q.Encode()
+		target = u.String()
+	}
+
+	var resp struct {
+		Data byokExportInfo `json:"data"`
+	}
+	if err := c.Get(ctx, target, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *openBaoClient) deleteTransitKey(ctx context.Context, name string) error {
+	if err := c.Post(ctx, c.transitPath("keys", name, "config"), map[string]any{
+		"deletion_allowed": true,
+	}, nil); err != nil {
+		if isOpenBaoStatus(err, http.StatusNotFound) {
+			return nil
+		}
+		return err
+	}
+	if err := c.Delete(ctx, c.transitPath("keys", name), nil); err != nil {
+		if isOpenBaoStatus(err, http.StatusNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func (c *openBaoClient) createEthereumKey(ctx context.Context, name string) (*ethereumKeyInfo, error) {
 	var resp struct {
 		Data ethereumKeyInfo `json:"data"`
@@ -285,6 +408,19 @@ func (c *openBaoClient) putMetadata(ctx context.Context, clientID, keyID string,
 	return c.Post(ctx, c.metadataPath(clientID, keyID), map[string]any{
 		"data": metadata,
 	}, nil)
+}
+
+func (c *openBaoClient) metadataExists(ctx context.Context, clientID, keyID string) error {
+	return c.Get(ctx, c.metadataPath(clientID, keyID), nil)
+}
+
+func (c *openBaoClient) deleteMetadata(ctx context.Context, clientID, keyID string) error {
+	return c.Delete(ctx, c.metadataPath(clientID, keyID), nil)
+}
+
+func isOpenBaoStatus(err error, statusCode int) bool {
+	var statusErr *openbao.StatusError
+	return errors.As(err, &statusErr) && statusErr.StatusCode == statusCode
 }
 
 func (c *openBaoClient) getMetadata(ctx context.Context, clientID, keyID string) (*keyMetadataRecord, error) {

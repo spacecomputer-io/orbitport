@@ -1,6 +1,7 @@
 use std::io::Result;
 
 const SERDE_DERIVES: &str = "#[derive(serde::Serialize, serde::Deserialize)]";
+const SERDE_DEFAULT: &str = "#[serde(default)]";
 const PASCAL_CASE: &str = "#[serde(rename_all = \"PascalCase\")]";
 const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.Tag",
@@ -23,6 +24,18 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.RotateKeyResponse",
     "kms.GetCapabilitiesRequest",
     "kms.GetCapabilitiesResponse",
+    "kms.GetImportParametersRequest",
+    "kms.GetImportParametersResponse",
+    "kms.ImportKeyMaterialRequest",
+    "kms.ImportKeyMaterialResponse",
+    "kms.ImportKeyMaterialVersionRequest",
+    "kms.ImportKeyMaterialVersionResponse",
+    "kms.RegisterExportWrappingKeyRequest",
+    "kms.RegisterExportWrappingKeyResponse",
+    "kms.ExportKeyMaterialRequest",
+    "kms.ExportKeyMaterialResponse",
+    "kms.DeleteKeyRequest",
+    "kms.DeleteKeyResponse",
     "kms.SigningCapability",
     "kms.KeyAgreementCapability",
     "kms.SchemeCapability",
@@ -31,10 +44,25 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
 const THRESHOLD_PASCAL_CASE_TYPES: &[&str] = &["threshold.DkgRequest", "threshold.DkgResponse"];
 
 fn apply_service_attributes(config: tonic_prost_build::Builder) -> tonic_prost_build::Builder {
-    KMS_PASCAL_CASE_TYPES
+    let config = KMS_PASCAL_CASE_TYPES
         .iter()
         .chain(THRESHOLD_PASCAL_CASE_TYPES.iter())
-        .fold(config, |config, ty| config.type_attribute(*ty, PASCAL_CASE))
+        .fold(config, |config, ty| config.type_attribute(*ty, PASCAL_CASE));
+
+    [
+        "kms.KeyMetadata.origin",
+        "kms.KeyMetadata.public_only",
+        "kms.SchemeCapability.supports_get_import_parameters",
+        "kms.SchemeCapability.supports_import_key_material",
+        "kms.SchemeCapability.supports_import_key_material_version",
+        "kms.SchemeCapability.supports_byok_export",
+        "kms.SchemeCapability.supports_delete_key",
+        "kms.SchemeCapability.import_hash_functions",
+    ]
+    .iter()
+    .fold(config, |config, field| {
+        config.field_attribute(*field, SERDE_DEFAULT)
+    })
 }
 
 fn build_plugins(proto_dir: &str) -> Result<()> {

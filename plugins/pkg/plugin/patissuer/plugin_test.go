@@ -130,6 +130,22 @@ func TestKmsTenantOmittedWhenEmpty(t *testing.T) {
 	require.False(t, present)
 }
 
+func TestIssueTokenIncludesScopes(t *testing.T) {
+	p := newTestPlugin(t, nil)
+	resp, err := p.IssueToken(context.Background(), &proto.IssueTokenRequest{
+		Jti:       "jti-scoped",
+		Subject:   "acct-1",
+		KmsTenant: "tenant-1",
+		ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		Scopes:    []string{"kms:import", "kms:export", "kms:import"},
+	})
+	require.NoError(t, err)
+
+	parsed, _, err := jwt.NewParser().ParseUnverified(resp.Token, jwt.MapClaims{})
+	require.NoError(t, err)
+	require.Equal(t, "kms:import kms:export", parsed.Claims.(jwt.MapClaims)["scope"])
+}
+
 func TestIssueValidation(t *testing.T) {
 	p := newTestPlugin(t, nil)
 	future := time.Now().Add(time.Hour).Unix()
@@ -142,6 +158,8 @@ func TestIssueValidation(t *testing.T) {
 		{"missing subject", &proto.IssueTokenRequest{Jti: "j", ExpiresAt: future}},
 		{"expiry in past", &proto.IssueTokenRequest{Jti: "j", Subject: "a", ExpiresAt: time.Now().Add(-time.Minute).Unix()}},
 		{"expiry beyond ceiling", &proto.IssueTokenRequest{Jti: "j", Subject: "a", ExpiresAt: time.Now().AddDate(2, 0, 0).Unix()}},
+		{"empty scope", &proto.IssueTokenRequest{Jti: "j", Subject: "a", ExpiresAt: future, Scopes: []string{""}}},
+		{"scope with whitespace", &proto.IssueTokenRequest{Jti: "j", Subject: "a", ExpiresAt: future, Scopes: []string{"kms:import kms:export"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

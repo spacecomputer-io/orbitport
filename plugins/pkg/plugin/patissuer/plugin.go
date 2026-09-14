@@ -2,6 +2,8 @@ package patissuer
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -68,6 +70,10 @@ func (p *Plugin) IssueToken(ctx context.Context, req *proto.IssueTokenRequest) (
 	if exp.After(now.AddDate(0, 0, p.cfg.MaxTTLDays)) {
 		return nil, status.Errorf(codes.InvalidArgument, "expires_at exceeds the %d-day ceiling", p.cfg.MaxTTLDays)
 	}
+	scopes, err := normalizeScopes(req.GetScopes())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 
 	claims := jwt.MapClaims{
 		"iss": p.cfg.Issuer,
@@ -79,6 +85,9 @@ func (p *Plugin) IssueToken(ctx context.Context, req *proto.IssueTokenRequest) (
 	}
 	if req.GetKmsTenant() != "" {
 		claims["kms_tenant"] = req.GetKmsTenant()
+	}
+	if len(scopes) > 0 {
+		claims["scope"] = strings.Join(scopes, " ")
 	}
 
 	token, err := p.signer.Mint(ctx, claims)
@@ -93,6 +102,27 @@ func (p *Plugin) IssueToken(ctx context.Context, req *proto.IssueTokenRequest) (
 	p.logger.Infof("issued PAT exp=%s", exp.UTC().Format(time.RFC3339))
 
 	return &proto.IssueTokenResponse{Ok: true, Token: token}, nil
+}
+
+func normalizeScopes(scopes []string) ([]string, error) {
+	normalized := make([]string, 0, len(scopes))
+	seen := make(map[string]struct{}, len(scopes))
+	for _, scope := range scopes {
+		scope = strings.TrimSpace(scope)
+		if scope == "" {
+			return nil, fmt.Errorf("scopes must not contain empty values")
+		}
+		if strings.ContainsAny(scope, " \t\r\n") {
+			return nil, fmt.Errorf("scope values must not contain whitespace")
+		}
+		key := strings.ToLower(scope)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, scope)
+	}
+	return normalized, nil
 }
 
 func (p *Plugin) GetJwks(ctx context.Context, _ *proto.GetJwksRequest) (*proto.GetJwksResponse, error) {

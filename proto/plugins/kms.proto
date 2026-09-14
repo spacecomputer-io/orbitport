@@ -17,6 +17,12 @@ service KmsPlugin {
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+  rpc GetImportParameters(GetImportParametersRequest) returns (GetImportParametersResponse);
+  rpc ImportKeyMaterial(ImportKeyMaterialRequest) returns (ImportKeyMaterialResponse);
+  rpc ImportKeyMaterialVersion(ImportKeyMaterialVersionRequest) returns (ImportKeyMaterialVersionResponse);
+  rpc RegisterExportWrappingKey(RegisterExportWrappingKeyRequest) returns (RegisterExportWrappingKeyResponse);
+  rpc ExportKeyMaterial(ExportKeyMaterialRequest) returns (ExportKeyMaterialResponse);
+  rpc DeleteKey(DeleteKeyRequest) returns (DeleteKeyResponse);
 }
 
 message Tag {
@@ -37,6 +43,10 @@ message KeyMetadata {
   optional string public_key = 10;
   optional string address = 11;
   string alias = 12;
+  string origin = 13;
+  bool public_only = 14;
+  optional string deleted_at = 15;
+  bool exportable = 16;
 }
 
 message EncryptRequest {
@@ -44,6 +54,7 @@ message EncryptRequest {
   string plaintext = 2;
   optional string encryption_algorithm = 3;
   string client_id = 4;
+  AuthzContext authz_context = 5;
 }
 
 message EncryptResponse {
@@ -57,6 +68,7 @@ message DecryptRequest {
   optional string key_id = 2;
   optional string encryption_algorithm = 3;
   string client_id = 4;
+  AuthzContext authz_context = 5;
 }
 
 message DecryptResponse {
@@ -71,6 +83,7 @@ message SignRequest {
   string signing_algorithm = 3;
   optional string message_type = 4;
   string client_id = 5;
+  AuthzContext authz_context = 6;
 }
 
 message SignResponse {
@@ -82,6 +95,7 @@ message SignResponse {
 message EncapsulateRequest {
   string key_id = 1;
   string client_id = 2;
+  AuthzContext authz_context = 3;
 }
 
 message EncapsulateResponse {
@@ -95,6 +109,7 @@ message DecapsulateRequest {
   string key_id = 1;
   string ciphertext = 2;
   string client_id = 3;
+  AuthzContext authz_context = 4;
 }
 
 message DecapsulateResponse {
@@ -111,6 +126,7 @@ message CreateKeyRequest {
   optional string scheme = 5;
   string client_id = 6;
   string alias = 7;
+  AuthzContext authz_context = 8;
 }
 
 message CreateKeyResponse {
@@ -122,6 +138,7 @@ message GenerateDataKeyRequest {
   optional string data_key_spec = 2;
   optional uint32 number_of_bytes = 3;
   string client_id = 4;
+  AuthzContext authz_context = 5;
 }
 
 message GenerateDataKeyResponse {
@@ -133,8 +150,103 @@ message GenerateDataKeyResponse {
 message RotateKeyRequest {
   string key_id = 1;
   string client_id = 2;
+  AuthzContext authz_context = 3;
 }
 
 message RotateKeyResponse {
   KeyMetadata key_metadata = 1;
+}
+
+message GetImportParametersRequest {
+  optional string scheme = 1;
+  string key_spec = 2;
+  string key_usage = 3;
+  optional string hash_function = 4;
+  string client_id = 5;
+  AuthzContext authz_context = 6;
+}
+
+message GetImportParametersResponse {
+  string wrapping_key = 1;
+  string wrapping_algorithm = 2;
+  string hash_function = 3;
+  string key_material_format = 4;
+}
+
+message ImportKeyMaterialRequest {
+  string alias = 1;
+  string key_spec = 2;
+  string key_usage = 3;
+  string ciphertext = 4;
+  optional string hash_function = 5;
+  string description = 6;
+  repeated Tag tags = 7;
+  optional string scheme = 8;
+  string client_id = 9;
+  AuthzContext authz_context = 10;
+  optional bool exportable = 11;
+}
+
+message ImportKeyMaterialResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message ImportKeyMaterialVersionRequest {
+  string key_id = 1;
+  string ciphertext = 2;
+  optional string hash_function = 3;
+  optional uint32 version = 4;
+  string client_id = 5;
+  AuthzContext authz_context = 6;
+}
+
+message ImportKeyMaterialVersionResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message RegisterExportWrappingKeyRequest {
+  string alias = 1;
+  string public_key = 2;
+  string description = 3;
+  repeated Tag tags = 4;
+  string client_id = 5;
+  AuthzContext authz_context = 6;
+}
+
+message RegisterExportWrappingKeyResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message ExportKeyMaterialRequest {
+  string key_id = 1;
+  string destination_key_id = 2;
+  optional uint32 version = 3;
+  optional string hash_function = 4;
+  string client_id = 5;
+  AuthzContext authz_context = 6;
+}
+
+message ExportKeyMaterialResponse {
+  string key_id = 1;
+  string destination_key_id = 2;
+  string hash_function = 3;
+  map<string, string> wrapped_key_material_by_version = 4;
+}
+
+message DeleteKeyRequest {
+  string key_id = 1;
+  string client_id = 2;
+  AuthzContext authz_context = 3;
+}
+
+message DeleteKeyResponse {
+  string key_id = 1;
+  reserved 2;
+  reserved "deleted";
+}
+
+message AuthzContext {
+  bool is_pat = 1;
+  string credential_id = 2;
+  repeated string scopes = 3;
 }

@@ -33,7 +33,10 @@ type IssueTokenRequest struct {
 	KmsTenant string `protobuf:"bytes,3,opt,name=kms_tenant,json=kmsTenant,proto3" json:"kms_tenant,omitempty"`
 	// Expiry as unix seconds. iat/exp are the issuer's responsibility to
 	// stamp; the request only bounds the lifetime.
-	ExpiresAt     int64 `protobuf:"varint,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	ExpiresAt int64 `protobuf:"varint,4,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// Optional OAuth-style scopes such as kms:import, kms:export, kms:delete,
+	// kms:rotate, or kms:*. Scoped KMS operations require explicit scopes.
+	Scopes        []string `protobuf:"bytes,5,rep,name=scopes,proto3" json:"scopes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -94,6 +97,13 @@ func (x *IssueTokenRequest) GetExpiresAt() int64 {
 		return x.ExpiresAt
 	}
 	return 0
+}
+
+func (x *IssueTokenRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
 }
 
 type IssueTokenResponse struct {
@@ -242,14 +252,15 @@ var File_proto_plugins_patissuer_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_patissuer_proto_rawDesc = "" +
 	"\n" +
-	"\x1dproto/plugins/patissuer.proto\x12\tpatissuer\"}\n" +
+	"\x1dproto/plugins/patissuer.proto\x12\tpatissuer\"\x95\x01\n" +
 	"\x11IssueTokenRequest\x12\x10\n" +
 	"\x03jti\x18\x01 \x01(\tR\x03jti\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x1d\n" +
 	"\n" +
 	"kms_tenant\x18\x03 \x01(\tR\tkmsTenant\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x04 \x01(\x03R\texpiresAt\"P\n" +
+	"expires_at\x18\x04 \x01(\x03R\texpiresAt\x12\x16\n" +
+	"\x06scopes\x18\x05 \x03(\tR\x06scopes\"P\n" +
 	"\x12IssueTokenResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\x12\x14\n" +

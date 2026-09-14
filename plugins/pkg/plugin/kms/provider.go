@@ -32,3 +32,28 @@ type dataKeyProvider interface {
 type rotateKeyProvider interface {
 	RotateKey(context.Context, *keyMetadataRecord) (*keyMetadataRecord, error)
 }
+
+type importParametersProvider interface {
+	GetImportParameters(context.Context, *proto.GetImportParametersRequest) (*proto.GetImportParametersResponse, error)
+}
+
+type keyMaterialImporter interface {
+	PrepareImportKeyMaterial(*proto.ImportKeyMaterialRequest, string, time.Time) (*keyMetadataRecord, error)
+	ImportKeyMaterial(context.Context, *keyMetadataRecord, *proto.ImportKeyMaterialRequest) (*keyMetadataRecord, error)
+}
+
+type keyMaterialVersionImporter interface {
+	ImportKeyMaterialVersion(context.Context, *keyMetadataRecord, *proto.ImportKeyMaterialVersionRequest) (*keyMetadataRecord, error)
+}
+
+type exportWrappingKeyRegistrar interface {
+	RegisterExportWrappingKey(context.Context, *proto.RegisterExportWrappingKeyRequest, string, time.Time) (*keyMetadataRecord, error)
+}
+
+type keyMaterialExporter interface {
+	ExportKeyMaterial(context.Context, *keyMetadataRecord, *keyMetadataRecord, *proto.ExportKeyMaterialRequest) (*proto.ExportKeyMaterialResponse, error)
+}
+
+type deleteKeyProvider interface {
+	DeleteKey(context.Context, *keyMetadataRecord) error
+}

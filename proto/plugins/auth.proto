@@ -23,6 +23,9 @@ message TokenValidationResponse {
     // suffix. On the PAT path this is the self-asserted claim, which the
     // gateway ignores in favour of HoldResponse.kms_tenant.
     string kms_tenant = 4;
+    // Optional OAuth-style scopes carried by PATs. Legacy Auth0 customer
+    // tokens keep this empty so existing behavior remains unchanged.
+    repeated string scopes = 5;
 }
 
 // Validates an Auth0 M2M token for a gateway-internal capability. The caller

@@ -364,6 +364,7 @@ services:
       - ORBITPORT_KMS_KV_MOUNT=orbitport-kv
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
       - ORBITPORT_KMS_PQC_MOUNT=pqc
+      - ORBITPORT_KMS_CEDAR_POLICY_PATH=/etc/orbitport/kms/kms_default.cedar
     ports:
       - 9004:9000
     depends_on:

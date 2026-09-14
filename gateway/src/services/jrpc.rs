@@ -9,7 +9,11 @@ use crate::proto::services::kms::{
 use crate::proto::services::threshold::DkgRequest;
 
 use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
-use crate::services::kms::{KmsRpcCall, KmsService};
+use crate::services::kms::{
+    DeleteKeyRequest, ExportKeyMaterialRequest, GetImportParametersRequest,
+    ImportKeyMaterialRequest, ImportKeyMaterialVersionRequest, KmsAuthzContext, KmsRpcCall,
+    KmsService, RegisterExportWrappingKeyRequest,
+};
 use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
 #[derive(Serialize)]
@@ -88,6 +92,18 @@ pub enum RpcCall {
     GenerateDataKey(GenerateDataKeyRequest),
     #[serde(rename = "kms.RotateKey")]
     RotateKey(RotateKeyRequest),
+    #[serde(rename = "kms.GetImportParameters")]
+    GetImportParameters(GetImportParametersRequest),
+    #[serde(rename = "kms.ImportKeyMaterial")]
+    ImportKeyMaterial(ImportKeyMaterialRequest),
+    #[serde(rename = "kms.ImportKeyMaterialVersion")]
+    ImportKeyMaterialVersion(ImportKeyMaterialVersionRequest),
+    #[serde(rename = "kms.RegisterExportWrappingKey")]
+    RegisterExportWrappingKey(RegisterExportWrappingKeyRequest),
+    #[serde(rename = "kms.ExportKeyMaterial")]
+    ExportKeyMaterial(ExportKeyMaterialRequest),
+    #[serde(rename = "kms.DeleteKey")]
+    DeleteKey(DeleteKeyRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
     #[serde(rename = "kms.Encapsulate")]
@@ -121,6 +137,16 @@ impl RpcCall {
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
+            RpcCall::GetImportParameters(req) => KmsService::validate_get_import_parameters(req)?,
+            RpcCall::ImportKeyMaterial(req) => KmsService::validate_import_key_material(req)?,
+            RpcCall::ImportKeyMaterialVersion(req) => {
+                KmsService::validate_import_key_material_version(req)?
+            }
+            RpcCall::RegisterExportWrappingKey(req) => {
+                KmsService::validate_register_export_wrapping_key(req)?
+            }
+            RpcCall::ExportKeyMaterial(req) => KmsService::validate_export_key_material(req)?,
+            RpcCall::DeleteKey(req) => KmsService::validate_delete_key(req)?,
             RpcCall::CoordinateDKG(req) => {
                 ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
             }
@@ -133,6 +159,7 @@ impl RpcCall {
         self,
         req_id: u64,
         client_id: &str,
+        authz: &KmsAuthzContext,
         plugin_catalog: &PluginCatalog,
     ) -> Result<serde_json::Value, tonic::Status> {
         match self {
@@ -153,18 +180,40 @@ impl RpcCall {
                 serialize_success_response(req_id, KmsService::get_capabilities())
             }
             RpcCall::Encrypt(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Encrypt(req)).await
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::Encrypt(req),
+                )
+                .await
             }
             RpcCall::Decrypt(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Decrypt(req)).await
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::Decrypt(req),
+                )
+                .await
             }
             RpcCall::Sign(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Sign(req)).await
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::Sign(req),
+                )
+                .await
             }
             RpcCall::Encapsulate(req) => {
                 execute_kms(
                     req_id,
                     client_id,
+                    authz,
                     plugin_catalog,
                     KmsRpcCall::Encapsulate(req),
                 )
@@ -174,6 +223,7 @@ impl RpcCall {
                 execute_kms(
                     req_id,
                     client_id,
+                    authz,
                     plugin_catalog,
                     KmsRpcCall::Decapsulate(req),
                 )
@@ -183,6 +233,7 @@ impl RpcCall {
                 execute_kms(
                     req_id,
                     client_id,
+                    authz,
                     plugin_catalog,
                     KmsRpcCall::CreateKey(req),
                 )
@@ -192,6 +243,7 @@ impl RpcCall {
                 execute_kms(
                     req_id,
                     client_id,
+                    authz,
                     plugin_catalog,
                     KmsRpcCall::GenerateDataKey(req),
                 )
@@ -201,8 +253,69 @@ impl RpcCall {
                 execute_kms(
                     req_id,
                     client_id,
+                    authz,
                     plugin_catalog,
                     KmsRpcCall::RotateKey(req),
+                )
+                .await
+            }
+            RpcCall::GetImportParameters(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::GetImportParameters(req),
+                )
+                .await
+            }
+            RpcCall::ImportKeyMaterial(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::ImportKeyMaterial(req),
+                )
+                .await
+            }
+            RpcCall::ImportKeyMaterialVersion(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::ImportKeyMaterialVersion(req),
+                )
+                .await
+            }
+            RpcCall::RegisterExportWrappingKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::RegisterExportWrappingKey(req),
+                )
+                .await
+            }
+            RpcCall::ExportKeyMaterial(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::ExportKeyMaterial(req),
+                )
+                .await
+            }
+            RpcCall::DeleteKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    authz,
+                    plugin_catalog,
+                    KmsRpcCall::DeleteKey(req),
                 )
                 .await
             }
@@ -231,6 +344,7 @@ fn serialize_success_response<T: Serialize>(
 async fn execute_kms(
     req_id: u64,
     client_id: &str,
+    authz: &KmsAuthzContext,
     plugin_catalog: &PluginCatalog,
     call: KmsRpcCall,
 ) -> Result<serde_json::Value, tonic::Status> {
@@ -239,7 +353,7 @@ async fn execute_kms(
         .await
         .map_err(|_| tonic::Status::unavailable("KMS plugin unavailable"))?;
     let mut svc = KmsService::new(grpc_client);
-    let results = svc.execute(client_id, req_id, call).await?;
+    let results = svc.execute(client_id, authz, req_id, call).await?;
     serialize_success_response(req_id, results)
 }
 
@@ -328,6 +442,67 @@ mod test {
                 assert_eq!(params.ciphertext, "Y3Q=");
             }
             _ => panic!("expected kms.Decapsulate"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_import_key_material_pascal_case_and_redacts_debug() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "kms.ImportKeyMaterial",
+            "params": {
+                "Alias": "imported-main",
+                "KeySpec": "AES_256_GCM96",
+                "KeyUsage": "ENCRYPT_DECRYPT",
+                "Ciphertext": "wrapped-secret",
+                "HashFunction": "SHA256",
+                "Description": "imported key",
+                "Tags": [{"TagKey": "env", "TagValue": "prod"}]
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        let debug = format!("{req:?}");
+        assert!(!debug.contains("wrapped-secret"));
+        assert!(debug.contains("<redacted>"));
+        match req.call {
+            RpcCall::ImportKeyMaterial(params) => {
+                assert_eq!(params.alias, "imported-main");
+                assert_eq!(params.key_spec, "AES_256_GCM96");
+                assert_eq!(params.key_usage, "ENCRYPT_DECRYPT");
+                assert_eq!(params.ciphertext, "wrapped-secret");
+                assert_eq!(params.hash_function.as_deref(), Some("SHA256"));
+                assert_eq!(params.exportable, None);
+                assert_eq!(params.tags.len(), 1);
+            }
+            _ => panic!("expected kms.ImportKeyMaterial"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_export_key_material_pascal_case() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 11,
+            "method": "kms.ExportKeyMaterial",
+            "params": {
+                "KeyId": "kms:source",
+                "DestinationKeyId": "kms:dest",
+                "Version": 2,
+                "HashFunction": "SHA512"
+            }
+        });
+
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        match req.call {
+            RpcCall::ExportKeyMaterial(params) => {
+                assert_eq!(params.key_id, "kms:source");
+                assert_eq!(params.destination_key_id, "kms:dest");
+                assert_eq!(params.version, Some(2));
+                assert_eq!(params.hash_function.as_deref(), Some("SHA512"));
+            }
+            _ => panic!("expected kms.ExportKeyMaterial"),
         }
     }
 

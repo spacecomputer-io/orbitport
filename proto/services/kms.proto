@@ -19,6 +19,12 @@ service KmsService {
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
   rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+  rpc GetImportParameters(GetImportParametersRequest) returns (GetImportParametersResponse);
+  rpc ImportKeyMaterial(ImportKeyMaterialRequest) returns (ImportKeyMaterialResponse);
+  rpc ImportKeyMaterialVersion(ImportKeyMaterialVersionRequest) returns (ImportKeyMaterialVersionResponse);
+  rpc RegisterExportWrappingKey(RegisterExportWrappingKeyRequest) returns (RegisterExportWrappingKeyResponse);
+  rpc ExportKeyMaterial(ExportKeyMaterialRequest) returns (ExportKeyMaterialResponse);
+  rpc DeleteKey(DeleteKeyRequest) returns (DeleteKeyResponse);
 }
 
 message Tag {
@@ -39,6 +45,10 @@ message KeyMetadata {
   optional string public_key = 10;
   optional string address = 11;
   string alias = 12;
+  string origin = 13;
+  bool public_only = 14;
+  optional string deleted_at = 15;
+  bool exportable = 16;
 }
 
 message EncryptRequest {
@@ -158,8 +168,90 @@ message SchemeCapability {
   repeated KeyAgreementCapability key_agreement_capabilities = 11;
   bool supports_encapsulate = 12;
   bool supports_decapsulate = 13;
+  bool supports_get_import_parameters = 14;
+  bool supports_import_key_material = 15;
+  bool supports_import_key_material_version = 16;
+  bool supports_byok_export = 17;
+  bool supports_delete_key = 18;
+  repeated string import_hash_functions = 19;
 }
 
 message GetCapabilitiesResponse {
   repeated SchemeCapability schemes = 1;
+}
+
+message GetImportParametersRequest {
+  optional string scheme = 1;
+  string key_spec = 2;
+  string key_usage = 3;
+  optional string hash_function = 4;
+}
+
+message GetImportParametersResponse {
+  string wrapping_key = 1;
+  string wrapping_algorithm = 2;
+  string hash_function = 3;
+  string key_material_format = 4;
+}
+
+message ImportKeyMaterialRequest {
+  string alias = 1;
+  string key_spec = 2;
+  string key_usage = 3;
+  string ciphertext = 4;
+  optional string hash_function = 5;
+  string description = 6;
+  repeated Tag tags = 7;
+  optional string scheme = 8;
+  optional bool exportable = 9;
+}
+
+message ImportKeyMaterialResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message ImportKeyMaterialVersionRequest {
+  string key_id = 1;
+  string ciphertext = 2;
+  optional string hash_function = 3;
+  optional uint32 version = 4;
+}
+
+message ImportKeyMaterialVersionResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message RegisterExportWrappingKeyRequest {
+  string alias = 1;
+  string public_key = 2;
+  string description = 3;
+  repeated Tag tags = 4;
+}
+
+message RegisterExportWrappingKeyResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message ExportKeyMaterialRequest {
+  string key_id = 1;
+  string destination_key_id = 2;
+  optional uint32 version = 3;
+  optional string hash_function = 4;
+}
+
+message ExportKeyMaterialResponse {
+  string key_id = 1;
+  string destination_key_id = 2;
+  string hash_function = 3;
+  map<string, string> wrapped_key_material_by_version = 4;
+}
+
+message DeleteKeyRequest {
+  string key_id = 1;
+}
+
+message DeleteKeyResponse {
+  string key_id = 1;
+  reserved 2;
+  reserved "deleted";
 }

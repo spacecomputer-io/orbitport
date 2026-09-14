@@ -172,6 +172,7 @@ fn synthetic_auth_claiming(
                 client_id,
                 jti,
                 kms_tenant,
+                scopes: vec![],
             })
         }
     })

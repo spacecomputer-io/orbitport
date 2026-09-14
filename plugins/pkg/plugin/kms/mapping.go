@@ -8,6 +8,8 @@ const (
 	encryptDecryptUsage               = "ENCRYPT_DECRYPT"
 	encryptionAlgorithmAES256GCM96    = "AES_256_GCM96"
 	keyAgreementUsage                 = "KEY_AGREEMENT"
+	keyMaterialFormatPKCS8DER         = "PKCS8_DER"
+	keyMaterialFormatRaw              = "RAW"
 	keySpecECCSecgP256K1              = "ECC_SECG_P256K1"
 	keySpecECDSAP256                  = "ECDSA_P256"
 	keySpecECDSAP384                  = "ECDSA_P384"
@@ -19,13 +21,28 @@ const (
 	keySpecMLDSA87                    = "ML_DSA_87"
 	keySpecRSA4096                    = "RSA_4096"
 	keySpecAES256GCM96                = encryptionAlgorithmAES256GCM96
+	keyUsageKeyWrap                   = "KEY_WRAP"
 	messageTypeDigest                 = "DIGEST"
 	messageTypeEIP191                 = "EIP191"
 	messageTypeRaw                    = "RAW"
+	metadataOriginGenerated           = "GENERATED"
+	metadataOriginImported            = "IMPORTED"
+	metadataOriginPublicOnly          = "PUBLIC_ONLY"
+	metadataStatusDeleted             = "DELETED"
+	metadataStatusDeletePending       = "DELETE_PENDING"
+	metadataStatusDisabled            = "DISABLED"
+	metadataStatusEnabled             = "ENABLED"
+	metadataStatusImportPending       = "IMPORT_PENDING"
 	ethereumSignMethodRawHash         = "raw_hash"
 	schemeEthereum                    = "ETHEREUM"
 	schemePQC                         = "PQC"
 	schemeTransit                     = "TRANSIT"
+	transitImportWrappingAlgorithm    = "RSA-OAEP-4096"
+	hashFunctionSHA1                  = "SHA1"
+	hashFunctionSHA224                = "SHA224"
+	hashFunctionSHA256                = "SHA256"
+	hashFunctionSHA384                = "SHA384"
+	hashFunctionSHA512                = "SHA512"
 	keyAgreementAlgorithmMLKEM        = "ML_KEM"
 	signVerifyUsage                   = "SIGN_VERIFY"
 	signingAlgorithmEthereumSecp256k1 = "ETHEREUM_SECP256K1"
@@ -110,6 +127,45 @@ func validateTransitKeyUsage(keySpec, keyUsage string) error {
 		}
 	}
 	return nil
+}
+
+func validateTransitImportKeyUsage(keySpec, keyUsage string) error {
+	switch keySpec {
+	case keySpecAES256GCM96:
+		if keyUsage != encryptDecryptUsage {
+			return fmt.Errorf("%s keys must use ENCRYPT_DECRYPT", keySpecAES256GCM96)
+		}
+	case keySpecECDSAP256, keySpecED25519, keySpecRSA4096:
+		if keyUsage != signVerifyUsage {
+			return fmt.Errorf("asymmetric keys must use SIGN_VERIFY")
+		}
+	default:
+		return fmt.Errorf("Transit BYOK supports AES_256_GCM96, ECDSA_P256, ED25519, and RSA_4096")
+	}
+	return nil
+}
+
+func normalizeHashFunction(hashFunction string) (string, error) {
+	if hashFunction == "" {
+		return hashFunctionSHA256, nil
+	}
+	switch hashFunction {
+	case hashFunctionSHA1, hashFunctionSHA224, hashFunctionSHA256, hashFunctionSHA384, hashFunctionSHA512:
+		return hashFunction, nil
+	default:
+		return "", fmt.Errorf("HashFunction must be SHA1, SHA224, SHA256, SHA384, or SHA512")
+	}
+}
+
+func keyMaterialFormat(keySpec string) (string, error) {
+	switch keySpec {
+	case keySpecAES256GCM96:
+		return keyMaterialFormatRaw, nil
+	case keySpecECDSAP256, keySpecED25519, keySpecRSA4096:
+		return keyMaterialFormatPKCS8DER, nil
+	default:
+		return "", fmt.Errorf("unsupported KeySpec %q", keySpec)
+	}
 }
 
 func validateEthereumKeyUsage(keySpec, keyUsage string) error {

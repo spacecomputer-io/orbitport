@@ -1,25 +1,39 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 use tonic::transport::Channel;
 
 use crate::proto::plugins::kms::{
-    CreateKeyRequest as PluginCreateKeyRequest, CreateKeyResponse as PluginCreateKeyResponse,
-    DecapsulateRequest as PluginDecapsulateRequest,
+    AuthzContext as PluginAuthzContext, CreateKeyRequest as PluginCreateKeyRequest,
+    CreateKeyResponse as PluginCreateKeyResponse, DecapsulateRequest as PluginDecapsulateRequest,
     DecapsulateResponse as PluginDecapsulateResponse, DecryptRequest as PluginDecryptRequest,
-    DecryptResponse as PluginDecryptResponse, EncapsulateRequest as PluginEncapsulateRequest,
+    DecryptResponse as PluginDecryptResponse, DeleteKeyRequest as PluginDeleteKeyRequest,
+    DeleteKeyResponse as PluginDeleteKeyResponse, EncapsulateRequest as PluginEncapsulateRequest,
     EncapsulateResponse as PluginEncapsulateResponse, EncryptRequest as PluginEncryptRequest,
     EncryptResponse as PluginEncryptResponse,
+    ExportKeyMaterialRequest as PluginExportKeyMaterialRequest,
+    ExportKeyMaterialResponse as PluginExportKeyMaterialResponse,
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
     GenerateDataKeyResponse as PluginGenerateDataKeyResponse,
+    GetImportParametersRequest as PluginGetImportParametersRequest,
+    GetImportParametersResponse as PluginGetImportParametersResponse,
+    ImportKeyMaterialRequest as PluginImportKeyMaterialRequest,
+    ImportKeyMaterialResponse as PluginImportKeyMaterialResponse,
+    ImportKeyMaterialVersionRequest as PluginImportKeyMaterialVersionRequest,
+    ImportKeyMaterialVersionResponse as PluginImportKeyMaterialVersionResponse,
+    RegisterExportWrappingKeyRequest as PluginRegisterExportWrappingKeyRequest,
+    RegisterExportWrappingKeyResponse as PluginRegisterExportWrappingKeyResponse,
     RotateKeyRequest as PluginRotateKeyRequest, RotateKeyResponse as PluginRotateKeyResponse,
     SignRequest as PluginSignRequest, SignResponse as PluginSignResponse, Tag as PluginTag,
     kms_plugin_client::KmsPluginClient,
 };
 use crate::proto::services::kms::{
     CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
-    DecryptResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest, EncryptResponse,
-    GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
-    KeyAgreementCapability, RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest,
-    SignResponse, SigningCapability, Tag,
+    DecryptResponse, DeleteKeyResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest,
+    EncryptResponse, ExportKeyMaterialResponse, GenerateDataKeyRequest, GenerateDataKeyResponse,
+    GetCapabilitiesResponse, GetImportParametersResponse, ImportKeyMaterialResponse,
+    ImportKeyMaterialVersionResponse, KeyAgreementCapability, RegisterExportWrappingKeyResponse,
+    RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest, SignResponse,
+    SigningCapability, Tag,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -299,6 +313,177 @@ impl DataKeySpec {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HashFunction {
+    Sha1,
+    Sha224,
+    Sha256,
+    Sha384,
+    Sha512,
+}
+
+impl HashFunction {
+    fn parse_optional(value: Option<&str>) -> Result<Self, String> {
+        match value.map(str::trim).filter(|v| !v.is_empty()) {
+            None | Some("SHA256") => Ok(Self::Sha256),
+            Some("SHA1") => Ok(Self::Sha1),
+            Some("SHA224") => Ok(Self::Sha224),
+            Some("SHA384") => Ok(Self::Sha384),
+            Some("SHA512") => Ok(Self::Sha512),
+            Some(_) => {
+                Err("HashFunction must be SHA1, SHA224, SHA256, SHA384, or SHA512".to_string())
+            }
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Sha1 => "SHA1",
+            Self::Sha224 => "SHA224",
+            Self::Sha256 => "SHA256",
+            Self::Sha384 => "SHA384",
+            Self::Sha512 => "SHA512",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct KmsAuthzContext {
+    pub is_pat: bool,
+    pub credential_id: String,
+    pub scopes: Vec<String>,
+}
+
+impl KmsAuthzContext {
+    fn to_plugin(&self) -> PluginAuthzContext {
+        PluginAuthzContext {
+            is_pat: self.is_pat,
+            credential_id: self.credential_id.clone(),
+            scopes: self.scopes.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct GetImportParametersRequest {
+    pub scheme: Option<String>,
+    pub key_spec: String,
+    pub key_usage: String,
+    pub hash_function: Option<String>,
+}
+
+impl fmt::Debug for GetImportParametersRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GetImportParametersRequest")
+            .field("scheme", &self.scheme)
+            .field("key_spec", &self.key_spec)
+            .field("key_usage", &self.key_usage)
+            .field("hash_function", &self.hash_function)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ImportKeyMaterialRequest {
+    pub alias: String,
+    pub key_spec: String,
+    pub key_usage: String,
+    pub ciphertext: String,
+    pub hash_function: Option<String>,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub tags: Vec<Tag>,
+    pub scheme: Option<String>,
+    pub exportable: Option<bool>,
+}
+
+impl fmt::Debug for ImportKeyMaterialRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImportKeyMaterialRequest")
+            .field("alias", &self.alias)
+            .field("key_spec", &self.key_spec)
+            .field("key_usage", &self.key_usage)
+            .field("ciphertext", &"<redacted>")
+            .field("hash_function", &self.hash_function)
+            .field("description", &self.description)
+            .field("tags", &self.tags)
+            .field("scheme", &self.scheme)
+            .field("exportable", &self.exportable)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ImportKeyMaterialVersionRequest {
+    pub key_id: String,
+    pub ciphertext: String,
+    pub hash_function: Option<String>,
+    pub version: Option<u32>,
+}
+
+impl fmt::Debug for ImportKeyMaterialVersionRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ImportKeyMaterialVersionRequest")
+            .field("key_id", &self.key_id)
+            .field("ciphertext", &"<redacted>")
+            .field("hash_function", &self.hash_function)
+            .field("version", &self.version)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct RegisterExportWrappingKeyRequest {
+    pub alias: String,
+    pub public_key: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub tags: Vec<Tag>,
+}
+
+impl fmt::Debug for RegisterExportWrappingKeyRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RegisterExportWrappingKeyRequest")
+            .field("alias", &self.alias)
+            .field("public_key", &"<redacted>")
+            .field("description", &self.description)
+            .field("tags", &self.tags)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ExportKeyMaterialRequest {
+    pub key_id: String,
+    pub destination_key_id: String,
+    pub version: Option<u32>,
+    pub hash_function: Option<String>,
+}
+
+impl fmt::Debug for ExportKeyMaterialRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExportKeyMaterialRequest")
+            .field("key_id", &self.key_id)
+            .field("destination_key_id", &self.destination_key_id)
+            .field("version", &self.version)
+            .field("hash_function", &self.hash_function)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct DeleteKeyRequest {
+    pub key_id: String,
+}
+
 const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "kms:";
 
@@ -312,6 +497,12 @@ pub enum KmsRpcCall {
     CreateKey(CreateKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
+    GetImportParameters(GetImportParametersRequest),
+    ImportKeyMaterial(ImportKeyMaterialRequest),
+    ImportKeyMaterialVersion(ImportKeyMaterialVersionRequest),
+    RegisterExportWrappingKey(RegisterExportWrappingKeyRequest),
+    ExportKeyMaterial(ExportKeyMaterialRequest),
+    DeleteKey(DeleteKeyRequest),
 }
 
 impl KmsRpcCall {
@@ -325,6 +516,16 @@ impl KmsRpcCall {
             Self::CreateKey(req) => KmsService::validate_create_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
+            Self::GetImportParameters(req) => KmsService::validate_get_import_parameters(req),
+            Self::ImportKeyMaterial(req) => KmsService::validate_import_key_material(req),
+            Self::ImportKeyMaterialVersion(req) => {
+                KmsService::validate_import_key_material_version(req)
+            }
+            Self::RegisterExportWrappingKey(req) => {
+                KmsService::validate_register_export_wrapping_key(req)
+            }
+            Self::ExportKeyMaterial(req) => KmsService::validate_export_key_material(req),
+            Self::DeleteKey(req) => KmsService::validate_delete_key(req),
         }
     }
 
@@ -373,6 +574,43 @@ impl KmsRpcCall {
                 req_id,
                 req.key_id
             ),
+            Self::GetImportParameters(req) => tracing::debug!(
+                "Executing KMS GetImportParameters RPC [id={} scheme={} key_spec={} key_usage={}]",
+                req_id,
+                req.scheme.as_deref().unwrap_or("TRANSIT"),
+                req.key_spec,
+                req.key_usage
+            ),
+            Self::ImportKeyMaterial(req) => tracing::debug!(
+                "Executing KMS ImportKeyMaterial RPC [id={} scheme={} key_spec={} key_usage={}]",
+                req_id,
+                req.scheme.as_deref().unwrap_or("TRANSIT"),
+                req.key_spec,
+                req.key_usage
+            ),
+            Self::ImportKeyMaterialVersion(req) => tracing::debug!(
+                "Executing KMS ImportKeyMaterialVersion RPC [id={} key_id={} version={:?}]",
+                req_id,
+                req.key_id,
+                req.version
+            ),
+            Self::RegisterExportWrappingKey(req) => tracing::debug!(
+                "Executing KMS RegisterExportWrappingKey RPC [id={} alias={}]",
+                req_id,
+                req.alias
+            ),
+            Self::ExportKeyMaterial(req) => tracing::debug!(
+                "Executing KMS ExportKeyMaterial RPC [id={} key_id={} destination_key_id={} version={:?}]",
+                req_id,
+                req.key_id,
+                req.destination_key_id,
+                req.version
+            ),
+            Self::DeleteKey(req) => tracing::debug!(
+                "Executing KMS DeleteKey RPC [id={} key_id={}]",
+                req_id,
+                req.key_id
+            ),
         }
     }
 }
@@ -388,6 +626,12 @@ pub enum KmsRpcResult {
     CreateKey(CreateKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
+    GetImportParameters(GetImportParametersResponse),
+    ImportKeyMaterial(ImportKeyMaterialResponse),
+    ImportKeyMaterialVersion(ImportKeyMaterialVersionResponse),
+    RegisterExportWrappingKey(RegisterExportWrappingKeyResponse),
+    ExportKeyMaterial(ExportKeyMaterialResponse),
+    DeleteKey(DeleteKeyResponse),
 }
 
 impl KmsRpcResult {
@@ -446,6 +690,53 @@ impl KmsRpcResult {
                     );
                 }
             }
+            Self::GetImportParameters(result) => tracing::debug!(
+                "KMS GetImportParameters RPC succeeded [id={} hash_function={} key_material_format={}]",
+                req_id,
+                result.hash_function,
+                result.key_material_format
+            ),
+            Self::ImportKeyMaterial(result) => {
+                if let Some(metadata) = result.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS ImportKeyMaterial RPC succeeded [id={} key_id={} scheme={}]",
+                        req_id,
+                        metadata.key_id,
+                        metadata.scheme
+                    );
+                }
+            }
+            Self::ImportKeyMaterialVersion(result) => {
+                if let Some(metadata) = result.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS ImportKeyMaterialVersion RPC succeeded [id={} key_id={} primary_version={}]",
+                        req_id,
+                        metadata.key_id,
+                        metadata.primary_version
+                    );
+                }
+            }
+            Self::RegisterExportWrappingKey(result) => {
+                if let Some(metadata) = result.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS RegisterExportWrappingKey RPC succeeded [id={} key_id={}]",
+                        req_id,
+                        metadata.key_id
+                    );
+                }
+            }
+            Self::ExportKeyMaterial(result) => tracing::debug!(
+                "KMS ExportKeyMaterial RPC succeeded [id={} key_id={} destination_key_id={} versions={}]",
+                req_id,
+                result.key_id,
+                result.destination_key_id,
+                result.wrapped_key_material_by_version.len()
+            ),
+            Self::DeleteKey(result) => tracing::debug!(
+                "KMS DeleteKey RPC succeeded [id={} key_id={}]",
+                req_id,
+                result.key_id
+            ),
         }
     }
 }
@@ -562,6 +853,65 @@ impl KmsService {
         validate_key_reference("KeyId", &req.key_id)
     }
 
+    pub fn validate_get_import_parameters(req: &GetImportParametersRequest) -> Result<(), String> {
+        let scheme = Scheme::parse_optional(req.scheme.as_deref())?;
+        let key_spec = validate_key_spec(&req.key_spec, scheme)?;
+        let key_usage = validate_key_usage(&req.key_usage)?;
+        validate_byok_key_spec_usage(scheme, key_spec, key_usage)?;
+        HashFunction::parse_optional(req.hash_function.as_deref())?;
+        Ok(())
+    }
+
+    pub fn validate_import_key_material(req: &ImportKeyMaterialRequest) -> Result<(), String> {
+        let scheme = Scheme::parse_optional(req.scheme.as_deref())?;
+        let key_spec = validate_key_spec(&req.key_spec, scheme)?;
+        let key_usage = validate_key_usage(&req.key_usage)?;
+        validate_byok_key_spec_usage(scheme, key_spec, key_usage)?;
+        validate_required("Alias", &req.alias)?;
+        validate_alias(&req.alias)?;
+        validate_required("Ciphertext", &req.ciphertext)?;
+        HashFunction::parse_optional(req.hash_function.as_deref())?;
+
+        for tag in &req.tags {
+            validate_required("TagKey", &tag.tag_key)?;
+        }
+        Ok(())
+    }
+
+    pub fn validate_import_key_material_version(
+        req: &ImportKeyMaterialVersionRequest,
+    ) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)?;
+        validate_required("Ciphertext", &req.ciphertext)?;
+        HashFunction::parse_optional(req.hash_function.as_deref())?;
+        validate_optional_version(req.version)?;
+        Ok(())
+    }
+
+    pub fn validate_register_export_wrapping_key(
+        req: &RegisterExportWrappingKeyRequest,
+    ) -> Result<(), String> {
+        validate_required("Alias", &req.alias)?;
+        validate_alias(&req.alias)?;
+        validate_required("PublicKey", &req.public_key)?;
+        for tag in &req.tags {
+            validate_required("TagKey", &tag.tag_key)?;
+        }
+        Ok(())
+    }
+
+    pub fn validate_export_key_material(req: &ExportKeyMaterialRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)?;
+        validate_key_reference("DestinationKeyId", &req.destination_key_id)?;
+        validate_optional_version(req.version)?;
+        HashFunction::parse_optional(req.hash_function.as_deref())?;
+        Ok(())
+    }
+
+    pub fn validate_delete_key(req: &DeleteKeyRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)
+    }
+
     pub fn get_capabilities() -> GetCapabilitiesResponse {
         GetCapabilitiesResponse {
             schemes: vec![
@@ -575,29 +925,54 @@ impl KmsService {
     pub async fn execute(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req_id: u64,
         call: KmsRpcCall,
     ) -> Result<KmsRpcResult, tonic::Status> {
         call.log_start(req_id);
 
         let result = match call {
-            KmsRpcCall::Encrypt(req) => KmsRpcResult::Encrypt(self.encrypt(client_id, req).await?),
-            KmsRpcCall::Decrypt(req) => KmsRpcResult::Decrypt(self.decrypt(client_id, req).await?),
-            KmsRpcCall::Sign(req) => KmsRpcResult::Sign(self.sign(client_id, req).await?),
+            KmsRpcCall::Encrypt(req) => {
+                KmsRpcResult::Encrypt(self.encrypt(client_id, authz, req).await?)
+            }
+            KmsRpcCall::Decrypt(req) => {
+                KmsRpcResult::Decrypt(self.decrypt(client_id, authz, req).await?)
+            }
+            KmsRpcCall::Sign(req) => KmsRpcResult::Sign(self.sign(client_id, authz, req).await?),
             KmsRpcCall::Encapsulate(req) => {
-                KmsRpcResult::Encapsulate(self.encapsulate(client_id, req).await?)
+                KmsRpcResult::Encapsulate(self.encapsulate(client_id, authz, req).await?)
             }
             KmsRpcCall::Decapsulate(req) => {
-                KmsRpcResult::Decapsulate(self.decapsulate(client_id, req).await?)
+                KmsRpcResult::Decapsulate(self.decapsulate(client_id, authz, req).await?)
             }
             KmsRpcCall::CreateKey(req) => {
-                KmsRpcResult::CreateKey(self.create_key(client_id, req).await?)
+                KmsRpcResult::CreateKey(self.create_key(client_id, authz, req).await?)
             }
             KmsRpcCall::GenerateDataKey(req) => {
-                KmsRpcResult::GenerateDataKey(self.generate_data_key(client_id, req).await?)
+                KmsRpcResult::GenerateDataKey(self.generate_data_key(client_id, authz, req).await?)
             }
             KmsRpcCall::RotateKey(req) => {
-                KmsRpcResult::RotateKey(self.rotate_key(client_id, req).await?)
+                KmsRpcResult::RotateKey(self.rotate_key(client_id, authz, req).await?)
+            }
+            KmsRpcCall::GetImportParameters(req) => KmsRpcResult::GetImportParameters(
+                self.get_import_parameters(client_id, authz, req).await?,
+            ),
+            KmsRpcCall::ImportKeyMaterial(req) => KmsRpcResult::ImportKeyMaterial(
+                self.import_key_material(client_id, authz, req).await?,
+            ),
+            KmsRpcCall::ImportKeyMaterialVersion(req) => KmsRpcResult::ImportKeyMaterialVersion(
+                self.import_key_material_version(client_id, authz, req)
+                    .await?,
+            ),
+            KmsRpcCall::RegisterExportWrappingKey(req) => KmsRpcResult::RegisterExportWrappingKey(
+                self.register_export_wrapping_key(client_id, authz, req)
+                    .await?,
+            ),
+            KmsRpcCall::ExportKeyMaterial(req) => KmsRpcResult::ExportKeyMaterial(
+                self.export_key_material(client_id, authz, req).await?,
+            ),
+            KmsRpcCall::DeleteKey(req) => {
+                KmsRpcResult::DeleteKey(self.delete_key(client_id, authz, req).await?)
             }
         };
 
@@ -608,8 +983,10 @@ impl KmsService {
     pub async fn encrypt(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: EncryptRequest,
     ) -> Result<EncryptResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginEncryptResponse = self
             .client
             .encrypt(tonic::Request::new(PluginEncryptRequest {
@@ -617,6 +994,7 @@ impl KmsService {
                 plaintext: req.plaintext,
                 encryption_algorithm: req.encryption_algorithm,
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
@@ -631,8 +1009,10 @@ impl KmsService {
     pub async fn decrypt(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: DecryptRequest,
     ) -> Result<DecryptResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginDecryptResponse = self
             .client
             .decrypt(tonic::Request::new(PluginDecryptRequest {
@@ -640,6 +1020,7 @@ impl KmsService {
                 key_id: req.key_id,
                 encryption_algorithm: req.encryption_algorithm,
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
@@ -654,8 +1035,10 @@ impl KmsService {
     pub async fn sign(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: SignRequest,
     ) -> Result<SignResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginSignResponse = self
             .client
             .sign(tonic::Request::new(PluginSignRequest {
@@ -664,6 +1047,7 @@ impl KmsService {
                 signing_algorithm: req.signing_algorithm,
                 message_type: req.message_type,
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
@@ -678,13 +1062,16 @@ impl KmsService {
     pub async fn encapsulate(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: EncapsulateRequest,
     ) -> Result<EncapsulateResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginEncapsulateResponse = self
             .client
             .encapsulate(tonic::Request::new(PluginEncapsulateRequest {
                 key_id: req.key_id,
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
@@ -700,14 +1087,17 @@ impl KmsService {
     pub async fn decapsulate(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: DecapsulateRequest,
     ) -> Result<DecapsulateResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginDecapsulateResponse = self
             .client
             .decapsulate(tonic::Request::new(PluginDecapsulateRequest {
                 key_id: req.key_id,
                 ciphertext: req.ciphertext,
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
@@ -722,8 +1112,10 @@ impl KmsService {
     pub async fn create_key(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: CreateKeyRequest,
     ) -> Result<CreateKeyResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginCreateKeyResponse = self
             .client
             .create_key(tonic::Request::new(PluginCreateKeyRequest {
@@ -741,6 +1133,7 @@ impl KmsService {
                     })
                     .collect(),
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
@@ -753,8 +1146,10 @@ impl KmsService {
     pub async fn generate_data_key(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: GenerateDataKeyRequest,
     ) -> Result<GenerateDataKeyResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginGenerateDataKeyResponse = self
             .client
             .generate_data_key(tonic::Request::new(PluginGenerateDataKeyRequest {
@@ -762,6 +1157,7 @@ impl KmsService {
                 data_key_spec: req.data_key_spec,
                 number_of_bytes: req.number_of_bytes,
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
@@ -776,19 +1172,208 @@ impl KmsService {
     pub async fn rotate_key(
         &mut self,
         client_id: &str,
+        authz: &KmsAuthzContext,
         req: RotateKeyRequest,
     ) -> Result<RotateKeyResponse, tonic::Status> {
+        let authz_context = Some(authz.to_plugin());
         let response: PluginRotateKeyResponse = self
             .client
             .rotate_key(tonic::Request::new(PluginRotateKeyRequest {
                 key_id: req.key_id,
                 client_id: client_id.to_string(),
+                authz_context,
             }))
             .await?
             .into_inner();
 
         Ok(RotateKeyResponse {
             key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn get_import_parameters(
+        &mut self,
+        client_id: &str,
+        authz: &KmsAuthzContext,
+        req: GetImportParametersRequest,
+    ) -> Result<GetImportParametersResponse, tonic::Status> {
+        let hash_function = HashFunction::parse_optional(req.hash_function.as_deref())
+            .map_err(tonic::Status::invalid_argument)?
+            .as_str()
+            .to_string();
+        let response: PluginGetImportParametersResponse = self
+            .client
+            .get_import_parameters(tonic::Request::new(PluginGetImportParametersRequest {
+                scheme: req.scheme,
+                key_spec: req.key_spec,
+                key_usage: req.key_usage,
+                hash_function: Some(hash_function),
+                client_id: client_id.to_string(),
+                authz_context: Some(authz.to_plugin()),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(GetImportParametersResponse {
+            wrapping_key: response.wrapping_key,
+            wrapping_algorithm: response.wrapping_algorithm,
+            hash_function: response.hash_function,
+            key_material_format: response.key_material_format,
+        })
+    }
+
+    pub async fn import_key_material(
+        &mut self,
+        client_id: &str,
+        authz: &KmsAuthzContext,
+        req: ImportKeyMaterialRequest,
+    ) -> Result<ImportKeyMaterialResponse, tonic::Status> {
+        let hash_function = HashFunction::parse_optional(req.hash_function.as_deref())
+            .map_err(tonic::Status::invalid_argument)?
+            .as_str()
+            .to_string();
+        let response: PluginImportKeyMaterialResponse = self
+            .client
+            .import_key_material(tonic::Request::new(PluginImportKeyMaterialRequest {
+                alias: req.alias,
+                key_spec: req.key_spec,
+                key_usage: req.key_usage,
+                ciphertext: req.ciphertext,
+                hash_function: Some(hash_function),
+                description: req.description,
+                tags: req
+                    .tags
+                    .into_iter()
+                    .map(|tag| PluginTag {
+                        tag_key: tag.tag_key,
+                        tag_value: tag.tag_value,
+                    })
+                    .collect(),
+                scheme: req.scheme,
+                client_id: client_id.to_string(),
+                authz_context: Some(authz.to_plugin()),
+                exportable: req.exportable,
+            }))
+            .await?
+            .into_inner();
+
+        Ok(ImportKeyMaterialResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn import_key_material_version(
+        &mut self,
+        client_id: &str,
+        authz: &KmsAuthzContext,
+        req: ImportKeyMaterialVersionRequest,
+    ) -> Result<ImportKeyMaterialVersionResponse, tonic::Status> {
+        let hash_function = HashFunction::parse_optional(req.hash_function.as_deref())
+            .map_err(tonic::Status::invalid_argument)?
+            .as_str()
+            .to_string();
+        let response: PluginImportKeyMaterialVersionResponse = self
+            .client
+            .import_key_material_version(tonic::Request::new(
+                PluginImportKeyMaterialVersionRequest {
+                    key_id: req.key_id,
+                    ciphertext: req.ciphertext,
+                    hash_function: Some(hash_function),
+                    version: req.version,
+                    client_id: client_id.to_string(),
+                    authz_context: Some(authz.to_plugin()),
+                },
+            ))
+            .await?
+            .into_inner();
+
+        Ok(ImportKeyMaterialVersionResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn register_export_wrapping_key(
+        &mut self,
+        client_id: &str,
+        authz: &KmsAuthzContext,
+        req: RegisterExportWrappingKeyRequest,
+    ) -> Result<RegisterExportWrappingKeyResponse, tonic::Status> {
+        let response: PluginRegisterExportWrappingKeyResponse = self
+            .client
+            .register_export_wrapping_key(tonic::Request::new(
+                PluginRegisterExportWrappingKeyRequest {
+                    alias: req.alias,
+                    public_key: req.public_key,
+                    description: req.description,
+                    tags: req
+                        .tags
+                        .into_iter()
+                        .map(|tag| PluginTag {
+                            tag_key: tag.tag_key,
+                            tag_value: tag.tag_value,
+                        })
+                        .collect(),
+                    client_id: client_id.to_string(),
+                    authz_context: Some(authz.to_plugin()),
+                },
+            ))
+            .await?
+            .into_inner();
+
+        Ok(RegisterExportWrappingKeyResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn export_key_material(
+        &mut self,
+        client_id: &str,
+        authz: &KmsAuthzContext,
+        req: ExportKeyMaterialRequest,
+    ) -> Result<ExportKeyMaterialResponse, tonic::Status> {
+        let hash_function = HashFunction::parse_optional(req.hash_function.as_deref())
+            .map_err(tonic::Status::invalid_argument)?
+            .as_str()
+            .to_string();
+        let response: PluginExportKeyMaterialResponse = self
+            .client
+            .export_key_material(tonic::Request::new(PluginExportKeyMaterialRequest {
+                key_id: req.key_id,
+                destination_key_id: req.destination_key_id,
+                version: req.version,
+                hash_function: Some(hash_function),
+                client_id: client_id.to_string(),
+                authz_context: Some(authz.to_plugin()),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(ExportKeyMaterialResponse {
+            key_id: response.key_id,
+            destination_key_id: response.destination_key_id,
+            hash_function: response.hash_function,
+            wrapped_key_material_by_version: response.wrapped_key_material_by_version,
+        })
+    }
+
+    pub async fn delete_key(
+        &mut self,
+        client_id: &str,
+        authz: &KmsAuthzContext,
+        req: DeleteKeyRequest,
+    ) -> Result<DeleteKeyResponse, tonic::Status> {
+        let response: PluginDeleteKeyResponse = self
+            .client
+            .delete_key(tonic::Request::new(PluginDeleteKeyRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+                authz_context: Some(authz.to_plugin()),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(DeleteKeyResponse {
+            key_id: response.key_id,
         })
     }
 }
@@ -844,6 +1429,12 @@ fn transit_capability() -> SchemeCapability {
         key_agreement_capabilities: vec![],
         supports_encapsulate: false,
         supports_decapsulate: false,
+        supports_get_import_parameters: true,
+        supports_import_key_material: true,
+        supports_import_key_material_version: true,
+        supports_byok_export: true,
+        supports_delete_key: true,
+        import_hash_functions: supported_import_hash_functions(),
     }
 }
 
@@ -865,6 +1456,12 @@ fn ethereum_capability() -> SchemeCapability {
         key_agreement_capabilities: vec![],
         supports_encapsulate: false,
         supports_decapsulate: false,
+        supports_get_import_parameters: false,
+        supports_import_key_material: false,
+        supports_import_key_material_version: false,
+        supports_byok_export: false,
+        supports_delete_key: false,
+        import_hash_functions: vec![],
     }
 }
 
@@ -898,7 +1495,26 @@ fn pqc_capability() -> SchemeCapability {
         key_agreement_capabilities: vec![key_agreement_capability(KeyAgreementAlgorithm::MlKem)],
         supports_encapsulate: true,
         supports_decapsulate: true,
+        supports_get_import_parameters: false,
+        supports_import_key_material: false,
+        supports_import_key_material_version: false,
+        supports_byok_export: false,
+        supports_delete_key: false,
+        import_hash_functions: vec![],
     }
+}
+
+fn supported_import_hash_functions() -> Vec<String> {
+    vec![
+        HashFunction::Sha1,
+        HashFunction::Sha224,
+        HashFunction::Sha256,
+        HashFunction::Sha384,
+        HashFunction::Sha512,
+    ]
+    .into_iter()
+    .map(|hash| hash.as_str().to_string())
+    .collect()
 }
 
 fn key_agreement_capability(
@@ -957,6 +1573,54 @@ fn validate_key_usage(value: &str) -> Result<KeyUsage, String> {
     KeyUsage::parse(value)
 }
 
+fn validate_byok_key_spec_usage(
+    scheme: Scheme,
+    key_spec: KeySpec,
+    key_usage: KeyUsage,
+) -> Result<(), String> {
+    if scheme == Scheme::Transit {
+        match key_spec {
+            KeySpec::Aes256Gcm96 if key_usage == KeyUsage::EncryptDecrypt => return Ok(()),
+            KeySpec::Aes256Gcm96 => {
+                return Err("AES_256_GCM96 keys must use ENCRYPT_DECRYPT".to_string());
+            }
+            KeySpec::EcdsaP256 | KeySpec::Ed25519 | KeySpec::Rsa4096
+                if key_usage == KeyUsage::SignVerify =>
+            {
+                return Ok(());
+            }
+            KeySpec::EcdsaP256 | KeySpec::Ed25519 | KeySpec::Rsa4096 => {
+                return Err("asymmetric keys must use SIGN_VERIFY".to_string());
+            }
+            _ => {
+                return Err(
+                    "Transit BYOK supports AES_256_GCM96, ECDSA_P256, ED25519, and RSA_4096"
+                        .to_string(),
+                );
+            }
+        }
+    }
+
+    if key_usage != key_spec.allowed_usage() {
+        return Err(match (scheme, key_spec) {
+            (_, KeySpec::MlKem768 | KeySpec::MlKem1024) => {
+                "PQC ML-KEM keys must use KEY_AGREEMENT".to_string()
+            }
+            (Scheme::Ethereum, _) => "ETHEREUM keys must use SIGN_VERIFY".to_string(),
+            (Scheme::Pqc, _) => "PQC keys must use SIGN_VERIFY".to_string(),
+            _ => "KeyUsage is not supported for KeySpec".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_optional_version(version: Option<u32>) -> Result<(), String> {
+    if matches!(version, Some(0)) {
+        return Err("Version must be greater than 0".to_string());
+    }
+    Ok(())
+}
+
 fn validate_encryption_algorithm(value: &str) -> Result<EncryptionAlgorithm, String> {
     EncryptionAlgorithm::parse(value)
 }
@@ -1007,6 +1671,10 @@ fn map_key_metadata(
         alias: metadata.alias,
         public_key: metadata.public_key,
         address: metadata.address,
+        origin: metadata.origin,
+        public_only: metadata.public_only,
+        deleted_at: metadata.deleted_at,
+        exportable: metadata.exportable,
         tags: metadata
             .tags
             .into_iter()
@@ -1143,6 +1811,85 @@ mod test {
     }
 
     #[test]
+    fn test_validate_import_key_material_aes() {
+        let req = ImportKeyMaterialRequest {
+            alias: "imported-main".to_string(),
+            key_spec: "AES_256_GCM96".to_string(),
+            key_usage: "ENCRYPT_DECRYPT".to_string(),
+            ciphertext: "wrapped".to_string(),
+            hash_function: Some("SHA384".to_string()),
+            description: String::new(),
+            tags: vec![],
+            scheme: None,
+            exportable: None,
+        };
+        KmsService::validate_import_key_material(&req).unwrap();
+    }
+
+    #[test]
+    fn test_validate_import_key_material_rejects_wrong_usage() {
+        let req = ImportKeyMaterialRequest {
+            alias: "imported-main".to_string(),
+            key_spec: "ECDSA_P256".to_string(),
+            key_usage: "ENCRYPT_DECRYPT".to_string(),
+            ciphertext: "wrapped".to_string(),
+            hash_function: None,
+            description: String::new(),
+            tags: vec![],
+            scheme: None,
+            exportable: None,
+        };
+        let err = KmsService::validate_import_key_material(&req).unwrap_err();
+        assert!(err.contains("SIGN_VERIFY"));
+    }
+
+    #[test]
+    fn test_validate_import_key_material_rejects_unsupported_transit_spec() {
+        let req = ImportKeyMaterialRequest {
+            alias: "imported-main".to_string(),
+            key_spec: "ECDSA_P384".to_string(),
+            key_usage: "SIGN_VERIFY".to_string(),
+            ciphertext: "wrapped".to_string(),
+            hash_function: None,
+            description: String::new(),
+            tags: vec![],
+            scheme: None,
+            exportable: None,
+        };
+        let err = KmsService::validate_import_key_material(&req).unwrap_err();
+        assert!(err.contains("Transit BYOK supports"));
+    }
+
+    #[test]
+    fn test_validate_import_key_material_rejects_invalid_hash() {
+        let req = ImportKeyMaterialRequest {
+            alias: "imported-main".to_string(),
+            key_spec: "AES_256_GCM96".to_string(),
+            key_usage: "ENCRYPT_DECRYPT".to_string(),
+            ciphertext: "wrapped".to_string(),
+            hash_function: Some("SHA999".to_string()),
+            description: String::new(),
+            tags: vec![],
+            scheme: None,
+            exportable: None,
+        };
+        let err = KmsService::validate_import_key_material(&req).unwrap_err();
+        assert!(err.contains("HashFunction"));
+    }
+
+    #[test]
+    fn test_validate_export_key_material_rejects_zero_version() {
+        let req = ExportKeyMaterialRequest {
+            key_id: "kms:source".to_string(),
+            destination_key_id: "kms:dest".to_string(),
+            version: Some(0),
+            hash_function: None,
+        };
+        let err = KmsService::validate_export_key_material(&req).unwrap_err();
+        assert!(err.contains("Version"));
+    }
+
+    #[test]
     fn test_validate_decapsulate_requires_ciphertext() {
         let req = DecapsulateRequest {
             key_id: "kms:abc".to_string(),
@@ -1183,6 +1930,21 @@ mod test {
         assert!(transit.supports_decrypt);
         assert!(transit.supports_generate_data_key);
         assert!(transit.supports_rotate_key);
+        assert!(transit.supports_get_import_parameters);
+        assert!(transit.supports_import_key_material);
+        assert!(transit.supports_import_key_material_version);
+        assert!(transit.supports_byok_export);
+        assert!(transit.supports_delete_key);
+        assert!(
+            transit
+                .import_hash_functions
+                .contains(&"SHA256".to_string())
+        );
+        assert!(
+            transit
+                .import_hash_functions
+                .contains(&"SHA512".to_string())
+        );
 
         let ethereum = capabilities
             .schemes

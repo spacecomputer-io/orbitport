@@ -17,7 +17,10 @@ use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
-use crate::services::jrpc::{JsonRpcRequest, JsonRpcResponse};
+use crate::services::{
+    jrpc::{JsonRpcRequest, JsonRpcResponse},
+    kms::KmsAuthzContext,
+};
 use crate::trng::SRC_DERIVED_TRNG;
 use tonic::transport::Channel;
 use warp::filters::BoxedFilter;
@@ -329,10 +332,15 @@ async fn handle_rpc(
     }
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
     let client_id = ctx.kms_tenant;
+    let authz = KmsAuthzContext {
+        is_pat: !ctx.auth.jti.is_empty(),
+        credential_id: ctx.auth.jti,
+        scopes: ctx.auth.scopes,
+    };
 
     match timeout(
         REQUEST_TIMEOUT,
-        rpc_call.execute(req_id, &client_id, &plugin_catalog),
+        rpc_call.execute(req_id, &client_id, &authz, &plugin_catalog),
     )
     .await
     {

@@ -92,6 +92,10 @@ type KeyMetadata struct {
 	PublicKey      *string                `protobuf:"bytes,10,opt,name=public_key,json=publicKey,proto3,oneof" json:"public_key,omitempty"`
 	Address        *string                `protobuf:"bytes,11,opt,name=address,proto3,oneof" json:"address,omitempty"`
 	Alias          string                 `protobuf:"bytes,12,opt,name=alias,proto3" json:"alias,omitempty"`
+	Origin         string                 `protobuf:"bytes,13,opt,name=origin,proto3" json:"origin,omitempty"`
+	PublicOnly     bool                   `protobuf:"varint,14,opt,name=public_only,json=publicOnly,proto3" json:"public_only,omitempty"`
+	DeletedAt      *string                `protobuf:"bytes,15,opt,name=deleted_at,json=deletedAt,proto3,oneof" json:"deleted_at,omitempty"`
+	Exportable     bool                   `protobuf:"varint,16,opt,name=exportable,proto3" json:"exportable,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -210,12 +214,41 @@ func (x *KeyMetadata) GetAlias() string {
 	return ""
 }
 
+func (x *KeyMetadata) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetPublicOnly() bool {
+	if x != nil {
+		return x.PublicOnly
+	}
+	return false
+}
+
+func (x *KeyMetadata) GetDeletedAt() string {
+	if x != nil && x.DeletedAt != nil {
+		return *x.DeletedAt
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetExportable() bool {
+	if x != nil {
+		return x.Exportable
+	}
+	return false
+}
+
 type EncryptRequest struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	KeyId               string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	Plaintext           string                 `protobuf:"bytes,2,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
 	EncryptionAlgorithm *string                `protobuf:"bytes,3,opt,name=encryption_algorithm,json=encryptionAlgorithm,proto3,oneof" json:"encryption_algorithm,omitempty"`
 	ClientId            string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext        *AuthzContext          `protobuf:"bytes,5,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -276,6 +309,13 @@ func (x *EncryptRequest) GetClientId() string {
 		return x.ClientId
 	}
 	return ""
+}
+
+func (x *EncryptRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
 }
 
 type EncryptResponse struct {
@@ -344,6 +384,7 @@ type DecryptRequest struct {
 	KeyId               *string                `protobuf:"bytes,2,opt,name=key_id,json=keyId,proto3,oneof" json:"key_id,omitempty"`
 	EncryptionAlgorithm *string                `protobuf:"bytes,3,opt,name=encryption_algorithm,json=encryptionAlgorithm,proto3,oneof" json:"encryption_algorithm,omitempty"`
 	ClientId            string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext        *AuthzContext          `protobuf:"bytes,5,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -404,6 +445,13 @@ func (x *DecryptRequest) GetClientId() string {
 		return x.ClientId
 	}
 	return ""
+}
+
+func (x *DecryptRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
 }
 
 type DecryptResponse struct {
@@ -473,6 +521,7 @@ type SignRequest struct {
 	SigningAlgorithm string                 `protobuf:"bytes,3,opt,name=signing_algorithm,json=signingAlgorithm,proto3" json:"signing_algorithm,omitempty"`
 	MessageType      *string                `protobuf:"bytes,4,opt,name=message_type,json=messageType,proto3,oneof" json:"message_type,omitempty"`
 	ClientId         string                 `protobuf:"bytes,5,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext     *AuthzContext          `protobuf:"bytes,6,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -542,6 +591,13 @@ func (x *SignRequest) GetClientId() string {
 	return ""
 }
 
+func (x *SignRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
 type SignResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	KeyId            string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
@@ -606,6 +662,7 @@ type EncapsulateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,3,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -652,6 +709,13 @@ func (x *EncapsulateRequest) GetClientId() string {
 		return x.ClientId
 	}
 	return ""
+}
+
+func (x *EncapsulateRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
 }
 
 type EncapsulateResponse struct {
@@ -727,6 +791,7 @@ type DecapsulateRequest struct {
 	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	Ciphertext    string                 `protobuf:"bytes,2,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
 	ClientId      string                 `protobuf:"bytes,3,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,4,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -780,6 +845,13 @@ func (x *DecapsulateRequest) GetClientId() string {
 		return x.ClientId
 	}
 	return ""
+}
+
+func (x *DecapsulateRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
 }
 
 type DecapsulateResponse struct {
@@ -851,6 +923,7 @@ type CreateKeyRequest struct {
 	Scheme        *string                `protobuf:"bytes,5,opt,name=scheme,proto3,oneof" json:"scheme,omitempty"`
 	ClientId      string                 `protobuf:"bytes,6,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	Alias         string                 `protobuf:"bytes,7,opt,name=alias,proto3" json:"alias,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,8,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -934,6 +1007,13 @@ func (x *CreateKeyRequest) GetAlias() string {
 	return ""
 }
 
+func (x *CreateKeyRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
 type CreateKeyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
@@ -984,6 +1064,7 @@ type GenerateDataKeyRequest struct {
 	DataKeySpec   *string                `protobuf:"bytes,2,opt,name=data_key_spec,json=dataKeySpec,proto3,oneof" json:"data_key_spec,omitempty"`
 	NumberOfBytes *uint32                `protobuf:"varint,3,opt,name=number_of_bytes,json=numberOfBytes,proto3,oneof" json:"number_of_bytes,omitempty"`
 	ClientId      string                 `protobuf:"bytes,4,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,5,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1044,6 +1125,13 @@ func (x *GenerateDataKeyRequest) GetClientId() string {
 		return x.ClientId
 	}
 	return ""
+}
+
+func (x *GenerateDataKeyRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
 }
 
 type GenerateDataKeyResponse struct {
@@ -1110,6 +1198,7 @@ type RotateKeyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,3,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1158,6 +1247,13 @@ func (x *RotateKeyRequest) GetClientId() string {
 	return ""
 }
 
+func (x *RotateKeyRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
 type RotateKeyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
@@ -1202,6 +1298,898 @@ func (x *RotateKeyResponse) GetKeyMetadata() *KeyMetadata {
 	return nil
 }
 
+type GetImportParametersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Scheme        *string                `protobuf:"bytes,1,opt,name=scheme,proto3,oneof" json:"scheme,omitempty"`
+	KeySpec       string                 `protobuf:"bytes,2,opt,name=key_spec,json=keySpec,proto3" json:"key_spec,omitempty"`
+	KeyUsage      string                 `protobuf:"bytes,3,opt,name=key_usage,json=keyUsage,proto3" json:"key_usage,omitempty"`
+	HashFunction  *string                `protobuf:"bytes,4,opt,name=hash_function,json=hashFunction,proto3,oneof" json:"hash_function,omitempty"`
+	ClientId      string                 `protobuf:"bytes,5,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,6,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetImportParametersRequest) Reset() {
+	*x = GetImportParametersRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetImportParametersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetImportParametersRequest) ProtoMessage() {}
+
+func (x *GetImportParametersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetImportParametersRequest.ProtoReflect.Descriptor instead.
+func (*GetImportParametersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetImportParametersRequest) GetScheme() string {
+	if x != nil && x.Scheme != nil {
+		return *x.Scheme
+	}
+	return ""
+}
+
+func (x *GetImportParametersRequest) GetKeySpec() string {
+	if x != nil {
+		return x.KeySpec
+	}
+	return ""
+}
+
+func (x *GetImportParametersRequest) GetKeyUsage() string {
+	if x != nil {
+		return x.KeyUsage
+	}
+	return ""
+}
+
+func (x *GetImportParametersRequest) GetHashFunction() string {
+	if x != nil && x.HashFunction != nil {
+		return *x.HashFunction
+	}
+	return ""
+}
+
+func (x *GetImportParametersRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *GetImportParametersRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
+type GetImportParametersResponse struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	WrappingKey       string                 `protobuf:"bytes,1,opt,name=wrapping_key,json=wrappingKey,proto3" json:"wrapping_key,omitempty"`
+	WrappingAlgorithm string                 `protobuf:"bytes,2,opt,name=wrapping_algorithm,json=wrappingAlgorithm,proto3" json:"wrapping_algorithm,omitempty"`
+	HashFunction      string                 `protobuf:"bytes,3,opt,name=hash_function,json=hashFunction,proto3" json:"hash_function,omitempty"`
+	KeyMaterialFormat string                 `protobuf:"bytes,4,opt,name=key_material_format,json=keyMaterialFormat,proto3" json:"key_material_format,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *GetImportParametersResponse) Reset() {
+	*x = GetImportParametersResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetImportParametersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetImportParametersResponse) ProtoMessage() {}
+
+func (x *GetImportParametersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetImportParametersResponse.ProtoReflect.Descriptor instead.
+func (*GetImportParametersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *GetImportParametersResponse) GetWrappingKey() string {
+	if x != nil {
+		return x.WrappingKey
+	}
+	return ""
+}
+
+func (x *GetImportParametersResponse) GetWrappingAlgorithm() string {
+	if x != nil {
+		return x.WrappingAlgorithm
+	}
+	return ""
+}
+
+func (x *GetImportParametersResponse) GetHashFunction() string {
+	if x != nil {
+		return x.HashFunction
+	}
+	return ""
+}
+
+func (x *GetImportParametersResponse) GetKeyMaterialFormat() string {
+	if x != nil {
+		return x.KeyMaterialFormat
+	}
+	return ""
+}
+
+type ImportKeyMaterialRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alias         string                 `protobuf:"bytes,1,opt,name=alias,proto3" json:"alias,omitempty"`
+	KeySpec       string                 `protobuf:"bytes,2,opt,name=key_spec,json=keySpec,proto3" json:"key_spec,omitempty"`
+	KeyUsage      string                 `protobuf:"bytes,3,opt,name=key_usage,json=keyUsage,proto3" json:"key_usage,omitempty"`
+	Ciphertext    string                 `protobuf:"bytes,4,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
+	HashFunction  *string                `protobuf:"bytes,5,opt,name=hash_function,json=hashFunction,proto3,oneof" json:"hash_function,omitempty"`
+	Description   string                 `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	Tags          []*Tag                 `protobuf:"bytes,7,rep,name=tags,proto3" json:"tags,omitempty"`
+	Scheme        *string                `protobuf:"bytes,8,opt,name=scheme,proto3,oneof" json:"scheme,omitempty"`
+	ClientId      string                 `protobuf:"bytes,9,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,10,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
+	Exportable    *bool                  `protobuf:"varint,11,opt,name=exportable,proto3,oneof" json:"exportable,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportKeyMaterialRequest) Reset() {
+	*x = ImportKeyMaterialRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportKeyMaterialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportKeyMaterialRequest) ProtoMessage() {}
+
+func (x *ImportKeyMaterialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportKeyMaterialRequest.ProtoReflect.Descriptor instead.
+func (*ImportKeyMaterialRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *ImportKeyMaterialRequest) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetKeySpec() string {
+	if x != nil {
+		return x.KeySpec
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetKeyUsage() string {
+	if x != nil {
+		return x.KeyUsage
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetCiphertext() string {
+	if x != nil {
+		return x.Ciphertext
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetHashFunction() string {
+	if x != nil && x.HashFunction != nil {
+		return *x.HashFunction
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetTags() []*Tag {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *ImportKeyMaterialRequest) GetScheme() string {
+	if x != nil && x.Scheme != nil {
+		return *x.Scheme
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
+func (x *ImportKeyMaterialRequest) GetExportable() bool {
+	if x != nil && x.Exportable != nil {
+		return *x.Exportable
+	}
+	return false
+}
+
+type ImportKeyMaterialResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportKeyMaterialResponse) Reset() {
+	*x = ImportKeyMaterialResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportKeyMaterialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportKeyMaterialResponse) ProtoMessage() {}
+
+func (x *ImportKeyMaterialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportKeyMaterialResponse.ProtoReflect.Descriptor instead.
+func (*ImportKeyMaterialResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ImportKeyMaterialResponse) GetKeyMetadata() *KeyMetadata {
+	if x != nil {
+		return x.KeyMetadata
+	}
+	return nil
+}
+
+type ImportKeyMaterialVersionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	Ciphertext    string                 `protobuf:"bytes,2,opt,name=ciphertext,proto3" json:"ciphertext,omitempty"`
+	HashFunction  *string                `protobuf:"bytes,3,opt,name=hash_function,json=hashFunction,proto3,oneof" json:"hash_function,omitempty"`
+	Version       *uint32                `protobuf:"varint,4,opt,name=version,proto3,oneof" json:"version,omitempty"`
+	ClientId      string                 `protobuf:"bytes,5,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,6,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportKeyMaterialVersionRequest) Reset() {
+	*x = ImportKeyMaterialVersionRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportKeyMaterialVersionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportKeyMaterialVersionRequest) ProtoMessage() {}
+
+func (x *ImportKeyMaterialVersionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportKeyMaterialVersionRequest.ProtoReflect.Descriptor instead.
+func (*ImportKeyMaterialVersionRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ImportKeyMaterialVersionRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialVersionRequest) GetCiphertext() string {
+	if x != nil {
+		return x.Ciphertext
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialVersionRequest) GetHashFunction() string {
+	if x != nil && x.HashFunction != nil {
+		return *x.HashFunction
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialVersionRequest) GetVersion() uint32 {
+	if x != nil && x.Version != nil {
+		return *x.Version
+	}
+	return 0
+}
+
+func (x *ImportKeyMaterialVersionRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ImportKeyMaterialVersionRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
+type ImportKeyMaterialVersionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ImportKeyMaterialVersionResponse) Reset() {
+	*x = ImportKeyMaterialVersionResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportKeyMaterialVersionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportKeyMaterialVersionResponse) ProtoMessage() {}
+
+func (x *ImportKeyMaterialVersionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportKeyMaterialVersionResponse.ProtoReflect.Descriptor instead.
+func (*ImportKeyMaterialVersionResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ImportKeyMaterialVersionResponse) GetKeyMetadata() *KeyMetadata {
+	if x != nil {
+		return x.KeyMetadata
+	}
+	return nil
+}
+
+type RegisterExportWrappingKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Alias         string                 `protobuf:"bytes,1,opt,name=alias,proto3" json:"alias,omitempty"`
+	PublicKey     string                 `protobuf:"bytes,2,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Tags          []*Tag                 `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	ClientId      string                 `protobuf:"bytes,5,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,6,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterExportWrappingKeyRequest) Reset() {
+	*x = RegisterExportWrappingKeyRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterExportWrappingKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterExportWrappingKeyRequest) ProtoMessage() {}
+
+func (x *RegisterExportWrappingKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterExportWrappingKeyRequest.ProtoReflect.Descriptor instead.
+func (*RegisterExportWrappingKeyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *RegisterExportWrappingKeyRequest) GetAlias() string {
+	if x != nil {
+		return x.Alias
+	}
+	return ""
+}
+
+func (x *RegisterExportWrappingKeyRequest) GetPublicKey() string {
+	if x != nil {
+		return x.PublicKey
+	}
+	return ""
+}
+
+func (x *RegisterExportWrappingKeyRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *RegisterExportWrappingKeyRequest) GetTags() []*Tag {
+	if x != nil {
+		return x.Tags
+	}
+	return nil
+}
+
+func (x *RegisterExportWrappingKeyRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *RegisterExportWrappingKeyRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
+type RegisterExportWrappingKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterExportWrappingKeyResponse) Reset() {
+	*x = RegisterExportWrappingKeyResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterExportWrappingKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterExportWrappingKeyResponse) ProtoMessage() {}
+
+func (x *RegisterExportWrappingKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterExportWrappingKeyResponse.ProtoReflect.Descriptor instead.
+func (*RegisterExportWrappingKeyResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RegisterExportWrappingKeyResponse) GetKeyMetadata() *KeyMetadata {
+	if x != nil {
+		return x.KeyMetadata
+	}
+	return nil
+}
+
+type ExportKeyMaterialRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	KeyId            string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	DestinationKeyId string                 `protobuf:"bytes,2,opt,name=destination_key_id,json=destinationKeyId,proto3" json:"destination_key_id,omitempty"`
+	Version          *uint32                `protobuf:"varint,3,opt,name=version,proto3,oneof" json:"version,omitempty"`
+	HashFunction     *string                `protobuf:"bytes,4,opt,name=hash_function,json=hashFunction,proto3,oneof" json:"hash_function,omitempty"`
+	ClientId         string                 `protobuf:"bytes,5,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext     *AuthzContext          `protobuf:"bytes,6,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ExportKeyMaterialRequest) Reset() {
+	*x = ExportKeyMaterialRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportKeyMaterialRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportKeyMaterialRequest) ProtoMessage() {}
+
+func (x *ExportKeyMaterialRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportKeyMaterialRequest.ProtoReflect.Descriptor instead.
+func (*ExportKeyMaterialRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ExportKeyMaterialRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *ExportKeyMaterialRequest) GetDestinationKeyId() string {
+	if x != nil {
+		return x.DestinationKeyId
+	}
+	return ""
+}
+
+func (x *ExportKeyMaterialRequest) GetVersion() uint32 {
+	if x != nil && x.Version != nil {
+		return *x.Version
+	}
+	return 0
+}
+
+func (x *ExportKeyMaterialRequest) GetHashFunction() string {
+	if x != nil && x.HashFunction != nil {
+		return *x.HashFunction
+	}
+	return ""
+}
+
+func (x *ExportKeyMaterialRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *ExportKeyMaterialRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
+type ExportKeyMaterialResponse struct {
+	state                       protoimpl.MessageState `protogen:"open.v1"`
+	KeyId                       string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	DestinationKeyId            string                 `protobuf:"bytes,2,opt,name=destination_key_id,json=destinationKeyId,proto3" json:"destination_key_id,omitempty"`
+	HashFunction                string                 `protobuf:"bytes,3,opt,name=hash_function,json=hashFunction,proto3" json:"hash_function,omitempty"`
+	WrappedKeyMaterialByVersion map[string]string      `protobuf:"bytes,4,rep,name=wrapped_key_material_by_version,json=wrappedKeyMaterialByVersion,proto3" json:"wrapped_key_material_by_version,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
+}
+
+func (x *ExportKeyMaterialResponse) Reset() {
+	*x = ExportKeyMaterialResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportKeyMaterialResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportKeyMaterialResponse) ProtoMessage() {}
+
+func (x *ExportKeyMaterialResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportKeyMaterialResponse.ProtoReflect.Descriptor instead.
+func (*ExportKeyMaterialResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *ExportKeyMaterialResponse) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *ExportKeyMaterialResponse) GetDestinationKeyId() string {
+	if x != nil {
+		return x.DestinationKeyId
+	}
+	return ""
+}
+
+func (x *ExportKeyMaterialResponse) GetHashFunction() string {
+	if x != nil {
+		return x.HashFunction
+	}
+	return ""
+}
+
+func (x *ExportKeyMaterialResponse) GetWrappedKeyMaterialByVersion() map[string]string {
+	if x != nil {
+		return x.WrappedKeyMaterialByVersion
+	}
+	return nil
+}
+
+type DeleteKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	AuthzContext  *AuthzContext          `protobuf:"bytes,3,opt,name=authz_context,json=authzContext,proto3" json:"authz_context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteKeyRequest) Reset() {
+	*x = DeleteKeyRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteKeyRequest) ProtoMessage() {}
+
+func (x *DeleteKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteKeyRequest.ProtoReflect.Descriptor instead.
+func (*DeleteKeyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *DeleteKeyRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *DeleteKeyRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+func (x *DeleteKeyRequest) GetAuthzContext() *AuthzContext {
+	if x != nil {
+		return x.AuthzContext
+	}
+	return nil
+}
+
+type DeleteKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteKeyResponse) Reset() {
+	*x = DeleteKeyResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteKeyResponse) ProtoMessage() {}
+
+func (x *DeleteKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteKeyResponse.ProtoReflect.Descriptor instead.
+func (*DeleteKeyResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *DeleteKeyResponse) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+type AuthzContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	IsPat         bool                   `protobuf:"varint,1,opt,name=is_pat,json=isPat,proto3" json:"is_pat,omitempty"`
+	CredentialId  string                 `protobuf:"bytes,2,opt,name=credential_id,json=credentialId,proto3" json:"credential_id,omitempty"`
+	Scopes        []string               `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthzContext) Reset() {
+	*x = AuthzContext{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthzContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthzContext) ProtoMessage() {}
+
+func (x *AuthzContext) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthzContext.ProtoReflect.Descriptor instead.
+func (*AuthzContext) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *AuthzContext) GetIsPat() bool {
+	if x != nil {
+		return x.IsPat
+	}
+	return false
+}
+
+func (x *AuthzContext) GetCredentialId() string {
+	if x != nil {
+		return x.CredentialId
+	}
+	return ""
+}
+
+func (x *AuthzContext) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
 var File_proto_plugins_kms_proto protoreflect.FileDescriptor
 
 const file_proto_plugins_kms_proto_rawDesc = "" +
@@ -1209,7 +2197,7 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x17proto/plugins/kms.proto\x12\x06kmsapi\";\n" +
 	"\x03Tag\x12\x17\n" +
 	"\atag_key\x18\x01 \x01(\tR\x06tagKey\x12\x1b\n" +
-	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\x93\x03\n" +
+	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\x9f\x04\n" +
 	"\vKeyMetadata\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x19\n" +
@@ -1224,45 +2212,58 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"public_key\x18\n" +
 	" \x01(\tH\x00R\tpublicKey\x88\x01\x01\x12\x1d\n" +
 	"\aaddress\x18\v \x01(\tH\x01R\aaddress\x88\x01\x01\x12\x14\n" +
-	"\x05alias\x18\f \x01(\tR\x05aliasB\r\n" +
+	"\x05alias\x18\f \x01(\tR\x05alias\x12\x16\n" +
+	"\x06origin\x18\r \x01(\tR\x06origin\x12\x1f\n" +
+	"\vpublic_only\x18\x0e \x01(\bR\n" +
+	"publicOnly\x12\"\n" +
+	"\n" +
+	"deleted_at\x18\x0f \x01(\tH\x02R\tdeletedAt\x88\x01\x01\x12\x1e\n" +
+	"\n" +
+	"exportable\x18\x10 \x01(\bR\n" +
+	"exportableB\r\n" +
 	"\v_public_keyB\n" +
 	"\n" +
-	"\b_address\"\xb3\x01\n" +
+	"\b_addressB\r\n" +
+	"\v_deleted_at\"\xee\x01\n" +
 	"\x0eEncryptRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tplaintext\x18\x02 \x01(\tR\tplaintext\x126\n" +
 	"\x14encryption_algorithm\x18\x03 \x01(\tH\x00R\x13encryptionAlgorithm\x88\x01\x01\x12\x1b\n" +
-	"\tclient_id\x18\x04 \x01(\tR\bclientIdB\x17\n" +
+	"\tclient_id\x18\x04 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x05 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\x17\n" +
 	"\x15_encryption_algorithm\"\x84\x01\n" +
 	"\x0fEncryptResponse\x12'\n" +
 	"\x0fciphertext_blob\x18\x01 \x01(\tR\x0eciphertextBlob\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\x121\n" +
-	"\x14encryption_algorithm\x18\x03 \x01(\tR\x13encryptionAlgorithm\"\xce\x01\n" +
+	"\x14encryption_algorithm\x18\x03 \x01(\tR\x13encryptionAlgorithm\"\x89\x02\n" +
 	"\x0eDecryptRequest\x12'\n" +
 	"\x0fciphertext_blob\x18\x01 \x01(\tR\x0eciphertextBlob\x12\x1a\n" +
 	"\x06key_id\x18\x02 \x01(\tH\x00R\x05keyId\x88\x01\x01\x126\n" +
 	"\x14encryption_algorithm\x18\x03 \x01(\tH\x01R\x13encryptionAlgorithm\x88\x01\x01\x12\x1b\n" +
-	"\tclient_id\x18\x04 \x01(\tR\bclientIdB\t\n" +
+	"\tclient_id\x18\x04 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x05 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\t\n" +
 	"\a_key_idB\x17\n" +
 	"\x15_encryption_algorithm\"y\n" +
 	"\x0fDecryptResponse\x12\x1c\n" +
 	"\tplaintext\x18\x01 \x01(\tR\tplaintext\x12\x15\n" +
 	"\x06key_id\x18\x02 \x01(\tR\x05keyId\x121\n" +
-	"\x14encryption_algorithm\x18\x03 \x01(\tR\x13encryptionAlgorithm\"\xc1\x01\n" +
+	"\x14encryption_algorithm\x18\x03 \x01(\tR\x13encryptionAlgorithm\"\xfc\x01\n" +
 	"\vSignRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12+\n" +
 	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\x12&\n" +
 	"\fmessage_type\x18\x04 \x01(\tH\x00R\vmessageType\x88\x01\x01\x12\x1b\n" +
-	"\tclient_id\x18\x05 \x01(\tR\bclientIdB\x0f\n" +
+	"\tclient_id\x18\x05 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x06 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\x0f\n" +
 	"\r_message_type\"p\n" +
 	"\fSignResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12+\n" +
-	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"H\n" +
+	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"\x83\x01\n" +
 	"\x12EncapsulateRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
-	"\tclient_id\x18\x02 \x01(\tR\bclientId\"\xa3\x01\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x03 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContext\"\xa3\x01\n" +
 	"\x13EncapsulateResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1e\n" +
 	"\n" +
@@ -1270,18 +2271,19 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"ciphertext\x12\x1d\n" +
 	"\n" +
 	"shared_key\x18\x03 \x01(\tR\tsharedKey\x126\n" +
-	"\x17key_agreement_algorithm\x18\x04 \x01(\tR\x15keyAgreementAlgorithm\"h\n" +
+	"\x17key_agreement_algorithm\x18\x04 \x01(\tR\x15keyAgreementAlgorithm\"\xa3\x01\n" +
 	"\x12DecapsulateRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1e\n" +
 	"\n" +
 	"ciphertext\x18\x02 \x01(\tR\n" +
 	"ciphertext\x12\x1b\n" +
-	"\tclient_id\x18\x03 \x01(\tR\bclientId\"\x83\x01\n" +
+	"\tclient_id\x18\x03 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x04 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContext\"\x83\x01\n" +
 	"\x13DecapsulateResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x126\n" +
 	"\x17key_agreement_algorithm\x18\x02 \x01(\tR\x15keyAgreementAlgorithm\x12\x1d\n" +
 	"\n" +
-	"shared_key\x18\x03 \x01(\tR\tsharedKey\"\xe8\x01\n" +
+	"shared_key\x18\x03 \x01(\tR\tsharedKey\"\xa3\x02\n" +
 	"\x10CreateKeyRequest\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x19\n" +
 	"\bkey_spec\x18\x02 \x01(\tR\akeySpec\x12\x1b\n" +
@@ -1289,26 +2291,117 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x04tags\x18\x04 \x03(\v2\v.kmsapi.TagR\x04tags\x12\x1b\n" +
 	"\x06scheme\x18\x05 \x01(\tH\x00R\x06scheme\x88\x01\x01\x12\x1b\n" +
 	"\tclient_id\x18\x06 \x01(\tR\bclientId\x12\x14\n" +
-	"\x05alias\x18\a \x01(\tR\x05aliasB\t\n" +
+	"\x05alias\x18\a \x01(\tR\x05alias\x129\n" +
+	"\rauthz_context\x18\b \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\t\n" +
 	"\a_scheme\"K\n" +
 	"\x11CreateKeyResponse\x126\n" +
-	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\xc8\x01\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\x83\x02\n" +
 	"\x16GenerateDataKeyRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12'\n" +
 	"\rdata_key_spec\x18\x02 \x01(\tH\x00R\vdataKeySpec\x88\x01\x01\x12+\n" +
 	"\x0fnumber_of_bytes\x18\x03 \x01(\rH\x01R\rnumberOfBytes\x88\x01\x01\x12\x1b\n" +
-	"\tclient_id\x18\x04 \x01(\tR\bclientIdB\x10\n" +
+	"\tclient_id\x18\x04 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x05 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\x10\n" +
 	"\x0e_data_key_specB\x12\n" +
 	"\x10_number_of_bytes\"w\n" +
 	"\x17GenerateDataKeyResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tplaintext\x18\x02 \x01(\tR\tplaintext\x12'\n" +
-	"\x0fciphertext_blob\x18\x03 \x01(\tR\x0eciphertextBlob\"F\n" +
+	"\x0fciphertext_blob\x18\x03 \x01(\tR\x0eciphertextBlob\"\x81\x01\n" +
 	"\x10RotateKeyRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
-	"\tclient_id\x18\x02 \x01(\tR\bclientId\"K\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x03 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContext\"K\n" +
 	"\x11RotateKeyResponse\x126\n" +
-	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata2\x9e\x04\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\x90\x02\n" +
+	"\x1aGetImportParametersRequest\x12\x1b\n" +
+	"\x06scheme\x18\x01 \x01(\tH\x00R\x06scheme\x88\x01\x01\x12\x19\n" +
+	"\bkey_spec\x18\x02 \x01(\tR\akeySpec\x12\x1b\n" +
+	"\tkey_usage\x18\x03 \x01(\tR\bkeyUsage\x12(\n" +
+	"\rhash_function\x18\x04 \x01(\tH\x01R\fhashFunction\x88\x01\x01\x12\x1b\n" +
+	"\tclient_id\x18\x05 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x06 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\t\n" +
+	"\a_schemeB\x10\n" +
+	"\x0e_hash_function\"\xc4\x01\n" +
+	"\x1bGetImportParametersResponse\x12!\n" +
+	"\fwrapping_key\x18\x01 \x01(\tR\vwrappingKey\x12-\n" +
+	"\x12wrapping_algorithm\x18\x02 \x01(\tR\x11wrappingAlgorithm\x12#\n" +
+	"\rhash_function\x18\x03 \x01(\tR\fhashFunction\x12.\n" +
+	"\x13key_material_format\x18\x04 \x01(\tR\x11keyMaterialFormat\"\xbb\x03\n" +
+	"\x18ImportKeyMaterialRequest\x12\x14\n" +
+	"\x05alias\x18\x01 \x01(\tR\x05alias\x12\x19\n" +
+	"\bkey_spec\x18\x02 \x01(\tR\akeySpec\x12\x1b\n" +
+	"\tkey_usage\x18\x03 \x01(\tR\bkeyUsage\x12\x1e\n" +
+	"\n" +
+	"ciphertext\x18\x04 \x01(\tR\n" +
+	"ciphertext\x12(\n" +
+	"\rhash_function\x18\x05 \x01(\tH\x00R\fhashFunction\x88\x01\x01\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x1f\n" +
+	"\x04tags\x18\a \x03(\v2\v.kmsapi.TagR\x04tags\x12\x1b\n" +
+	"\x06scheme\x18\b \x01(\tH\x01R\x06scheme\x88\x01\x01\x12\x1b\n" +
+	"\tclient_id\x18\t \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\n" +
+	" \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContext\x12#\n" +
+	"\n" +
+	"exportable\x18\v \x01(\bH\x02R\n" +
+	"exportable\x88\x01\x01B\x10\n" +
+	"\x0e_hash_functionB\t\n" +
+	"\a_schemeB\r\n" +
+	"\v_exportable\"S\n" +
+	"\x19ImportKeyMaterialResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\x97\x02\n" +
+	"\x1fImportKeyMaterialVersionRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1e\n" +
+	"\n" +
+	"ciphertext\x18\x02 \x01(\tR\n" +
+	"ciphertext\x12(\n" +
+	"\rhash_function\x18\x03 \x01(\tH\x00R\fhashFunction\x88\x01\x01\x12\x1d\n" +
+	"\aversion\x18\x04 \x01(\rH\x01R\aversion\x88\x01\x01\x12\x1b\n" +
+	"\tclient_id\x18\x05 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x06 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\x10\n" +
+	"\x0e_hash_functionB\n" +
+	"\n" +
+	"\b_version\"Z\n" +
+	" ImportKeyMaterialVersionResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\xf2\x01\n" +
+	" RegisterExportWrappingKeyRequest\x12\x14\n" +
+	"\x05alias\x18\x01 \x01(\tR\x05alias\x12\x1d\n" +
+	"\n" +
+	"public_key\x18\x02 \x01(\tR\tpublicKey\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1f\n" +
+	"\x04tags\x18\x04 \x03(\v2\v.kmsapi.TagR\x04tags\x12\x1b\n" +
+	"\tclient_id\x18\x05 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x06 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContext\"[\n" +
+	"!RegisterExportWrappingKeyResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\x9e\x02\n" +
+	"\x18ExportKeyMaterialRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12,\n" +
+	"\x12destination_key_id\x18\x02 \x01(\tR\x10destinationKeyId\x12\x1d\n" +
+	"\aversion\x18\x03 \x01(\rH\x00R\aversion\x88\x01\x01\x12(\n" +
+	"\rhash_function\x18\x04 \x01(\tH\x01R\fhashFunction\x88\x01\x01\x12\x1b\n" +
+	"\tclient_id\x18\x05 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x06 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContextB\n" +
+	"\n" +
+	"\b_versionB\x10\n" +
+	"\x0e_hash_function\"\xe0\x02\n" +
+	"\x19ExportKeyMaterialResponse\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12,\n" +
+	"\x12destination_key_id\x18\x02 \x01(\tR\x10destinationKeyId\x12#\n" +
+	"\rhash_function\x18\x03 \x01(\tR\fhashFunction\x12\x88\x01\n" +
+	"\x1fwrapped_key_material_by_version\x18\x04 \x03(\v2B.kmsapi.ExportKeyMaterialResponse.WrappedKeyMaterialByVersionEntryR\x1bwrappedKeyMaterialByVersion\x1aN\n" +
+	" WrappedKeyMaterialByVersionEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x01\n" +
+	"\x10DeleteKeyRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x129\n" +
+	"\rauthz_context\x18\x03 \x01(\v2\x14.kmsapi.AuthzContextR\fauthzContext\"9\n" +
+	"\x11DeleteKeyResponse\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyIdJ\x04\b\x02\x10\x03R\adeleted\"b\n" +
+	"\fAuthzContext\x12\x15\n" +
+	"\x06is_pat\x18\x01 \x01(\bR\x05isPat\x12#\n" +
+	"\rcredential_id\x18\x02 \x01(\tR\fcredentialId\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes2\xd5\b\n" +
 	"\tKmsPlugin\x12:\n" +
 	"\aEncrypt\x12\x16.kmsapi.EncryptRequest\x1a\x17.kmsapi.EncryptResponse\x12:\n" +
 	"\aDecrypt\x12\x16.kmsapi.DecryptRequest\x1a\x17.kmsapi.DecryptResponse\x121\n" +
@@ -1317,7 +2410,13 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\vDecapsulate\x12\x1a.kmsapi.DecapsulateRequest\x1a\x1b.kmsapi.DecapsulateResponse\x12@\n" +
 	"\tCreateKey\x12\x18.kmsapi.CreateKeyRequest\x1a\x19.kmsapi.CreateKeyResponse\x12R\n" +
 	"\x0fGenerateDataKey\x12\x1e.kmsapi.GenerateDataKeyRequest\x1a\x1f.kmsapi.GenerateDataKeyResponse\x12@\n" +
-	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
+	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponse\x12^\n" +
+	"\x13GetImportParameters\x12\".kmsapi.GetImportParametersRequest\x1a#.kmsapi.GetImportParametersResponse\x12X\n" +
+	"\x11ImportKeyMaterial\x12 .kmsapi.ImportKeyMaterialRequest\x1a!.kmsapi.ImportKeyMaterialResponse\x12m\n" +
+	"\x18ImportKeyMaterialVersion\x12'.kmsapi.ImportKeyMaterialVersionRequest\x1a(.kmsapi.ImportKeyMaterialVersionResponse\x12p\n" +
+	"\x19RegisterExportWrappingKey\x12(.kmsapi.RegisterExportWrappingKeyRequest\x1a).kmsapi.RegisterExportWrappingKeyResponse\x12X\n" +
+	"\x11ExportKeyMaterial\x12 .kmsapi.ExportKeyMaterialRequest\x1a!.kmsapi.ExportKeyMaterialResponse\x12@\n" +
+	"\tDeleteKey\x12\x18.kmsapi.DeleteKeyRequest\x1a\x19.kmsapi.DeleteKeyResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
 
 var (
 	file_proto_plugins_kms_proto_rawDescOnce sync.Once
@@ -1331,53 +2430,99 @@ func file_proto_plugins_kms_proto_rawDescGZIP() []byte {
 	return file_proto_plugins_kms_proto_rawDescData
 }
 
-var file_proto_plugins_kms_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_proto_plugins_kms_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_proto_plugins_kms_proto_goTypes = []any{
-	(*Tag)(nil),                     // 0: kmsapi.Tag
-	(*KeyMetadata)(nil),             // 1: kmsapi.KeyMetadata
-	(*EncryptRequest)(nil),          // 2: kmsapi.EncryptRequest
-	(*EncryptResponse)(nil),         // 3: kmsapi.EncryptResponse
-	(*DecryptRequest)(nil),          // 4: kmsapi.DecryptRequest
-	(*DecryptResponse)(nil),         // 5: kmsapi.DecryptResponse
-	(*SignRequest)(nil),             // 6: kmsapi.SignRequest
-	(*SignResponse)(nil),            // 7: kmsapi.SignResponse
-	(*EncapsulateRequest)(nil),      // 8: kmsapi.EncapsulateRequest
-	(*EncapsulateResponse)(nil),     // 9: kmsapi.EncapsulateResponse
-	(*DecapsulateRequest)(nil),      // 10: kmsapi.DecapsulateRequest
-	(*DecapsulateResponse)(nil),     // 11: kmsapi.DecapsulateResponse
-	(*CreateKeyRequest)(nil),        // 12: kmsapi.CreateKeyRequest
-	(*CreateKeyResponse)(nil),       // 13: kmsapi.CreateKeyResponse
-	(*GenerateDataKeyRequest)(nil),  // 14: kmsapi.GenerateDataKeyRequest
-	(*GenerateDataKeyResponse)(nil), // 15: kmsapi.GenerateDataKeyResponse
-	(*RotateKeyRequest)(nil),        // 16: kmsapi.RotateKeyRequest
-	(*RotateKeyResponse)(nil),       // 17: kmsapi.RotateKeyResponse
+	(*Tag)(nil),                               // 0: kmsapi.Tag
+	(*KeyMetadata)(nil),                       // 1: kmsapi.KeyMetadata
+	(*EncryptRequest)(nil),                    // 2: kmsapi.EncryptRequest
+	(*EncryptResponse)(nil),                   // 3: kmsapi.EncryptResponse
+	(*DecryptRequest)(nil),                    // 4: kmsapi.DecryptRequest
+	(*DecryptResponse)(nil),                   // 5: kmsapi.DecryptResponse
+	(*SignRequest)(nil),                       // 6: kmsapi.SignRequest
+	(*SignResponse)(nil),                      // 7: kmsapi.SignResponse
+	(*EncapsulateRequest)(nil),                // 8: kmsapi.EncapsulateRequest
+	(*EncapsulateResponse)(nil),               // 9: kmsapi.EncapsulateResponse
+	(*DecapsulateRequest)(nil),                // 10: kmsapi.DecapsulateRequest
+	(*DecapsulateResponse)(nil),               // 11: kmsapi.DecapsulateResponse
+	(*CreateKeyRequest)(nil),                  // 12: kmsapi.CreateKeyRequest
+	(*CreateKeyResponse)(nil),                 // 13: kmsapi.CreateKeyResponse
+	(*GenerateDataKeyRequest)(nil),            // 14: kmsapi.GenerateDataKeyRequest
+	(*GenerateDataKeyResponse)(nil),           // 15: kmsapi.GenerateDataKeyResponse
+	(*RotateKeyRequest)(nil),                  // 16: kmsapi.RotateKeyRequest
+	(*RotateKeyResponse)(nil),                 // 17: kmsapi.RotateKeyResponse
+	(*GetImportParametersRequest)(nil),        // 18: kmsapi.GetImportParametersRequest
+	(*GetImportParametersResponse)(nil),       // 19: kmsapi.GetImportParametersResponse
+	(*ImportKeyMaterialRequest)(nil),          // 20: kmsapi.ImportKeyMaterialRequest
+	(*ImportKeyMaterialResponse)(nil),         // 21: kmsapi.ImportKeyMaterialResponse
+	(*ImportKeyMaterialVersionRequest)(nil),   // 22: kmsapi.ImportKeyMaterialVersionRequest
+	(*ImportKeyMaterialVersionResponse)(nil),  // 23: kmsapi.ImportKeyMaterialVersionResponse
+	(*RegisterExportWrappingKeyRequest)(nil),  // 24: kmsapi.RegisterExportWrappingKeyRequest
+	(*RegisterExportWrappingKeyResponse)(nil), // 25: kmsapi.RegisterExportWrappingKeyResponse
+	(*ExportKeyMaterialRequest)(nil),          // 26: kmsapi.ExportKeyMaterialRequest
+	(*ExportKeyMaterialResponse)(nil),         // 27: kmsapi.ExportKeyMaterialResponse
+	(*DeleteKeyRequest)(nil),                  // 28: kmsapi.DeleteKeyRequest
+	(*DeleteKeyResponse)(nil),                 // 29: kmsapi.DeleteKeyResponse
+	(*AuthzContext)(nil),                      // 30: kmsapi.AuthzContext
+	nil,                                       // 31: kmsapi.ExportKeyMaterialResponse.WrappedKeyMaterialByVersionEntry
 }
 var file_proto_plugins_kms_proto_depIdxs = []int32{
 	0,  // 0: kmsapi.KeyMetadata.tags:type_name -> kmsapi.Tag
-	0,  // 1: kmsapi.CreateKeyRequest.tags:type_name -> kmsapi.Tag
-	1,  // 2: kmsapi.CreateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
-	1,  // 3: kmsapi.RotateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
-	2,  // 4: kmsapi.KmsPlugin.Encrypt:input_type -> kmsapi.EncryptRequest
-	4,  // 5: kmsapi.KmsPlugin.Decrypt:input_type -> kmsapi.DecryptRequest
-	6,  // 6: kmsapi.KmsPlugin.Sign:input_type -> kmsapi.SignRequest
-	8,  // 7: kmsapi.KmsPlugin.Encapsulate:input_type -> kmsapi.EncapsulateRequest
-	10, // 8: kmsapi.KmsPlugin.Decapsulate:input_type -> kmsapi.DecapsulateRequest
-	12, // 9: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
-	14, // 10: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
-	16, // 11: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
-	3,  // 12: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
-	5,  // 13: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
-	7,  // 14: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
-	9,  // 15: kmsapi.KmsPlugin.Encapsulate:output_type -> kmsapi.EncapsulateResponse
-	11, // 16: kmsapi.KmsPlugin.Decapsulate:output_type -> kmsapi.DecapsulateResponse
-	13, // 17: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
-	15, // 18: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
-	17, // 19: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
-	12, // [12:20] is the sub-list for method output_type
-	4,  // [4:12] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	30, // 1: kmsapi.EncryptRequest.authz_context:type_name -> kmsapi.AuthzContext
+	30, // 2: kmsapi.DecryptRequest.authz_context:type_name -> kmsapi.AuthzContext
+	30, // 3: kmsapi.SignRequest.authz_context:type_name -> kmsapi.AuthzContext
+	30, // 4: kmsapi.EncapsulateRequest.authz_context:type_name -> kmsapi.AuthzContext
+	30, // 5: kmsapi.DecapsulateRequest.authz_context:type_name -> kmsapi.AuthzContext
+	0,  // 6: kmsapi.CreateKeyRequest.tags:type_name -> kmsapi.Tag
+	30, // 7: kmsapi.CreateKeyRequest.authz_context:type_name -> kmsapi.AuthzContext
+	1,  // 8: kmsapi.CreateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	30, // 9: kmsapi.GenerateDataKeyRequest.authz_context:type_name -> kmsapi.AuthzContext
+	30, // 10: kmsapi.RotateKeyRequest.authz_context:type_name -> kmsapi.AuthzContext
+	1,  // 11: kmsapi.RotateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	30, // 12: kmsapi.GetImportParametersRequest.authz_context:type_name -> kmsapi.AuthzContext
+	0,  // 13: kmsapi.ImportKeyMaterialRequest.tags:type_name -> kmsapi.Tag
+	30, // 14: kmsapi.ImportKeyMaterialRequest.authz_context:type_name -> kmsapi.AuthzContext
+	1,  // 15: kmsapi.ImportKeyMaterialResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	30, // 16: kmsapi.ImportKeyMaterialVersionRequest.authz_context:type_name -> kmsapi.AuthzContext
+	1,  // 17: kmsapi.ImportKeyMaterialVersionResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	0,  // 18: kmsapi.RegisterExportWrappingKeyRequest.tags:type_name -> kmsapi.Tag
+	30, // 19: kmsapi.RegisterExportWrappingKeyRequest.authz_context:type_name -> kmsapi.AuthzContext
+	1,  // 20: kmsapi.RegisterExportWrappingKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	30, // 21: kmsapi.ExportKeyMaterialRequest.authz_context:type_name -> kmsapi.AuthzContext
+	31, // 22: kmsapi.ExportKeyMaterialResponse.wrapped_key_material_by_version:type_name -> kmsapi.ExportKeyMaterialResponse.WrappedKeyMaterialByVersionEntry
+	30, // 23: kmsapi.DeleteKeyRequest.authz_context:type_name -> kmsapi.AuthzContext
+	2,  // 24: kmsapi.KmsPlugin.Encrypt:input_type -> kmsapi.EncryptRequest
+	4,  // 25: kmsapi.KmsPlugin.Decrypt:input_type -> kmsapi.DecryptRequest
+	6,  // 26: kmsapi.KmsPlugin.Sign:input_type -> kmsapi.SignRequest
+	8,  // 27: kmsapi.KmsPlugin.Encapsulate:input_type -> kmsapi.EncapsulateRequest
+	10, // 28: kmsapi.KmsPlugin.Decapsulate:input_type -> kmsapi.DecapsulateRequest
+	12, // 29: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
+	14, // 30: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
+	16, // 31: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
+	18, // 32: kmsapi.KmsPlugin.GetImportParameters:input_type -> kmsapi.GetImportParametersRequest
+	20, // 33: kmsapi.KmsPlugin.ImportKeyMaterial:input_type -> kmsapi.ImportKeyMaterialRequest
+	22, // 34: kmsapi.KmsPlugin.ImportKeyMaterialVersion:input_type -> kmsapi.ImportKeyMaterialVersionRequest
+	24, // 35: kmsapi.KmsPlugin.RegisterExportWrappingKey:input_type -> kmsapi.RegisterExportWrappingKeyRequest
+	26, // 36: kmsapi.KmsPlugin.ExportKeyMaterial:input_type -> kmsapi.ExportKeyMaterialRequest
+	28, // 37: kmsapi.KmsPlugin.DeleteKey:input_type -> kmsapi.DeleteKeyRequest
+	3,  // 38: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
+	5,  // 39: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
+	7,  // 40: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
+	9,  // 41: kmsapi.KmsPlugin.Encapsulate:output_type -> kmsapi.EncapsulateResponse
+	11, // 42: kmsapi.KmsPlugin.Decapsulate:output_type -> kmsapi.DecapsulateResponse
+	13, // 43: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
+	15, // 44: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
+	17, // 45: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
+	19, // 46: kmsapi.KmsPlugin.GetImportParameters:output_type -> kmsapi.GetImportParametersResponse
+	21, // 47: kmsapi.KmsPlugin.ImportKeyMaterial:output_type -> kmsapi.ImportKeyMaterialResponse
+	23, // 48: kmsapi.KmsPlugin.ImportKeyMaterialVersion:output_type -> kmsapi.ImportKeyMaterialVersionResponse
+	25, // 49: kmsapi.KmsPlugin.RegisterExportWrappingKey:output_type -> kmsapi.RegisterExportWrappingKeyResponse
+	27, // 50: kmsapi.KmsPlugin.ExportKeyMaterial:output_type -> kmsapi.ExportKeyMaterialResponse
+	29, // 51: kmsapi.KmsPlugin.DeleteKey:output_type -> kmsapi.DeleteKeyResponse
+	38, // [38:52] is the sub-list for method output_type
+	24, // [24:38] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_proto_plugins_kms_proto_init() }
@@ -1391,13 +2536,17 @@ func file_proto_plugins_kms_proto_init() {
 	file_proto_plugins_kms_proto_msgTypes[6].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[12].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[14].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[18].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[20].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[22].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_plugins_kms_proto_rawDesc), len(file_proto_plugins_kms_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   18,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

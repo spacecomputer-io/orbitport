@@ -243,5 +243,14 @@ func (p *Plugin) validatePAT(ctx context.Context, tokenString string) (*proto.To
 		ClientId:  sub,
 		Jti:       jti,
 		KmsTenant: kmsTenant,
+		Scopes:    scopesFromClaims(claims),
 	}, nil
+}
+
+func scopesFromClaims(claims jwt.MapClaims) []string {
+	raw, _ := claims["scope"].(string)
+	if raw == "" {
+		return nil
+	}
+	return strings.Fields(raw)
 }

@@ -24,14 +24,20 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KmsPlugin_Encrypt_FullMethodName         = "/kmsapi.KmsPlugin/Encrypt"
-	KmsPlugin_Decrypt_FullMethodName         = "/kmsapi.KmsPlugin/Decrypt"
-	KmsPlugin_Sign_FullMethodName            = "/kmsapi.KmsPlugin/Sign"
-	KmsPlugin_Encapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Encapsulate"
-	KmsPlugin_Decapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Decapsulate"
-	KmsPlugin_CreateKey_FullMethodName       = "/kmsapi.KmsPlugin/CreateKey"
-	KmsPlugin_GenerateDataKey_FullMethodName = "/kmsapi.KmsPlugin/GenerateDataKey"
-	KmsPlugin_RotateKey_FullMethodName       = "/kmsapi.KmsPlugin/RotateKey"
+	KmsPlugin_Encrypt_FullMethodName                   = "/kmsapi.KmsPlugin/Encrypt"
+	KmsPlugin_Decrypt_FullMethodName                   = "/kmsapi.KmsPlugin/Decrypt"
+	KmsPlugin_Sign_FullMethodName                      = "/kmsapi.KmsPlugin/Sign"
+	KmsPlugin_Encapsulate_FullMethodName               = "/kmsapi.KmsPlugin/Encapsulate"
+	KmsPlugin_Decapsulate_FullMethodName               = "/kmsapi.KmsPlugin/Decapsulate"
+	KmsPlugin_CreateKey_FullMethodName                 = "/kmsapi.KmsPlugin/CreateKey"
+	KmsPlugin_GenerateDataKey_FullMethodName           = "/kmsapi.KmsPlugin/GenerateDataKey"
+	KmsPlugin_RotateKey_FullMethodName                 = "/kmsapi.KmsPlugin/RotateKey"
+	KmsPlugin_GetImportParameters_FullMethodName       = "/kmsapi.KmsPlugin/GetImportParameters"
+	KmsPlugin_ImportKeyMaterial_FullMethodName         = "/kmsapi.KmsPlugin/ImportKeyMaterial"
+	KmsPlugin_ImportKeyMaterialVersion_FullMethodName  = "/kmsapi.KmsPlugin/ImportKeyMaterialVersion"
+	KmsPlugin_RegisterExportWrappingKey_FullMethodName = "/kmsapi.KmsPlugin/RegisterExportWrappingKey"
+	KmsPlugin_ExportKeyMaterial_FullMethodName         = "/kmsapi.KmsPlugin/ExportKeyMaterial"
+	KmsPlugin_DeleteKey_FullMethodName                 = "/kmsapi.KmsPlugin/DeleteKey"
 )
 
 // KmsPluginClient is the client API for KmsPlugin service.
@@ -46,6 +52,12 @@ type KmsPluginClient interface {
 	CreateKey(ctx context.Context, in *CreateKeyRequest, opts ...grpc.CallOption) (*CreateKeyResponse, error)
 	GenerateDataKey(ctx context.Context, in *GenerateDataKeyRequest, opts ...grpc.CallOption) (*GenerateDataKeyResponse, error)
 	RotateKey(ctx context.Context, in *RotateKeyRequest, opts ...grpc.CallOption) (*RotateKeyResponse, error)
+	GetImportParameters(ctx context.Context, in *GetImportParametersRequest, opts ...grpc.CallOption) (*GetImportParametersResponse, error)
+	ImportKeyMaterial(ctx context.Context, in *ImportKeyMaterialRequest, opts ...grpc.CallOption) (*ImportKeyMaterialResponse, error)
+	ImportKeyMaterialVersion(ctx context.Context, in *ImportKeyMaterialVersionRequest, opts ...grpc.CallOption) (*ImportKeyMaterialVersionResponse, error)
+	RegisterExportWrappingKey(ctx context.Context, in *RegisterExportWrappingKeyRequest, opts ...grpc.CallOption) (*RegisterExportWrappingKeyResponse, error)
+	ExportKeyMaterial(ctx context.Context, in *ExportKeyMaterialRequest, opts ...grpc.CallOption) (*ExportKeyMaterialResponse, error)
+	DeleteKey(ctx context.Context, in *DeleteKeyRequest, opts ...grpc.CallOption) (*DeleteKeyResponse, error)
 }
 
 type kmsPluginClient struct {
@@ -136,6 +148,66 @@ func (c *kmsPluginClient) RotateKey(ctx context.Context, in *RotateKeyRequest, o
 	return out, nil
 }
 
+func (c *kmsPluginClient) GetImportParameters(ctx context.Context, in *GetImportParametersRequest, opts ...grpc.CallOption) (*GetImportParametersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetImportParametersResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_GetImportParameters_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) ImportKeyMaterial(ctx context.Context, in *ImportKeyMaterialRequest, opts ...grpc.CallOption) (*ImportKeyMaterialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ImportKeyMaterialResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_ImportKeyMaterial_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) ImportKeyMaterialVersion(ctx context.Context, in *ImportKeyMaterialVersionRequest, opts ...grpc.CallOption) (*ImportKeyMaterialVersionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ImportKeyMaterialVersionResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_ImportKeyMaterialVersion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) RegisterExportWrappingKey(ctx context.Context, in *RegisterExportWrappingKeyRequest, opts ...grpc.CallOption) (*RegisterExportWrappingKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RegisterExportWrappingKeyResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_RegisterExportWrappingKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) ExportKeyMaterial(ctx context.Context, in *ExportKeyMaterialRequest, opts ...grpc.CallOption) (*ExportKeyMaterialResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ExportKeyMaterialResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_ExportKeyMaterial_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) DeleteKey(ctx context.Context, in *DeleteKeyRequest, opts ...grpc.CallOption) (*DeleteKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteKeyResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_DeleteKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KmsPluginServer is the server API for KmsPlugin service.
 // All implementations must embed UnimplementedKmsPluginServer
 // for forward compatibility.
@@ -148,6 +220,12 @@ type KmsPluginServer interface {
 	CreateKey(context.Context, *CreateKeyRequest) (*CreateKeyResponse, error)
 	GenerateDataKey(context.Context, *GenerateDataKeyRequest) (*GenerateDataKeyResponse, error)
 	RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error)
+	GetImportParameters(context.Context, *GetImportParametersRequest) (*GetImportParametersResponse, error)
+	ImportKeyMaterial(context.Context, *ImportKeyMaterialRequest) (*ImportKeyMaterialResponse, error)
+	ImportKeyMaterialVersion(context.Context, *ImportKeyMaterialVersionRequest) (*ImportKeyMaterialVersionResponse, error)
+	RegisterExportWrappingKey(context.Context, *RegisterExportWrappingKeyRequest) (*RegisterExportWrappingKeyResponse, error)
+	ExportKeyMaterial(context.Context, *ExportKeyMaterialRequest) (*ExportKeyMaterialResponse, error)
+	DeleteKey(context.Context, *DeleteKeyRequest) (*DeleteKeyResponse, error)
 	mustEmbedUnimplementedKmsPluginServer()
 }
 
@@ -181,6 +259,24 @@ func (UnimplementedKmsPluginServer) GenerateDataKey(context.Context, *GenerateDa
 }
 func (UnimplementedKmsPluginServer) RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RotateKey not implemented")
+}
+func (UnimplementedKmsPluginServer) GetImportParameters(context.Context, *GetImportParametersRequest) (*GetImportParametersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetImportParameters not implemented")
+}
+func (UnimplementedKmsPluginServer) ImportKeyMaterial(context.Context, *ImportKeyMaterialRequest) (*ImportKeyMaterialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ImportKeyMaterial not implemented")
+}
+func (UnimplementedKmsPluginServer) ImportKeyMaterialVersion(context.Context, *ImportKeyMaterialVersionRequest) (*ImportKeyMaterialVersionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ImportKeyMaterialVersion not implemented")
+}
+func (UnimplementedKmsPluginServer) RegisterExportWrappingKey(context.Context, *RegisterExportWrappingKeyRequest) (*RegisterExportWrappingKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RegisterExportWrappingKey not implemented")
+}
+func (UnimplementedKmsPluginServer) ExportKeyMaterial(context.Context, *ExportKeyMaterialRequest) (*ExportKeyMaterialResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ExportKeyMaterial not implemented")
+}
+func (UnimplementedKmsPluginServer) DeleteKey(context.Context, *DeleteKeyRequest) (*DeleteKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteKey not implemented")
 }
 func (UnimplementedKmsPluginServer) mustEmbedUnimplementedKmsPluginServer() {}
 func (UnimplementedKmsPluginServer) testEmbeddedByValue()                   {}
@@ -347,6 +443,114 @@ func _KmsPlugin_RotateKey_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KmsPlugin_GetImportParameters_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetImportParametersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).GetImportParameters(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_GetImportParameters_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).GetImportParameters(ctx, req.(*GetImportParametersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_ImportKeyMaterial_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ImportKeyMaterialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).ImportKeyMaterial(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_ImportKeyMaterial_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).ImportKeyMaterial(ctx, req.(*ImportKeyMaterialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_ImportKeyMaterialVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ImportKeyMaterialVersionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).ImportKeyMaterialVersion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_ImportKeyMaterialVersion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).ImportKeyMaterialVersion(ctx, req.(*ImportKeyMaterialVersionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_RegisterExportWrappingKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterExportWrappingKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).RegisterExportWrappingKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_RegisterExportWrappingKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).RegisterExportWrappingKey(ctx, req.(*RegisterExportWrappingKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_ExportKeyMaterial_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExportKeyMaterialRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).ExportKeyMaterial(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_ExportKeyMaterial_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).ExportKeyMaterial(ctx, req.(*ExportKeyMaterialRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_DeleteKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).DeleteKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_DeleteKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).DeleteKey(ctx, req.(*DeleteKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // KmsPlugin_ServiceDesc is the grpc.ServiceDesc for KmsPlugin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -385,6 +589,30 @@ var KmsPlugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RotateKey",
 			Handler:    _KmsPlugin_RotateKey_Handler,
+		},
+		{
+			MethodName: "GetImportParameters",
+			Handler:    _KmsPlugin_GetImportParameters_Handler,
+		},
+		{
+			MethodName: "ImportKeyMaterial",
+			Handler:    _KmsPlugin_ImportKeyMaterial_Handler,
+		},
+		{
+			MethodName: "ImportKeyMaterialVersion",
+			Handler:    _KmsPlugin_ImportKeyMaterialVersion_Handler,
+		},
+		{
+			MethodName: "RegisterExportWrappingKey",
+			Handler:    _KmsPlugin_RegisterExportWrappingKey_Handler,
+		},
+		{
+			MethodName: "ExportKeyMaterial",
+			Handler:    _KmsPlugin_ExportKeyMaterial_Handler,
+		},
+		{
+			MethodName: "DeleteKey",
+			Handler:    _KmsPlugin_DeleteKey_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

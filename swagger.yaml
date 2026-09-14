@@ -79,3 +79,130 @@ paths:
                     description: Error message
               example:
                 message: "Internal Server Error"
+  /api/v1/rpc:
+    post:
+      summary: JSON-RPC gateway
+      description: |
+        Executes Orbitport JSON-RPC methods over the existing `/api/v1/rpc`
+        endpoint. KMS BYOK support uses true cryptographic key import/export:
+        clients wrap key material locally with the Transit wrapping key, then
+        Orbitport imports only wrapped ciphertext. Secure export returns only
+        Transit `byok-export` wrapped ciphertext by version, never plaintext
+        key material. `kms.ImportKeyMaterial` defaults `Exportable` to `true`
+        when omitted; callers can explicitly send `Exportable: false` to lock
+        the key inside KMS permanently. `kms.DeleteKey` permanently deletes
+        Transit key material through OpenBao after enabling OpenBao's
+        `deletion_allowed` guard for that key.
+
+        BYOK v1 is Transit-only. Ethereum and PQC BYOK requests return
+        `Unimplemented` until those OpenBao plugins support compatible
+        wrapped import/export.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [jsonrpc, id, method, params]
+              properties:
+                jsonrpc:
+                  type: string
+                  enum: ["2.0"]
+                id:
+                  type: integer
+                method:
+                  type: string
+                  enum:
+                    - kms.GetCapabilities
+                    - kms.GetImportParameters
+                    - kms.ImportKeyMaterial
+                    - kms.ImportKeyMaterialVersion
+                    - kms.RegisterExportWrappingKey
+                    - kms.ExportKeyMaterial
+                    - kms.DeleteKey
+                params:
+                  type: object
+                  additionalProperties: true
+            examples:
+              getImportParameters:
+                summary: Get Transit import wrapping parameters
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: kms.GetImportParameters
+                  params:
+                    Scheme: TRANSIT
+                    KeySpec: AES_256_GCM96
+                    KeyUsage: ENCRYPT_DECRYPT
+                    HashFunction: SHA256
+              importKeyMaterial:
+                summary: Import locally wrapped BYOK material
+                value:
+                  jsonrpc: "2.0"
+                  id: 2
+                  method: kms.ImportKeyMaterial
+                  params:
+                    Alias: imported-aes
+                    Scheme: TRANSIT
+                    KeySpec: AES_256_GCM96
+                    KeyUsage: ENCRYPT_DECRYPT
+                    HashFunction: SHA256
+                    Ciphertext: REPLACE_WITH_TRANSIT_WRAPPED_KEY_MATERIAL
+                    Exportable: true
+              exportKeyMaterial:
+                summary: Export as ciphertext wrapped to a registered destination
+                value:
+                  jsonrpc: "2.0"
+                  id: 3
+                  method: kms.ExportKeyMaterial
+                  params:
+                    KeyId: kms:imported-aes
+                    DestinationKeyId: kms:target-wrap
+                    Version: 1
+                    HashFunction: SHA256
+      responses:
+        '200':
+          description: JSON-RPC success or JSON-RPC error envelope
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jsonrpc, id]
+                properties:
+                  jsonrpc:
+                    type: string
+                    enum: ["2.0"]
+                  id:
+                    type: integer
+                  result:
+                    type: object
+                    additionalProperties: true
+                  error:
+                    type: object
+                    properties:
+                      code:
+                        type: integer
+                      message:
+                        type: string
+              examples:
+                importParametersResponse:
+                  summary: GetImportParameters response
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      WrappingKey: "-----BEGIN PUBLIC KEY-----..."
+                      WrappingAlgorithm: RSA-OAEP-4096
+                      HashFunction: SHA256
+                      KeyMaterialFormat: RAW
+                exportResponse:
+                  summary: ExportKeyMaterial response
+                  value:
+                    jsonrpc: "2.0"
+                    id: 3
+                    result:
+                      KeyId: kms:imported-aes
+                      DestinationKeyId: kms:target-wrap
+                      HashFunction: SHA256
+                      WrappedKeyMaterialByVersion:
+                        "1": wrapped-ciphertext

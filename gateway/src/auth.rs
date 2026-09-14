@@ -21,6 +21,8 @@ struct PatIssueBody {
     #[serde(default)]
     kms_tenant: Option<String>,
     expires_at: i64,
+    #[serde(default)]
+    scopes: Vec<String>,
 }
 
 /// INTERNAL `POST /internal/pat/issue`, guarded by an Auth0 M2M capability
@@ -53,6 +55,7 @@ async fn handle_pat_issue(
         subject: body.subject,
         kms_tenant: body.kms_tenant.unwrap_or_default(),
         expires_at: body.expires_at,
+        scopes: body.scopes,
     });
     match client.issue_token(request).await {
         Ok(resp) => Ok(json_status(

@@ -54,3 +54,51 @@ func requireRotateKeyProvider(provider kmsProvider, scheme string) (rotateKeyPro
 	}
 	return typed, nil
 }
+
+func requireImportParametersProvider(provider kmsProvider, scheme string) (importParametersProvider, error) {
+	typed, ok := provider.(importParametersProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("%s BYOK import parameters are not implemented", scheme))
+	}
+	return typed, nil
+}
+
+func requireKeyMaterialImporter(provider kmsProvider, scheme string) (keyMaterialImporter, error) {
+	typed, ok := provider.(keyMaterialImporter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("%s BYOK import is not implemented", scheme))
+	}
+	return typed, nil
+}
+
+func requireKeyMaterialVersionImporter(provider kmsProvider, scheme string) (keyMaterialVersionImporter, error) {
+	typed, ok := provider.(keyMaterialVersionImporter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("%s BYOK import-version is not implemented", scheme))
+	}
+	return typed, nil
+}
+
+func requireExportWrappingKeyRegistrar(provider kmsProvider, scheme string) (exportWrappingKeyRegistrar, error) {
+	typed, ok := provider.(exportWrappingKeyRegistrar)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("%s export wrapping-key registration is not implemented", scheme))
+	}
+	return typed, nil
+}
+
+func requireKeyMaterialExporter(provider kmsProvider, scheme string) (keyMaterialExporter, error) {
+	typed, ok := provider.(keyMaterialExporter)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("%s BYOK export is not implemented", scheme))
+	}
+	return typed, nil
+}
+
+func requireDeleteKeyProvider(provider kmsProvider, scheme string) (deleteKeyProvider, error) {
+	typed, ok := provider.(deleteKeyProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("%s key deletion is not implemented", scheme))
+	}
+	return typed, nil
+}

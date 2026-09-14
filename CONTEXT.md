@@ -48,7 +48,7 @@ beacons.yaml                Public beacon registry
 | [`ipfs`](plugins/pkg/plugin/ipfs/README.md) | Kubo wrapper with LRU cache, size ceilings, and IPNS publishing | Backs the beacon |
 | [`masterseed`](plugins/pkg/plugin/masterseed/README.md) | Rolling pool of satellite seeds with offset-reserved derivation | Serves cTRNG to the gateway |
 | [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS | No RPC; consumes the others |
-| [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate) backed by OpenBao | Wraps Transit + Ethereum secrets engines |
+| [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate / BYOK import-export) backed by OpenBao | Wraps Transit + Ethereum + PQC secrets engines |
 | [`account`](plugins/pkg/plugin/account/README.md) | Per-request credit gating against the dashboard backend account service | Holds credits before serving compute; settles on success, releases on failure |
 | [`patissuer`](plugins/pkg/plugin/patissuer/README.md) | Mints Personal Access Tokens (ES256 JWS) and serves the JWKS verifiers cache | Key custody behind a signer seam: local P-256 key now, OpenBao Transit when provisioned |
 
@@ -189,6 +189,7 @@ rather than gRPC and holds no key material. See
 | `ORBITPORT_KMS_ETHEREUM_MOUNT` | `ethereum` | Mount path of the Ethereum Secrets Engine |
 | `ORBITPORT_KMS_PQC_MOUNT` | `pqc` | Mount path of the PQC Secrets Engine |
 | `ORBITPORT_KMS_KV_MOUNT` | `secret` | KV v2 mount used to persist key metadata |
+| `ORBITPORT_KMS_CEDAR_POLICY_PATH` | — | Optional Cedar policy file evaluated as an additional KMS authorization layer. If unset, no Cedar policy layer is evaluated; compose points to `/etc/orbitport/kms/kms_default.cedar` |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 
 ### Plugin: `account`

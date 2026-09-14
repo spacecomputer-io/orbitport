@@ -556,6 +556,20 @@ func TestValidateToken_PATHappyPath(t *testing.T) {
 	require.Empty(t, resp.KmsTenant)
 }
 
+func TestValidateToken_PATScopesPropagate(t *testing.T) {
+	key := newP256Key(t)
+	mock := &mockIssuer{jwks: jwksJSON("kid-1", &key.PublicKey)}
+	p := newTestPlugin(t, startMockIssuer(t, mock))
+
+	claims := patClaims()
+	claims["scope"] = "kms:import kms:export"
+	token := mintES256(t, key, "kid-1", claims)
+
+	resp, err := p.ValidateToken(context.Background(), &proto.TokenValidationRequest{Token: token})
+	require.NoError(t, err)
+	require.Equal(t, []string{"kms:import", "kms:export"}, resp.Scopes)
+}
+
 func TestValidateToken_WrongIssFallsThroughToAuth0(t *testing.T) {
 	key := newP256Key(t)
 	mock := &mockIssuer{jwks: jwksJSON("kid-1", &key.PublicKey)}

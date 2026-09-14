@@ -63,6 +63,14 @@ func (c *Client) Get(ctx context.Context, target string, into any) error {
 	return c.do(req, into)
 }
 
+func (c *Client) Delete(ctx context.Context, target string, into any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, target, nil)
+	if err != nil {
+		return fmt.Errorf("create openbao request: %w", err)
+	}
+	return c.do(req, into)
+}
+
 func (c *Client) do(req *http.Request, into any) error {
 	if c.logger != nil {
 		c.logger.Debugf("OpenBao request %s %s", req.Method, req.URL.Path)
