@@ -2,6 +2,7 @@ ENV_FILE?=".dev.env"
 E2E_PROFILE?=happy
 CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl
 DOCKER_TAG?=latest ## DOCKER_TAG=v*.*.*
+RUST_FEATURES?="default"
 
 protoc:
 	@cd plugins && make protoc
@@ -20,7 +21,7 @@ fmt:
 
 build: protoc
 	@cd plugins && make build
-	@cd gateway && make build
+	@cd gateway && make RUST_FEATURES=${RUST_FEATURES} build
 
 e2e:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_${E2E_PROFILE} --features localtest
@@ -50,7 +51,7 @@ devenv-down:
 
 docker-build:
 	@cd plugins && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
-	@cd gateway && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} docker-build
+	@cd gateway && make CONTAINER_TOOL=${CONTAINER_TOOL} DOCKER_TAG=${DOCKER_TAG} RUST_FEATURES=${RUST_FEATURES} docker-build
 
 help:
 	@echo ""

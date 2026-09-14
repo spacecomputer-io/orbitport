@@ -3,9 +3,11 @@
 ################################################################################
 
 ARG RUST_VERSION=1.92
+ARG RUST_FEATURES="default"
 
 FROM dhi.io/rust:${RUST_VERSION}-debian13-dev AS build
 
+ARG RUST_FEATURES
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
@@ -32,7 +34,7 @@ RUN --mount=type=bind,source=gateway/src,target=src \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
     <<EOF
 set -e
-cargo build --locked --release --bin gateway 
+cargo build --locked --release --bin gateway --no-default-features --features "${RUST_FEATURES}"
 cp ./target/release/gateway /bin/gateway
 EOF
 

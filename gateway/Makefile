@@ -4,6 +4,7 @@ DOCKER_TAG?=latest
 DOCKER_CONTAINER_NAME?=gateway
 RUST_LOG?=debug
 CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl 
+RUST_FEATURES?=default
 
 test:
 	@cargo test -- --skip test_e2e
@@ -20,13 +21,13 @@ clippy:
 lint: clippy
 
 build:
-	@cargo build --release
+	@cargo build --release --features "${RUST_FEATURES}" --no-default-features
 
 run: build
 	@./target/release/gateway
 
 docker-build:
-	@${CONTAINER_TOOL} build -f Dockerfile -t ${DOCKER_IMAGE}:${DOCKER_TAG} ..
+	@${CONTAINER_TOOL} build --build-arg RUST_FEATURES="${RUST_FEATURES}" -f Dockerfile -t ${DOCKER_IMAGE}:${DOCKER_TAG} ..
 
 docker-clean:
 	@${CONTAINER_TOOL} rm -f ${DOCKER_CONTAINER_NAME} 2> /dev/null

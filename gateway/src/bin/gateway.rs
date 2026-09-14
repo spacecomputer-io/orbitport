@@ -2,7 +2,7 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use gateway::{logging, plugins, server, service_manager, types::GatewayError};
+use gateway::{logging, plugins, server, types::GatewayError};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -16,14 +16,16 @@ struct Args {
     metric_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
     auth_plugin: String,
+    #[cfg(feature = "kms")]
     #[clap(long, env = "ORBITPORT_KMS_PLUGIN")]
     kms_plugin: String,
-    #[clap(long, env = "ORBITPORT_THRESHOLD_ENABLED", default_value = "false")]
-    threshold_enabled: bool,
+    #[cfg(feature = "kms_threshold")]
     #[clap(long, env = "ORBITPORT_THRESHOLD_PLUGIN", default_value = "")]
     threshold_plugin: String,
+    #[cfg(feature = "kms_threshold")]
     #[clap(long, env = "ORBITPORT_THRESHOLD_GROUPS", default_value = "")]
     threshold_groups: String,
+    #[cfg(feature = "ctrng")]
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
     masterseed_plugin: String,
     /// Optional account plugin gRPC URL. When set, JWT-authenticated routes
@@ -41,8 +43,6 @@ struct Args {
     rate_limit: u32,
     #[clap(long, env = "ORBITPORT_RATE_LIMIT_WINDOW", default_value = "10")]
     rate_limit_window: u64,
-    #[clap(long, env = "ORBITPORT_BULK_MAX", default_value = "10")]
-    bulk_max: usize,
 }
 
 impl Args {
@@ -101,7 +101,9 @@ async fn main() -> Result<(), GatewayError> {
 
     let mut plugin_urls = vec![
         args.auth_plugin.to_string(),
+        #[cfg(feature = "kms")]
         args.kms_plugin.to_string(),
+        #[cfg(feature = "ctrng")]
         args.masterseed_plugin.to_string(),
     ];
     if let Some(ref url) = args.account_plugin {
@@ -110,7 +112,8 @@ async fn main() -> Result<(), GatewayError> {
     if let Some(ref url) = args.patissuer_plugin {
         plugin_urls.push(url.to_string());
     }
-    if args.threshold_enabled {
+    #[cfg(feature = "kms_threshold")]
+    {
         let threshold_plugin = args.threshold_plugin.trim();
         if threshold_plugin.is_empty() {
             return Err(GatewayError::BadRequest(
@@ -131,40 +134,37 @@ async fn main() -> Result<(), GatewayError> {
         tracing::error!("Failed while waiting for plugins to be healthy: {}", e);
         GatewayError::ServiceConnectionError(e.to_string())
     })?;
-    let service_manager =
-        service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
 
     let metrics_port = args.metric_port;
     tokio::spawn(async move {
         gateway::metrics::start_server(metrics_port).await;
     });
 
-    let service_manager = Arc::new(service_manager);
-    let threshold_groups = if args.threshold_enabled {
+    #[cfg(feature = "kms_threshold")]
+    let threshold_groups =
         gateway::services::threshold::ThresholdGroupRegistry::from_json(&args.threshold_groups)
-            .map_err(|e| GatewayError::BadRequest(e.to_string()))?
-    } else {
-        gateway::services::threshold::ThresholdGroupRegistry::default()
-    };
+            .map_err(|e| GatewayError::BadRequest(e.to_string()))?;
+
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
+        #[cfg(feature = "ctrng")]
         &args.masterseed_plugin,
+        #[cfg(feature = "kms")]
         &args.kms_plugin,
         args.account_plugin.as_deref(),
         args.patissuer_plugin.as_deref(),
-        args.threshold_enabled,
+        #[cfg(feature = "kms_threshold")]
         args.threshold_plugin.trim(),
+        #[cfg(feature = "kms_threshold")]
         threshold_groups,
     ));
 
     server::start(
         args.http_port,
         args.internal_port,
-        service_manager.clone(),
         plugin_catalog.clone(),
         args.rate_limit,
         args.rate_limit_window,
-        args.bulk_max,
     )
     .await;
 
