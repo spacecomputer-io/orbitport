@@ -214,9 +214,6 @@ impl PluginCatalog {
     pub async fn get_threshold_client(
         &self,
     ) -> Result<ThresholdPluginClient<Channel>, PluginError> {
-        if !self.threshold_enabled {
-            return Err(PluginError::PluginNotFound("threshold".to_string()));
-        }
         let channel = self.get_client("threshold").await?;
         Ok(ThresholdPluginClient::new(channel))
     }

@@ -121,18 +121,6 @@ impl RpcCall {
     pub fn validate(&self) -> Result<(), String> {
         tracing::trace!("Validating RPC call: {:?}", self);
 
-        #[cfg(feature = "ctrng")]
-        if let RpcCall::GetCTRNG(req) = self
-            && let Some(chunks) = req.chunks
-        {
-            if chunks > MAX_CHUNKS {
-                return Err("Max chunks exceeded".to_string());
-            }
-            if chunks < 1 {
-                return Err("Chunks must be at least 1".to_string());
-            }
-        }
-
         #[cfg(feature = "kms")]
         match self {
             RpcCall::GetCapabilities(_) => {}
@@ -151,6 +139,18 @@ impl RpcCall {
             _ => {}
         }
 
+        #[cfg(feature = "ctrng")]
+        if let RpcCall::GetCTRNG(req) = self
+            && let Some(chunks) = req.chunks
+        {
+            if chunks > MAX_CHUNKS {
+                return Err("Max chunks exceeded".to_string());
+            }
+            if chunks < 1 {
+                return Err("Chunks must be at least 1".to_string());
+            }
+        }
+
         Ok(())
     }
 
@@ -167,21 +167,6 @@ impl RpcCall {
             req_id,
             client_id
         );
-
-        #[cfg(feature = "ctrng")]
-        if let RpcCall::GetCTRNG(req) = self {
-            let grpc_client = plugin_catalog
-                .get_masterseed_client()
-                .await
-                .map_err(|_| tonic::Status::unavailable("Masterseed plugin unavailable"))?;
-            let mut svc = CTrngService::new(grpc_client);
-            let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
-                // We can log _e here for debugging, but we don't want to expose internal errors to the client
-                tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
-                tonic::Status::internal("Failed to get mixed cTRNG")
-            })?;
-            return serialize_success_response(req_id, results);
-        }
 
         #[cfg(feature = "kms")]
         match self {
@@ -257,6 +242,22 @@ impl RpcCall {
             _ => {}
         };
 
+        #[allow(irrefutable_let_patterns)]
+        #[cfg(feature = "ctrng")]
+        if let RpcCall::GetCTRNG(req) = self {
+            let grpc_client = plugin_catalog
+                .get_masterseed_client()
+                .await
+                .map_err(|_| tonic::Status::unavailable("Masterseed plugin unavailable"))?;
+            let mut svc = CTrngService::new(grpc_client);
+            let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
+                // We can log _e here for debugging, but we don't want to expose internal errors to the client
+                tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
+                tonic::Status::internal("Failed to get mixed cTRNG")
+            })?;
+            return serialize_success_response(req_id, results);
+        }
+
         Err(tonic::Status::unimplemented("Unsupported RPC call"))
     }
 }
@@ -294,10 +295,6 @@ async fn execute_threshold(
     plugin_catalog: &PluginCatalog,
     call: ThresholdRpcCall,
 ) -> Result<serde_json::Value, tonic::Status> {
-    if !plugin_catalog.threshold_enabled() {
-        return Err(tonic::Status::unavailable("Threshold feature disabled"));
-    }
-
     let grpc_client = plugin_catalog
         .get_threshold_client()
         .await
