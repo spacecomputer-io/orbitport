@@ -223,6 +223,29 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 	}
 }
 
+func TestKeyStoreGetRejectsNullStoredSecretPayload(t *testing.T) {
+	clientID := "client-a"
+	owner := tenantNamespace(clientID)
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeKeyStoreRawJSON(t, w, `{"data":{"data":{"name":"`+testKeyStoreName+`","owner":"`+owner+`","secret":null}}}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, err := plugin.KeyStoreGet(context.Background(), &proto.KeyStoreGetRequest{
+		ClientId: clientID,
+		Name:     testKeyStoreName,
+	})
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("expected PermissionDenied, got %v (%v)", status.Code(err), err)
+	}
+}
+
 func TestKeyStoreListReturnsSingleLevelTenantNamespace(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
@@ -404,6 +427,34 @@ func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
 	})
 	if status.Code(err) != codes.NotFound {
 		t.Fatalf("expected NotFound, got %v (%v)", status.Code(err), err)
+	}
+}
+
+func TestKeyStoreDeleteReturnsInternalWhenDeleteFailsAfterExistenceCheck(t *testing.T) {
+	clientID := "client-a"
+	owner := tenantNamespace(clientID)
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+testKeyStoreName:
+			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"version": 1}})
+		case r.Method == http.MethodDelete && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+testKeyStoreName:
+			http.NotFound(w, r)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	_, err := plugin.KeyStoreDelete(context.Background(), &proto.KeyStoreDeleteRequest{
+		ClientId: clientID,
+		Name:     testKeyStoreName,
+	})
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("expected Internal, got %v (%v)", status.Code(err), err)
+	}
+	if got := status.Convert(err).Message(); got != "key-store backend error" {
+		t.Fatalf("expected generic backend error, got %q", got)
 	}
 }
 

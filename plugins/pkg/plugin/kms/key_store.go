@@ -69,7 +69,7 @@ func (p *Plugin) KeyStoreGet(ctx context.Context, req *proto.KeyStoreGetRequest)
 	if err != nil {
 		return nil, keyStoreNotFoundOrBackendStatus("get", err, "key-store entry not found")
 	}
-	if record == nil || record.Owner != tenantNamespace(req.ClientId) || record.Name != name || record.Secret == nil {
+	if !isValidKeyStoreRecord(record, req.ClientId, name) {
 		logger.Warnf("key-store get rejected invalid stored payload owner=%s name=%s", tenantNamespace(req.ClientId), name)
 		return nil, status.Error(codes.PermissionDenied, "key-store entry does not belong to the requested key")
 	}
@@ -121,7 +121,7 @@ func (p *Plugin) KeyStoreDelete(ctx context.Context, req *proto.KeyStoreDeleteRe
 		return nil, keyStoreNotFoundOrBackendStatus("delete", err, "key-store entry not found")
 	}
 	if err := p.client.deleteKeyStoreSecret(ctx, req.ClientId, name); err != nil {
-		return nil, keyStoreNotFoundOrBackendStatus("delete", err, "key-store entry not found")
+		return nil, keyStoreBackendStatus("delete", err)
 	}
 	logger.Debugf("key-store delete completed name=%s owner=%s", name, tenantNamespace(req.ClientId))
 	return &proto.KeyStoreDeleteResponse{Name: name}, nil
@@ -195,6 +195,13 @@ func encodeKeyStoreSecretJSON(value json.RawMessage) (string, error) {
 		return "", fmt.Errorf("stored key-store secret must be a JSON object")
 	}
 	return string(value), nil
+}
+
+func isValidKeyStoreRecord(record *keyStoreRecord, clientID, name string) bool {
+	return record != nil &&
+		record.Owner == tenantNamespace(clientID) &&
+		record.Name == name &&
+		isKeyStoreJSONObject(record.Secret)
 }
 
 func isKeyStoreJSONObject(value json.RawMessage) bool {
