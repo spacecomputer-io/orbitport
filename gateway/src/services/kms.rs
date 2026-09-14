@@ -11,13 +11,16 @@ use crate::proto::plugins::kms::{
     EncryptResponse as PluginEncryptResponse,
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
     GenerateDataKeyResponse as PluginGenerateDataKeyResponse,
-    KeyStoreDeleteRequest as PluginDeleteRequest, KeyStoreDeleteResponse as PluginDeleteResponse,
-    KeyStoreGetRequest as PluginGetRequest, KeyStoreGetResponse as PluginGetResponse,
-    KeyStoreListRequest as PluginListRequest, KeyStoreListResponse as PluginListResponse,
-    KeyStorePutRequest as PluginPutRequest, KeyStorePutResponse as PluginPutResponse,
-    RotateKeyRequest as PluginRotateKeyRequest, RotateKeyResponse as PluginRotateKeyResponse,
-    SignRequest as PluginSignRequest, SignResponse as PluginSignResponse, Tag as PluginTag,
-    kms_plugin_client::KmsPluginClient,
+    KeyStoreDeleteRequest as PluginKeyStoreDeleteRequest,
+    KeyStoreDeleteResponse as PluginKeyStoreDeleteResponse,
+    KeyStoreGetRequest as PluginKeyStoreGetRequest,
+    KeyStoreGetResponse as PluginKeyStoreGetResponse,
+    KeyStoreListRequest as PluginKeyStoreListRequest,
+    KeyStoreListResponse as PluginKeyStoreListResponse,
+    KeyStorePutRequest as PluginKeyStorePutRequest,
+    KeyStorePutResponse as PluginKeyStorePutResponse, RotateKeyRequest as PluginRotateKeyRequest,
+    RotateKeyResponse as PluginRotateKeyResponse, SignRequest as PluginSignRequest,
+    SignResponse as PluginSignResponse, Tag as PluginTag, kms_plugin_client::KmsPluginClient,
 };
 use crate::proto::services::kms::{
     CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
@@ -369,7 +372,6 @@ pub struct KeyStoreListResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct KeyStoreDeleteResponse {
     pub name: String,
-    pub deleted: bool,
 }
 
 #[derive(Debug)]
@@ -382,10 +384,10 @@ pub enum KmsRpcCall {
     CreateKey(CreateKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
-    Put(KeyStorePutRequest),
-    Get(KeyStoreGetRequest),
-    List(KeyStoreListRequest),
-    Delete(KeyStoreDeleteRequest),
+    KeyStorePut(KeyStorePutRequest),
+    KeyStoreGet(KeyStoreGetRequest),
+    KeyStoreList(KeyStoreListRequest),
+    KeyStoreDelete(KeyStoreDeleteRequest),
 }
 
 impl KmsRpcCall {
@@ -399,10 +401,10 @@ impl KmsRpcCall {
             Self::CreateKey(req) => KmsService::validate_create_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
-            Self::Put(req) => KmsService::validate_key_store_put(req),
-            Self::Get(req) => KmsService::validate_key_store_get(req),
-            Self::List(req) => KmsService::validate_key_store_list(req),
-            Self::Delete(req) => KmsService::validate_key_store_delete(req),
+            Self::KeyStorePut(req) => KmsService::validate_key_store_put(req),
+            Self::KeyStoreGet(req) => KmsService::validate_key_store_get(req),
+            Self::KeyStoreList(req) => KmsService::validate_key_store_list(req),
+            Self::KeyStoreDelete(req) => KmsService::validate_key_store_delete(req),
         }
     }
 
@@ -451,28 +453,28 @@ impl KmsRpcCall {
                 req_id,
                 req.key_id
             ),
-            Self::Put(req) => {
+            Self::KeyStorePut(req) => {
                 tracing::debug!(
-                    "Executing KMS key-store Put RPC [id={} name={}]",
+                    "Executing KMS KeyStorePut RPC [id={} name={}]",
                     req_id,
                     req.name
                 )
             }
-            Self::Get(req) => {
+            Self::KeyStoreGet(req) => {
                 tracing::debug!(
-                    "Executing KMS key-store Get RPC [id={} name={}]",
+                    "Executing KMS KeyStoreGet RPC [id={} name={}]",
                     req_id,
                     req.name
                 )
             }
-            Self::List(req) => tracing::debug!(
-                "Executing KMS key-store List RPC [id={} prefix={}]",
+            Self::KeyStoreList(req) => tracing::debug!(
+                "Executing KMS KeyStoreList RPC [id={} prefix={}]",
                 req_id,
                 req.prefix.as_deref().unwrap_or("")
             ),
-            Self::Delete(req) => {
+            Self::KeyStoreDelete(req) => {
                 tracing::debug!(
-                    "Executing KMS key-store Delete RPC [id={} name={}]",
+                    "Executing KMS KeyStoreDelete RPC [id={} name={}]",
                     req_id,
                     req.name
                 )
@@ -492,10 +494,10 @@ pub enum KmsRpcResult {
     CreateKey(CreateKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
-    Put(KeyStorePutResponse),
-    Get(KeyStoreGetResponse),
-    List(KeyStoreListResponse),
-    Delete(KeyStoreDeleteResponse),
+    KeyStorePut(KeyStorePutResponse),
+    KeyStoreGet(KeyStoreGetResponse),
+    KeyStoreList(KeyStoreListResponse),
+    KeyStoreDelete(KeyStoreDeleteResponse),
 }
 
 impl KmsRpcResult {
@@ -554,27 +556,26 @@ impl KmsRpcResult {
                     );
                 }
             }
-            Self::Put(result) => tracing::debug!(
-                "KMS key-store Put RPC succeeded [id={} name={} version={}]",
+            Self::KeyStorePut(result) => tracing::debug!(
+                "KMS KeyStorePut RPC succeeded [id={} name={} version={}]",
                 req_id,
                 result.name,
                 result.version
             ),
-            Self::Get(result) => tracing::debug!(
-                "KMS key-store Get RPC succeeded [id={} name={}]",
+            Self::KeyStoreGet(result) => tracing::debug!(
+                "KMS KeyStoreGet RPC succeeded [id={} name={}]",
                 req_id,
                 result.name
             ),
-            Self::List(result) => tracing::debug!(
-                "KMS key-store List RPC succeeded [id={} count={}]",
+            Self::KeyStoreList(result) => tracing::debug!(
+                "KMS KeyStoreList RPC succeeded [id={} count={}]",
                 req_id,
                 result.names.len()
             ),
-            Self::Delete(result) => tracing::debug!(
-                "KMS key-store Delete RPC succeeded [id={} name={} deleted={}]",
+            Self::KeyStoreDelete(result) => tracing::debug!(
+                "KMS KeyStoreDelete RPC succeeded [id={} name={}]",
                 req_id,
-                result.name,
-                result.deleted
+                result.name
             ),
         }
     }
@@ -748,10 +749,18 @@ impl KmsService {
             KmsRpcCall::RotateKey(req) => {
                 KmsRpcResult::RotateKey(self.rotate_key(client_id, req).await?)
             }
-            KmsRpcCall::Put(req) => KmsRpcResult::Put(self.put(client_id, req).await?),
-            KmsRpcCall::Get(req) => KmsRpcResult::Get(self.get(client_id, req).await?),
-            KmsRpcCall::List(req) => KmsRpcResult::List(self.list(client_id, req).await?),
-            KmsRpcCall::Delete(req) => KmsRpcResult::Delete(self.delete(client_id, req).await?),
+            KmsRpcCall::KeyStorePut(req) => {
+                KmsRpcResult::KeyStorePut(self.key_store_put(client_id, req).await?)
+            }
+            KmsRpcCall::KeyStoreGet(req) => {
+                KmsRpcResult::KeyStoreGet(self.key_store_get(client_id, req).await?)
+            }
+            KmsRpcCall::KeyStoreList(req) => {
+                KmsRpcResult::KeyStoreList(self.key_store_list(client_id, req).await?)
+            }
+            KmsRpcCall::KeyStoreDelete(req) => {
+                KmsRpcResult::KeyStoreDelete(self.key_store_delete(client_id, req).await?)
+            }
         };
 
         result.log_success(req_id);
@@ -945,16 +954,16 @@ impl KmsService {
         })
     }
 
-    pub async fn put(
+    pub async fn key_store_put(
         &mut self,
         client_id: &str,
         req: KeyStorePutRequest,
     ) -> Result<KeyStorePutResponse, tonic::Status> {
         let secret_json = serde_json::to_string(&req.secret)
             .map_err(|e| tonic::Status::internal(format!("Failed to serialize secret: {e}")))?;
-        let response: PluginPutResponse = self
+        let response: PluginKeyStorePutResponse = self
             .client
-            .put(tonic::Request::new(PluginPutRequest {
+            .key_store_put(tonic::Request::new(PluginKeyStorePutRequest {
                 name: req.name,
                 secret_json,
                 client_id: client_id.to_string(),
@@ -968,14 +977,14 @@ impl KmsService {
         })
     }
 
-    pub async fn get(
+    pub async fn key_store_get(
         &mut self,
         client_id: &str,
         req: KeyStoreGetRequest,
     ) -> Result<KeyStoreGetResponse, tonic::Status> {
-        let response: PluginGetResponse = self
+        let response: PluginKeyStoreGetResponse = self
             .client
-            .get(tonic::Request::new(PluginGetRequest {
+            .key_store_get(tonic::Request::new(PluginKeyStoreGetRequest {
                 name: req.name,
                 client_id: client_id.to_string(),
             }))
@@ -990,14 +999,14 @@ impl KmsService {
         })
     }
 
-    pub async fn list(
+    pub async fn key_store_list(
         &mut self,
         client_id: &str,
         req: KeyStoreListRequest,
     ) -> Result<KeyStoreListResponse, tonic::Status> {
-        let response: PluginListResponse = self
+        let response: PluginKeyStoreListResponse = self
             .client
-            .list(tonic::Request::new(PluginListRequest {
+            .key_store_list(tonic::Request::new(PluginKeyStoreListRequest {
                 client_id: client_id.to_string(),
                 prefix: req.prefix,
             }))
@@ -1009,14 +1018,14 @@ impl KmsService {
         })
     }
 
-    pub async fn delete(
+    pub async fn key_store_delete(
         &mut self,
         client_id: &str,
         req: KeyStoreDeleteRequest,
     ) -> Result<KeyStoreDeleteResponse, tonic::Status> {
-        let response: PluginDeleteResponse = self
+        let response: PluginKeyStoreDeleteResponse = self
             .client
-            .delete(tonic::Request::new(PluginDeleteRequest {
+            .key_store_delete(tonic::Request::new(PluginKeyStoreDeleteRequest {
                 name: req.name,
                 client_id: client_id.to_string(),
             }))
@@ -1025,7 +1034,6 @@ impl KmsService {
 
         Ok(KeyStoreDeleteResponse {
             name: response.name,
-            deleted: response.deleted,
         })
     }
 }

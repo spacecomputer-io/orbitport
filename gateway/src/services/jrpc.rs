@@ -92,13 +92,13 @@ pub enum RpcCall {
     #[serde(rename = "kms.RotateKey")]
     RotateKey(RotateKeyRequest),
     #[serde(rename = "kms_keystore.Put")]
-    Put(KeyStorePutRequest),
+    KeyStorePut(KeyStorePutRequest),
     #[serde(rename = "kms_keystore.Get")]
-    Get(KeyStoreGetRequest),
+    KeyStoreGet(KeyStoreGetRequest),
     #[serde(rename = "kms_keystore.List")]
-    List(KeyStoreListRequest),
+    KeyStoreList(KeyStoreListRequest),
     #[serde(rename = "kms_keystore.Delete")]
-    Delete(KeyStoreDeleteRequest),
+    KeyStoreDelete(KeyStoreDeleteRequest),
     #[serde(rename = "kms.Sign")]
     Sign(SignRequest),
     #[serde(rename = "kms.Encapsulate")]
@@ -132,10 +132,10 @@ impl RpcCall {
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
-            RpcCall::Put(req) => KmsService::validate_key_store_put(req)?,
-            RpcCall::Get(req) => KmsService::validate_key_store_get(req)?,
-            RpcCall::List(req) => KmsService::validate_key_store_list(req)?,
-            RpcCall::Delete(req) => KmsService::validate_key_store_delete(req)?,
+            RpcCall::KeyStorePut(req) => KmsService::validate_key_store_put(req)?,
+            RpcCall::KeyStoreGet(req) => KmsService::validate_key_store_get(req)?,
+            RpcCall::KeyStoreList(req) => KmsService::validate_key_store_list(req)?,
+            RpcCall::KeyStoreDelete(req) => KmsService::validate_key_store_delete(req)?,
             RpcCall::CoordinateDKG(req) => {
                 ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
             }
@@ -221,17 +221,41 @@ impl RpcCall {
                 )
                 .await
             }
-            RpcCall::Put(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Put(req)).await
+            RpcCall::KeyStorePut(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::KeyStorePut(req),
+                )
+                .await
             }
-            RpcCall::Get(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Get(req)).await
+            RpcCall::KeyStoreGet(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::KeyStoreGet(req),
+                )
+                .await
             }
-            RpcCall::List(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::List(req)).await
+            RpcCall::KeyStoreList(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::KeyStoreList(req),
+                )
+                .await
             }
-            RpcCall::Delete(req) => {
-                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Delete(req)).await
+            RpcCall::KeyStoreDelete(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::KeyStoreDelete(req),
+                )
+                .await
             }
             RpcCall::CoordinateDKG(req) => {
                 execute_threshold(
@@ -374,7 +398,7 @@ mod test {
 
         let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
         match req.call {
-            RpcCall::Put(params) => {
+            RpcCall::KeyStorePut(params) => {
                 assert_eq!(params.name, "github/prod");
                 assert_eq!(
                     params
@@ -383,6 +407,31 @@ mod test {
                         .and_then(|value| value.as_str()),
                     Some("secret-value")
                 );
+            }
+            _ => panic!("expected kms_keystore.Put"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_key_store_put_preserves_large_integer_secret() {
+        let raw = r#"{
+            "jsonrpc": "2.0",
+            "id": 10,
+            "method": "kms_keystore.Put",
+            "params": {
+                "Name": "github/prod",
+                "Secret": {
+                    "id": 9007199254740993
+                }
+            }
+        }"#;
+
+        let req: JsonRpcRequest = serde_json::from_str(raw).unwrap();
+        match req.call {
+            RpcCall::KeyStorePut(params) => {
+                let secret_json = serde_json::to_string(&params.secret).unwrap();
+                assert!(secret_json.contains("9007199254740993"));
+                assert!(!secret_json.contains("9007199254740992"));
             }
             _ => panic!("expected kms_keystore.Put"),
         }
@@ -401,7 +450,7 @@ mod test {
 
         let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
         match req.call {
-            RpcCall::Get(params) => {
+            RpcCall::KeyStoreGet(params) => {
                 assert_eq!(params.name, "github/prod");
             }
             _ => panic!("expected kms_keystore.Get"),
@@ -421,7 +470,7 @@ mod test {
 
         let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
         match req.call {
-            RpcCall::Delete(params) => {
+            RpcCall::KeyStoreDelete(params) => {
                 assert_eq!(params.name, "github/prod");
             }
             _ => panic!("expected kms_keystore.Delete"),

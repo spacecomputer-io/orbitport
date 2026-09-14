@@ -127,10 +127,12 @@ curl -X POST http://localhost:8080/api/v1/rpc \
   }'
 ```
 
-Store arbitrary key material in the KMS key-store:
+Store an arbitrary JSON secret in the KMS key-store:
 
-Key-store names are slash-separated and bounded by
-`ORBITPORT_KMS_KEY_STORE_MAX_DEPTH`, which defaults to `3`.
+Key-store names are slash-separated, capped at 256 characters, and each segment
+must use `[A-Za-z0-9._-]+`. `List` returns only immediate entries and folders
+for the requested prefix; folder results end with `/` so callers can walk deeper
+by sending that value as the next `Prefix`.
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/rpc \

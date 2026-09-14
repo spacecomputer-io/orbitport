@@ -1569,7 +1569,6 @@ func (x *KeyStoreDeleteRequest) GetClientId() string {
 type KeyStoreDeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Deleted       bool                   `protobuf:"varint,2,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1609,13 +1608,6 @@ func (x *KeyStoreDeleteResponse) GetName() string {
 		return x.Name
 	}
 	return ""
-}
-
-func (x *KeyStoreDeleteResponse) GetDeleted() bool {
-	if x != nil {
-		return x.Deleted
-	}
-	return false
 }
 
 var File_proto_plugins_kms_proto protoreflect.FileDescriptor
@@ -1748,10 +1740,9 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x05names\x18\x01 \x03(\tR\x05names\"H\n" +
 	"\x15KeyStoreDeleteRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
-	"\tclient_id\x18\x02 \x01(\tR\bclientId\"F\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"2\n" +
 	"\x16KeyStoreDeleteResponse\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\adeleted\x18\x02 \x01(\bR\adeleted2\xaa\x06\n" +
+	"\x04name\x18\x01 \x01(\tR\x04nameJ\x04\b\x02\x10\x032\xca\x06\n" +
 	"\tKmsPlugin\x12:\n" +
 	"\aEncrypt\x12\x16.kmsapi.EncryptRequest\x1a\x17.kmsapi.EncryptResponse\x12:\n" +
 	"\aDecrypt\x12\x16.kmsapi.DecryptRequest\x1a\x17.kmsapi.DecryptResponse\x121\n" +
@@ -1760,11 +1751,11 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\vDecapsulate\x12\x1a.kmsapi.DecapsulateRequest\x1a\x1b.kmsapi.DecapsulateResponse\x12@\n" +
 	"\tCreateKey\x12\x18.kmsapi.CreateKeyRequest\x1a\x19.kmsapi.CreateKeyResponse\x12R\n" +
 	"\x0fGenerateDataKey\x12\x1e.kmsapi.GenerateDataKeyRequest\x1a\x1f.kmsapi.GenerateDataKeyResponse\x12@\n" +
-	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponse\x12>\n" +
-	"\x03Put\x12\x1a.kmsapi.KeyStorePutRequest\x1a\x1b.kmsapi.KeyStorePutResponse\x12>\n" +
-	"\x03Get\x12\x1a.kmsapi.KeyStoreGetRequest\x1a\x1b.kmsapi.KeyStoreGetResponse\x12A\n" +
-	"\x04List\x12\x1b.kmsapi.KeyStoreListRequest\x1a\x1c.kmsapi.KeyStoreListResponse\x12G\n" +
-	"\x06Delete\x12\x1d.kmsapi.KeyStoreDeleteRequest\x1a\x1e.kmsapi.KeyStoreDeleteResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
+	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponse\x12F\n" +
+	"\vKeyStorePut\x12\x1a.kmsapi.KeyStorePutRequest\x1a\x1b.kmsapi.KeyStorePutResponse\x12F\n" +
+	"\vKeyStoreGet\x12\x1a.kmsapi.KeyStoreGetRequest\x1a\x1b.kmsapi.KeyStoreGetResponse\x12I\n" +
+	"\fKeyStoreList\x12\x1b.kmsapi.KeyStoreListRequest\x1a\x1c.kmsapi.KeyStoreListResponse\x12O\n" +
+	"\x0eKeyStoreDelete\x12\x1d.kmsapi.KeyStoreDeleteRequest\x1a\x1e.kmsapi.KeyStoreDeleteResponseB5Z3github.com/spacecomputer-io/orbitport/plugins/protob\x06proto3"
 
 var (
 	file_proto_plugins_kms_proto_rawDescOnce sync.Once
@@ -1820,10 +1811,10 @@ var file_proto_plugins_kms_proto_depIdxs = []int32{
 	12, // 9: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
 	14, // 10: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
 	16, // 11: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
-	18, // 12: kmsapi.KmsPlugin.Put:input_type -> kmsapi.KeyStorePutRequest
-	20, // 13: kmsapi.KmsPlugin.Get:input_type -> kmsapi.KeyStoreGetRequest
-	22, // 14: kmsapi.KmsPlugin.List:input_type -> kmsapi.KeyStoreListRequest
-	24, // 15: kmsapi.KmsPlugin.Delete:input_type -> kmsapi.KeyStoreDeleteRequest
+	18, // 12: kmsapi.KmsPlugin.KeyStorePut:input_type -> kmsapi.KeyStorePutRequest
+	20, // 13: kmsapi.KmsPlugin.KeyStoreGet:input_type -> kmsapi.KeyStoreGetRequest
+	22, // 14: kmsapi.KmsPlugin.KeyStoreList:input_type -> kmsapi.KeyStoreListRequest
+	24, // 15: kmsapi.KmsPlugin.KeyStoreDelete:input_type -> kmsapi.KeyStoreDeleteRequest
 	3,  // 16: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
 	5,  // 17: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
 	7,  // 18: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
@@ -1832,10 +1823,10 @@ var file_proto_plugins_kms_proto_depIdxs = []int32{
 	13, // 21: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
 	15, // 22: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
 	17, // 23: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
-	19, // 24: kmsapi.KmsPlugin.Put:output_type -> kmsapi.KeyStorePutResponse
-	21, // 25: kmsapi.KmsPlugin.Get:output_type -> kmsapi.KeyStoreGetResponse
-	23, // 26: kmsapi.KmsPlugin.List:output_type -> kmsapi.KeyStoreListResponse
-	25, // 27: kmsapi.KmsPlugin.Delete:output_type -> kmsapi.KeyStoreDeleteResponse
+	19, // 24: kmsapi.KmsPlugin.KeyStorePut:output_type -> kmsapi.KeyStorePutResponse
+	21, // 25: kmsapi.KmsPlugin.KeyStoreGet:output_type -> kmsapi.KeyStoreGetResponse
+	23, // 26: kmsapi.KmsPlugin.KeyStoreList:output_type -> kmsapi.KeyStoreListResponse
+	25, // 27: kmsapi.KmsPlugin.KeyStoreDelete:output_type -> kmsapi.KeyStoreDeleteResponse
 	16, // [16:28] is the sub-list for method output_type
 	4,  // [4:16] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name

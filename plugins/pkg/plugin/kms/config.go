@@ -3,13 +3,12 @@ package kms
 import "github.com/spf13/viper"
 
 const (
-	defaultKMSEthereumMount    = "ethereum"
-	defaultKMSPQCMount         = "pqc"
-	defaultKMSTransitMount     = "transit"
-	defaultKMSKVMount          = "secret"
-	defaultKMSKeyStoreMount    = "key-store"
-	defaultKMSKeyStoreMaxDepth = 3
-	defaultKMSTimeoutSecs      = 10
+	defaultKMSEthereumMount = "ethereum"
+	defaultKMSPQCMount      = "pqc"
+	defaultKMSTransitMount  = "transit"
+	defaultKMSKVMount       = "secret"
+	defaultKMSKeyStoreMount = "key-store"
+	defaultKMSTimeoutSecs   = 10
 )
 
 type kmsConfig struct {
@@ -19,7 +18,6 @@ type kmsConfig struct {
 	TransitMount            string
 	KVMount                 string
 	KeyStoreMount           string
-	KeyStoreMaxDepth        int
 	KeyStoreCedarPolicyPath string
 	TimeoutSecs             int
 }
@@ -34,7 +32,6 @@ func readFromEnv() *kmsConfig {
 		TransitMount:            viper.GetString("KMS_TRANSIT_MOUNT"),
 		KVMount:                 viper.GetString("KMS_KV_MOUNT"),
 		KeyStoreMount:           viper.GetString("KMS_KEY_STORE_MOUNT"),
-		KeyStoreMaxDepth:        viper.GetInt("KMS_KEY_STORE_MAX_DEPTH"),
 		KeyStoreCedarPolicyPath: viper.GetString("KMS_KEY_STORE_CEDAR_POLICY_PATH"),
 		TimeoutSecs:             viper.GetInt("KMS_TIMEOUT_SECS"),
 	}
@@ -46,7 +43,6 @@ func setDefaults() {
 	viper.SetDefault("KMS_TRANSIT_MOUNT", defaultKMSTransitMount)
 	viper.SetDefault("KMS_KV_MOUNT", defaultKMSKVMount)
 	viper.SetDefault("KMS_KEY_STORE_MOUNT", defaultKMSKeyStoreMount)
-	viper.SetDefault("KMS_KEY_STORE_MAX_DEPTH", defaultKMSKeyStoreMaxDepth)
 	viper.SetDefault("KMS_KEY_STORE_CEDAR_POLICY_PATH", "")
 	viper.SetDefault("KMS_TIMEOUT_SECS", defaultKMSTimeoutSecs)
 }
@@ -70,9 +66,6 @@ func withKMSConfigDefaults(cfg *kmsConfig) *kmsConfig {
 	}
 	if next.KeyStoreMount == "" {
 		next.KeyStoreMount = defaultKMSKeyStoreMount
-	}
-	if next.KeyStoreMaxDepth <= 0 {
-		next.KeyStoreMaxDepth = defaultKMSKeyStoreMaxDepth
 	}
 	if next.TimeoutSecs == 0 {
 		next.TimeoutSecs = defaultKMSTimeoutSecs

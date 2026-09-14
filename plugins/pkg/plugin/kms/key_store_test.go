@@ -3,10 +3,12 @@ package kms
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,7 +41,7 @@ func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	defer server.Close()
 	plugin.now = func() time.Time { return time.Unix(1, 0).UTC() }
 
-	resp, err := plugin.Put(context.Background(), &proto.KeyStorePutRequest{
+	resp, err := plugin.KeyStorePut(context.Background(), &proto.KeyStorePutRequest{
 		ClientId:   clientID,
 		Name:       testKeyStoreName,
 		SecretJson: `{"api_key":"secret-value","metadata":{"env":"prod"}}`,
@@ -61,6 +63,54 @@ func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	}
 	if data["owner"] != owner || data["name"] != testKeyStoreName {
 		t.Fatalf("expected tenant owner and name in body, got %+v", data)
+	}
+}
+
+func TestKeyStorePutPreservesLargeIntegerSecret(t *testing.T) {
+	var requestBody string
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		requestBody = string(body)
+		writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"version": 1}})
+	}))
+	defer server.Close()
+
+	_, err := plugin.KeyStorePut(context.Background(), &proto.KeyStorePutRequest{
+		ClientId:   "client-a",
+		Name:       testKeyStoreName,
+		SecretJson: `{"id":9007199254740993}`,
+	})
+	if err != nil {
+		t.Fatalf("Put returned error: %v", err)
+	}
+	if !strings.Contains(requestBody, `"id":9007199254740993`) {
+		t.Fatalf("expected large integer to be preserved in OpenBao payload, got %s", requestBody)
+	}
+	if strings.Contains(requestBody, "9007199254740992") {
+		t.Fatalf("large integer was rounded in OpenBao payload: %s", requestBody)
+	}
+}
+
+func TestKeyStorePutBackendErrorIsGenericInternal(t *testing.T) {
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "missing mount at http://openbao.internal/v1/key-store", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	_, err := plugin.KeyStorePut(context.Background(), &proto.KeyStorePutRequest{
+		ClientId:   "client-a",
+		Name:       testKeyStoreName,
+		SecretJson: `{}`,
+	})
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("expected Internal, got %v (%v)", status.Code(err), err)
+	}
+	if got := status.Convert(err).Message(); got != "key-store backend error" {
+		t.Fatalf("expected generic backend error, got %q", got)
 	}
 }
 
@@ -87,7 +137,7 @@ func TestKeyStoreGetReturnsSecret(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
+	resp, err := plugin.KeyStoreGet(context.Background(), &proto.KeyStoreGetRequest{
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
@@ -96,6 +146,50 @@ func TestKeyStoreGetReturnsSecret(t *testing.T) {
 	}
 	if resp.Name != testKeyStoreName || resp.SecretJson != `{"api_key":"secret-value"}` {
 		t.Fatalf("unexpected secret json: %s", resp.SecretJson)
+	}
+}
+
+func TestKeyStoreGetPreservesLargeIntegerSecret(t *testing.T) {
+	clientID := "client-a"
+	owner := tenantNamespace(clientID)
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/key-store/data/owners/"+owner+"/"+testKeyStoreName:
+			writeKeyStoreRawJSON(t, w, `{"data":{"data":{"name":"`+testKeyStoreName+`","owner":"`+owner+`","secret":{"id":9007199254740993}}}}`)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	resp, err := plugin.KeyStoreGet(context.Background(), &proto.KeyStoreGetRequest{
+		ClientId: clientID,
+		Name:     testKeyStoreName,
+	})
+	if err != nil {
+		t.Fatalf("Get returned error: %v", err)
+	}
+	if resp.SecretJson != `{"id":9007199254740993}` {
+		t.Fatalf("expected large integer to be preserved, got %s", resp.SecretJson)
+	}
+}
+
+func TestKeyStoreGetForbiddenBackendErrorIsGenericInternal(t *testing.T) {
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "permission denied for /v1/key-store/data/owners/client-a", http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	_, err := plugin.KeyStoreGet(context.Background(), &proto.KeyStoreGetRequest{
+		ClientId: "client-a",
+		Name:     testKeyStoreName,
+	})
+	if status.Code(err) != codes.Internal {
+		t.Fatalf("expected Internal, got %v (%v)", status.Code(err), err)
+	}
+	if got := status.Convert(err).Message(); got != "key-store backend error" {
+		t.Fatalf("expected generic backend error, got %q", got)
 	}
 }
 
@@ -120,7 +214,7 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
+	_, err := plugin.KeyStoreGet(context.Background(), &proto.KeyStoreGetRequest{
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
@@ -129,7 +223,7 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 	}
 }
 
-func TestKeyStoreListRecursesTenantNamespace(t *testing.T) {
+func TestKeyStoreListReturnsSingleLevelTenantNamespace(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -137,125 +231,124 @@ func TestKeyStoreListRecursesTenantNamespace(t *testing.T) {
 		switch {
 		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner:
 			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"github/", "slack"}}})
-		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/github":
-			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"prod", "dev"}}})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
 	}))
 	defer server.Close()
 
-	resp, err := plugin.List(context.Background(), &proto.KeyStoreListRequest{
+	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
 		ClientId: clientID,
 	})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
-	want := []string{"github/dev", "github/prod", "slack"}
+	want := []string{"github/", "slack"}
 	if !reflect.DeepEqual(resp.Names, want) {
 		t.Fatalf("got names %+v, want %+v", resp.Names, want)
 	}
 }
 
-func TestKeyStoreRejectsNamesAboveConfiguredDepth(t *testing.T) {
-	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("OpenBao should not be called for an over-depth key-store name: %s %s", r.Method, r.URL.Path)
-	}))
-	defer server.Close()
-
-	deepName := "a/b/c/d"
-	cases := []struct {
-		name string
-		call func() error
-	}{
-		{
-			name: "Put",
-			call: func() error {
-				_, err := plugin.Put(context.Background(), &proto.KeyStorePutRequest{
-					ClientId:   "client-a",
-					Name:       deepName,
-					SecretJson: `{}`,
-				})
-				return err
-			},
-		},
-		{
-			name: "Get",
-			call: func() error {
-				_, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
-					ClientId: "client-a",
-					Name:     deepName,
-				})
-				return err
-			},
-		},
-		{
-			name: "Delete",
-			call: func() error {
-				_, err := plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
-					ClientId: "client-a",
-					Name:     deepName,
-				})
-				return err
-			},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := tc.call()
-			if status.Code(err) != codes.InvalidArgument {
-				t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
-			}
-		})
-	}
-}
-
-func TestKeyStoreRejectsListPrefixAboveConfiguredDepth(t *testing.T) {
-	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("OpenBao should not be called for an over-depth key-store prefix: %s %s", r.Method, r.URL.Path)
-	}))
-	defer server.Close()
-
-	_, err := plugin.List(context.Background(), &proto.KeyStoreListRequest{
-		ClientId: "client-a",
-		Prefix:   stringPtr("a/b/c/d"),
-	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
-	}
-}
-
-func TestKeyStoreListErrorsWhenOpenBaoHierarchyExceedsMaxDepth(t *testing.T) {
+func TestKeyStoreListSkipsUnsafeOpenBaoKeys(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
-	listTooDeepCalled := false
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner:
-			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"a/"}}})
-		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a":
-			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"b/"}}})
-		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a/b":
-			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"c/"}}})
-		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a/b/c":
-			listTooDeepCalled = true
-			t.Fatalf("list should not recurse past the configured key-store max depth")
+			writeKeyStoreJSON(t, w, map[string]any{
+				"data": map[string]any{
+					"keys": []string{"valid", "../", "bad/name", "github/", "also-valid", strings.Repeat("a", maxKeyStoreNameLen+1)},
+				},
+			})
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
 	}))
 	defer server.Close()
 
-	_, err := plugin.List(context.Background(), &proto.KeyStoreListRequest{
+	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
 		ClientId: clientID,
 	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
 	}
-	if listTooDeepCalled {
-		t.Fatal("list recursed past the configured max depth")
+	want := []string{"also-valid", "github/", "valid"}
+	if !reflect.DeepEqual(resp.Names, want) {
+		t.Fatalf("got names %+v, want %+v", resp.Names, want)
+	}
+}
+
+func TestKeyStoreListReturnsEmptyWhenNamespaceMissing(t *testing.T) {
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "no value found at /v1/key-store/metadata/owners/client-a", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
+		ClientId: "client-a",
+	})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	if len(resp.Names) != 0 {
+		t.Fatalf("expected empty list, got %+v", resp.Names)
+	}
+}
+
+func TestKeyStoreListAcceptsDeepPrefixWithSingleOpenBaoCall(t *testing.T) {
+	clientID := "client-a"
+	owner := tenantNamespace(clientID)
+	deepPrefix := "a/b/c/d"
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+deepPrefix:
+			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"token", "ci/"}}})
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
+		ClientId: clientID,
+		Prefix:   stringPtr(deepPrefix),
+	})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	want := []string{"a/b/c/d/ci/", "a/b/c/d/token"}
+	if !reflect.DeepEqual(resp.Names, want) {
+		t.Fatalf("got names %+v, want %+v", resp.Names, want)
+	}
+}
+
+func TestKeyStoreListDoesNotRecurseIntoFolders(t *testing.T) {
+	clientID := "client-a"
+	owner := tenantNamespace(clientID)
+
+	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner:
+			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"a/", "root"}}})
+		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a":
+			t.Fatalf("list should not recurse into returned folders")
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
+		ClientId: clientID,
+	})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+	want := []string{"a/", "root"}
+	if !reflect.DeepEqual(resp.Names, want) {
+		t.Fatalf("got names %+v, want %+v", resp.Names, want)
 	}
 }
 
@@ -277,14 +370,14 @@ func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
+	resp, err := plugin.KeyStoreDelete(context.Background(), &proto.KeyStoreDeleteRequest{
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
 	if err != nil {
 		t.Fatalf("Delete returned error: %v", err)
 	}
-	if !resp.Deleted || !deleteCalled {
+	if resp.Name != testKeyStoreName || !deleteCalled {
 		t.Fatalf("expected delete success, resp=%+v deleteCalled=%v", resp, deleteCalled)
 	}
 }
@@ -305,7 +398,7 @@ func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
+	_, err := plugin.KeyStoreDelete(context.Background(), &proto.KeyStoreDeleteRequest{
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
@@ -326,7 +419,7 @@ func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) 
 	}))
 	defer server.Close()
 
-	_, err := plugin.Get(context.Background(), &proto.KeyStoreGetRequest{
+	_, err := plugin.KeyStoreGet(context.Background(), &proto.KeyStoreGetRequest{
 		ClientId: "client-a",
 		Name:     "../tenant_b/github/prod",
 	})
@@ -349,8 +442,23 @@ func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
 	if _, err := client.keyStoreMetadataPath("client-a", "github/../prod"); err == nil {
 		t.Fatal("expected key-store metadata path builder to reject traversal")
 	}
-	if _, err := client.keyStoreDataPath("client-a", "a/b/c/d"); err == nil {
-		t.Fatal("expected key-store data path builder to reject over-depth names")
+}
+
+func TestKeyStorePathBuilderAllowsDeepNames(t *testing.T) {
+	cfg := &kmsConfig{
+		OpenBaoProxyURL: "http://openbao",
+		KeyStoreMount:   "key-store",
+		TimeoutSecs:     10,
+	}
+	client := newOpenBaoClient(cfg)
+
+	got, err := client.keyStoreDataPath("client-a", "github/prod/ci/token")
+	if err != nil {
+		t.Fatalf("expected deep key-store path to be allowed: %v", err)
+	}
+	want := "http://openbao/v1/key-store/data/owners/" + tenantNamespace("client-a") + "/github/prod/ci/token"
+	if got != want {
+		t.Fatalf("got path %q, want %q", got, want)
 	}
 }
 
@@ -372,7 +480,7 @@ forbid (
 	}))
 	defer server.Close()
 
-	_, err = plugin.Delete(context.Background(), &proto.KeyStoreDeleteRequest{
+	_, err = plugin.KeyStoreDelete(context.Background(), &proto.KeyStoreDeleteRequest{
 		ClientId: "client-a",
 		Name:     testKeyStoreName,
 	})
@@ -398,7 +506,6 @@ func newKeyStoreTestPluginWithPolicy(t *testing.T, policyPath string, handler ht
 		TransitMount:            "transit",
 		KVMount:                 "secret",
 		KeyStoreMount:           "key-store",
-		KeyStoreMaxDepth:        3,
 		KeyStoreCedarPolicyPath: policyPath,
 		TimeoutSecs:             10,
 	}
@@ -410,6 +517,14 @@ func writeKeyStoreJSON(t *testing.T, w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		t.Fatalf("write json: %v", err)
+	}
+}
+
+func writeKeyStoreRawJSON(t *testing.T, w http.ResponseWriter, value string) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if _, err := w.Write([]byte(value)); err != nil {
+		t.Fatalf("write raw json: %v", err)
 	}
 }
 

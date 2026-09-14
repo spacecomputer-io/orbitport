@@ -17,10 +17,10 @@ service KmsPlugin {
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
-  rpc Put(KeyStorePutRequest) returns (KeyStorePutResponse);
-  rpc Get(KeyStoreGetRequest) returns (KeyStoreGetResponse);
-  rpc List(KeyStoreListRequest) returns (KeyStoreListResponse);
-  rpc Delete(KeyStoreDeleteRequest) returns (KeyStoreDeleteResponse);
+  rpc KeyStorePut(KeyStorePutRequest) returns (KeyStorePutResponse);
+  rpc KeyStoreGet(KeyStoreGetRequest) returns (KeyStoreGetResponse);
+  rpc KeyStoreList(KeyStoreListRequest) returns (KeyStoreListResponse);
+  rpc KeyStoreDelete(KeyStoreDeleteRequest) returns (KeyStoreDeleteResponse);
 }
 
 message Tag {
@@ -180,5 +180,5 @@ message KeyStoreDeleteRequest {
 
 message KeyStoreDeleteResponse {
   string name = 1;
-  bool deleted = 2;
+  reserved 2;
 }

@@ -366,7 +366,6 @@ services:
       - ORBITPORT_KMS_TRANSIT_MOUNT=transit
       - ORBITPORT_KMS_KV_MOUNT=orbitport-kv
       - ORBITPORT_KMS_KEY_STORE_MOUNT=key-store
-      - ORBITPORT_KMS_KEY_STORE_MAX_DEPTH=3
       - ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH=/etc/orbitport/kms/key_store_default.cedar
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
       - ORBITPORT_KMS_PQC_MOUNT=pqc

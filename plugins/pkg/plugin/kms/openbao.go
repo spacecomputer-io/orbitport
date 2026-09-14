@@ -14,13 +14,12 @@ import (
 
 type openBaoClient struct {
 	*openbao.Client
-	baseURL          string
-	ethereumMount    string
-	keyStoreMaxDepth int
-	keyStoreMount    string
-	kvMount          string
-	pqcMount         string
-	transitMount     string
+	baseURL       string
+	ethereumMount string
+	keyStoreMount string
+	kvMount       string
+	pqcMount      string
+	transitMount  string
 }
 
 type keyMetadataRecord struct {
@@ -89,12 +88,11 @@ type pqcDecapsulateInfo struct {
 func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 	cfg = withKMSConfigDefaults(cfg)
 	logger.Infof(
-		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s key_store_mount=%s key_store_max_depth=%d ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
+		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s key_store_mount=%s ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
 		strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		cfg.TransitMount,
 		cfg.KVMount,
 		cfg.KeyStoreMount,
-		cfg.KeyStoreMaxDepth,
 		cfg.EthereumMount,
 		cfg.PQCMount,
 		cfg.TimeoutSecs,
@@ -103,13 +101,12 @@ func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 		Client: openbao.NewClient(&http.Client{
 			Timeout: time.Duration(cfg.TimeoutSecs) * time.Second,
 		}, logger),
-		baseURL:          strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
-		ethereumMount:    cfg.EthereumMount,
-		keyStoreMaxDepth: cfg.KeyStoreMaxDepth,
-		keyStoreMount:    cfg.KeyStoreMount,
-		kvMount:          cfg.KVMount,
-		pqcMount:         cfg.PQCMount,
-		transitMount:     cfg.TransitMount,
+		baseURL:       strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
+		ethereumMount: cfg.EthereumMount,
+		keyStoreMount: cfg.KeyStoreMount,
+		kvMount:       cfg.KVMount,
+		pqcMount:      cfg.PQCMount,
+		transitMount:  cfg.TransitMount,
 	}
 }
 

@@ -100,7 +100,7 @@ paths:
               $ref: '#/components/schemas/JsonRpcRequest'
             examples:
               kmsKeyStorePut:
-                summary: Store key material
+                summary: Store a key-store secret
                 value:
                   jsonrpc: "2.0"
                   id: 1
@@ -239,7 +239,7 @@ components:
         Prefix:
           type: string
           maxLength: 256
-          description: Optional key-store name prefix to list.
+          description: Optional key-store prefix to list. The response includes only immediate children for this prefix.
     KmsKeyStoreDeleteParams:
       type: object
       required:
@@ -269,15 +269,14 @@ components:
           type: array
           items:
             type: string
+          description: Immediate key-store entries and folders under the requested prefix. Folder prefixes end with `/`.
     KmsKeyStoreDeleteResult:
       type: object
       properties:
         Name:
           type: string
-        Deleted:
-          type: boolean
     KmsKeyStoreName:
       type: string
       maxLength: 256
       pattern: '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'
-      description: Slash-separated key-store name. `.` and `..` path segments are rejected. The default server-side maximum depth is 3 segments.
+      description: Slash-separated key-store name. `.` and `..` path segments are rejected.

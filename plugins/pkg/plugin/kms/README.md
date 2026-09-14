@@ -36,7 +36,7 @@ key-store RPCs:
   fresh data key as `{plaintext, ciphertext_blob}` so callers can do
   envelope encryption (Transit only).
 - `RotateKey(key_id)` — bumps the OpenBao key version (Transit only).
-- `Put(name, secret)` — stores or overwrites arbitrary JSON key material in the
+- `Put(name, secret)` — stores or overwrites an arbitrary JSON secret in the
   KMS key-store under the authenticated client.
 - `Get(name)` — returns the stored JSON object for a key-store entry owned by
   the authenticated client.
@@ -121,17 +121,16 @@ always `kms:<alias>`; both forms resolve to the same backend key.
 ## Key-store
 
 The key-store is for agentic workloads that need a simple place to persist and
-retrieve arbitrary key material or secrets through Orbitport KMS. It is
-separate from operational KMS metadata:
+retrieve arbitrary JSON secrets, API tokens, and agent credentials through
+Orbitport KMS. It is separate from operational KMS metadata:
 
 - **Storage path** — OpenBao KV v2 mount `ORBITPORT_KMS_KEY_STORE_MOUNT`
   (default `key-store`) under `owners/<tenant>/<name>`.
 - **Tenant scope** — the same authenticated `client_id` model as the existing
   KMS. The plugin hashes it into `tenant_<sha256(client_id)[:16]>`.
 - **Names** — slash-separated paths such as `github/prod`; each segment must
-  match `[A-Za-z0-9._-]+`. `.` and `..` are rejected. The default maximum
-  depth is three path segments and can be changed with
-  `ORBITPORT_KMS_KEY_STORE_MAX_DEPTH`.
+  match `[A-Za-z0-9._-]+`. `.` and `..` are rejected, and the full name is
+  capped at 256 characters.
 - **Tenant isolation** — enforced by the authenticated `client_id`, validated
   slash-separated names, and OpenBao paths constructed as
   `owners/<tenant>/<name>` after each path segment is revalidated.
@@ -140,8 +139,10 @@ separate from operational KMS metadata:
 - **Versioning** — `Put` uses KV v2 and returns the new version. A second `Put`
   with the same name intentionally overwrites the stored value with a new
   version.
-- **List depth** — recursive `List` traversal is bounded by the same configured
-  maximum name depth so listing cannot recurse through an unbounded hierarchy.
+- **Listing** — `List` performs one OpenBao LIST at the requested prefix and
+  returns only immediate entries and folders. Folder results end with `/` so
+  callers can request that folder as the next prefix when they want to walk
+  deeper.
 
 Authorization is enforced in the KMS plugin with Cedar. Docker images include
 the default owner policy file at `/etc/orbitport/kms/key_store_default.cedar`;

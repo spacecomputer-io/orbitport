@@ -23,7 +23,6 @@ type Plugin struct {
 	now                func() time.Time
 	providers          map[string]kmsProvider
 	keyStoreAuthorizer *keyStoreAuthorizer
-	keyStoreMaxDepth   int
 }
 
 var logger = utils.GetLogger("orbitport:kms")
@@ -37,12 +36,11 @@ func NewPlugin() (*Plugin, error) {
 		return nil, fmt.Errorf("ORBITPORT_KMS_OPENBAO_PROXY_URL is required")
 	}
 	logger.Infof(
-		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, key-store mount=%s, key-store max depth=%d, ethereum mount=%s, pqc mount=%s",
+		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, key-store mount=%s, ethereum mount=%s, pqc mount=%s",
 		cfg.OpenBaoProxyURL,
 		cfg.TransitMount,
 		cfg.KVMount,
 		cfg.KeyStoreMount,
-		cfg.KeyStoreMaxDepth,
 		cfg.EthereumMount,
 		cfg.PQCMount,
 	)
@@ -67,7 +65,6 @@ func newPluginWithConfig(cfg *kmsConfig, client *openBaoClient) (*Plugin, error)
 		client:             client,
 		now:                time.Now,
 		keyStoreAuthorizer: authorizer,
-		keyStoreMaxDepth:   cfg.KeyStoreMaxDepth,
 		providers: map[string]kmsProvider{
 			schemeTransit:  newTransitProvider(client),
 			schemeEthereum: newEthereumProvider(client),

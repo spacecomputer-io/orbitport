@@ -2,24 +2,21 @@ package kms
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
-	"net/http"
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 )
 
 type keyStoreRecord struct {
-	Name      string         `json:"name"`
-	Owner     string         `json:"owner"`
-	Secret    map[string]any `json:"secret"`
-	UpdatedAt string         `json:"updated_at"`
+	Name      string          `json:"name"`
+	Owner     string          `json:"owner"`
+	Secret    json.RawMessage `json:"secret"`
+	UpdatedAt string          `json:"updated_at"`
 }
 
-func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name string, secret map[string]any, updatedAt time.Time) (uint32, error) {
+func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name string, secret json.RawMessage, updatedAt time.Time) (uint32, error) {
 	var resp struct {
 		Data struct {
 			Version uint32 `json:"version"`
@@ -69,24 +66,6 @@ func (c *openBaoClient) ensureKeyStoreSecretExists(ctx context.Context, clientID
 }
 
 func (c *openBaoClient) listKeyStoreSecrets(ctx context.Context, clientID, prefix string) ([]string, error) {
-	prefixParts, err := keyStorePathParts(prefix, c.keyStoreMaxDepth)
-	if err != nil {
-		return nil, err
-	}
-	names, err := c.listKeyStoreSecretsRecursive(ctx, clientID, prefix, len(prefixParts))
-	if err != nil {
-		var statusErr *openbao.StatusError
-		if errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusNotFound {
-			return []string{}, nil
-		}
-		return nil, err
-	}
-	sort.Strings(names)
-	return names, nil
-}
-
-func (c *openBaoClient) listKeyStoreSecretsRecursive(ctx context.Context, clientID, prefix string, depth int) ([]string, error) {
-	maxDepth := effectiveKeyStoreMaxDepth(c.keyStoreMaxDepth)
 	var resp struct {
 		Data struct {
 			Keys []string `json:"keys"`
@@ -101,29 +80,32 @@ func (c *openBaoClient) listKeyStoreSecretsRecursive(ctx context.Context, client
 	}
 
 	var names []string
+	owner := tenantNamespace(clientID)
 	for _, key := range resp.Data.Keys {
+		isFolder := strings.HasSuffix(key, "/")
 		segment := strings.TrimSuffix(key, "/")
 		if err := validateKeyStoreSegment("path", segment); err != nil {
-			return nil, fmt.Errorf("unsafe key-store path: %w", err)
-		}
-		childDepth := depth + 1
-		if err := validateKeyStoreDepth("path", childDepth, c.keyStoreMaxDepth); err != nil {
-			return nil, err
-		}
-		if strings.HasSuffix(key, "/") {
-			if childDepth >= maxDepth {
-				return nil, fmt.Errorf("%w: list would exceed maximum depth of %d path segments", errKeyStoreMaxDepthExceeded, maxDepth)
-			}
-			childPrefix := joinKeyStoreName(prefix, segment)
-			childNames, err := c.listKeyStoreSecretsRecursive(ctx, clientID, childPrefix, childDepth)
-			if err != nil {
-				return nil, err
-			}
-			names = append(names, childNames...)
+			logger.Warnf("key-store list skipped unsafe OpenBao key owner=%s raw_key=%q: %v", owner, key, err)
 			continue
 		}
-		names = append(names, joinKeyStoreName(prefix, segment))
+		name := joinKeyStoreName(prefix, segment)
+		if len(name) > maxKeyStoreNameLen {
+			logger.Warnf(
+				"key-store list skipped over-length OpenBao key owner=%s raw_key=%q full_name=%q max_length=%d",
+				owner,
+				key,
+				name,
+				maxKeyStoreNameLen,
+			)
+			continue
+		}
+		if isFolder {
+			names = append(names, name+"/")
+			continue
+		}
+		names = append(names, name)
 	}
+	sort.Strings(names)
 	return names, nil
 }
 
@@ -137,7 +119,7 @@ func (c *openBaoClient) deleteKeyStoreSecret(ctx context.Context, clientID, name
 
 func (c *openBaoClient) keyStoreDataPath(clientID, name string) (string, error) {
 	parts := []string{"v1", c.keyStoreMount, "data", "owners", tenantNamespace(clientID)}
-	nameParts, err := keyStorePathParts(name, c.keyStoreMaxDepth)
+	nameParts, err := keyStorePathParts(name)
 	if err != nil {
 		return "", err
 	}
@@ -147,7 +129,7 @@ func (c *openBaoClient) keyStoreDataPath(clientID, name string) (string, error) 
 
 func (c *openBaoClient) keyStoreMetadataPath(clientID, prefix string) (string, error) {
 	parts := []string{"v1", c.keyStoreMount, "metadata", "owners", tenantNamespace(clientID)}
-	prefixParts, err := keyStorePathParts(prefix, c.keyStoreMaxDepth)
+	prefixParts, err := keyStorePathParts(prefix)
 	if err != nil {
 		return "", err
 	}
@@ -155,15 +137,12 @@ func (c *openBaoClient) keyStoreMetadataPath(clientID, prefix string) (string, e
 	return c.joinPath(parts...), nil
 }
 
-func keyStorePathParts(value string, maxDepth int) ([]string, error) {
+func keyStorePathParts(value string) ([]string, error) {
 	value = strings.Trim(value, "/")
 	if value == "" {
 		return nil, nil
 	}
 	segments := strings.Split(value, "/")
-	if err := validateKeyStoreDepth("path", len(segments), maxDepth); err != nil {
-		return nil, fmt.Errorf("unsafe key-store path: %w", err)
-	}
 	for _, segment := range segments {
 		if err := validateKeyStoreSegment("path", segment); err != nil {
 			return nil, fmt.Errorf("unsafe key-store path: %w", err)
