@@ -1,4 +1,7 @@
-use serde::Serialize;
+use serde::de;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::value::RawValue;
+use std::fmt;
 use tonic::transport::Channel;
 
 use crate::proto::plugins::kms::{
@@ -10,9 +13,16 @@ use crate::proto::plugins::kms::{
     EncryptResponse as PluginEncryptResponse,
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
     GenerateDataKeyResponse as PluginGenerateDataKeyResponse,
-    RotateKeyRequest as PluginRotateKeyRequest, RotateKeyResponse as PluginRotateKeyResponse,
-    SignRequest as PluginSignRequest, SignResponse as PluginSignResponse, Tag as PluginTag,
-    kms_plugin_client::KmsPluginClient,
+    KeyStoreDeleteRequest as PluginKeyStoreDeleteRequest,
+    KeyStoreDeleteResponse as PluginKeyStoreDeleteResponse,
+    KeyStoreGetRequest as PluginKeyStoreGetRequest,
+    KeyStoreGetResponse as PluginKeyStoreGetResponse,
+    KeyStoreListRequest as PluginKeyStoreListRequest,
+    KeyStoreListResponse as PluginKeyStoreListResponse,
+    KeyStorePutRequest as PluginKeyStorePutRequest,
+    KeyStorePutResponse as PluginKeyStorePutResponse, RotateKeyRequest as PluginRotateKeyRequest,
+    RotateKeyResponse as PluginRotateKeyResponse, SignRequest as PluginSignRequest,
+    SignResponse as PluginSignResponse, Tag as PluginTag, kms_plugin_client::KmsPluginClient,
 };
 use crate::proto::services::kms::{
     CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
@@ -301,6 +311,108 @@ impl DataKeySpec {
 
 const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "kms:";
+const MAX_KEY_STORE_NAME_LEN: usize = 256;
+
+#[derive(Clone)]
+pub struct KeyStoreSecret(Box<RawValue>);
+
+impl KeyStoreSecret {
+    pub(crate) fn as_json_str(&self) -> &str {
+        self.0.get()
+    }
+
+    fn from_json_string(value: String) -> Result<Self, String> {
+        let raw = RawValue::from_string(value).map_err(|_| "Secret must be valid JSON")?;
+        Self::from_raw(raw)
+    }
+
+    fn from_raw(raw: Box<RawValue>) -> Result<Self, String> {
+        if !raw.get().trim_start().starts_with('{') {
+            return Err("Secret must be a JSON object".to_string());
+        }
+        Ok(Self(raw))
+    }
+}
+
+impl<'de> Deserialize<'de> for KeyStoreSecret {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let raw = Box::<RawValue>::deserialize(deserializer)?;
+        Self::from_raw(raw).map_err(de::Error::custom)
+    }
+}
+
+impl Serialize for KeyStoreSecret {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.0.serialize(serializer)
+    }
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStorePutRequest {
+    pub name: String,
+    pub secret: KeyStoreSecret,
+}
+
+impl fmt::Debug for KeyStorePutRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeyStorePutRequest")
+            .field("name", &self.name)
+            .field("secret", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStoreGetRequest {
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStoreListRequest {
+    #[serde(default)]
+    pub prefix: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStoreDeleteRequest {
+    pub name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStorePutResponse {
+    pub name: String,
+    pub version: u32,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStoreGetResponse {
+    pub name: String,
+    pub secret: KeyStoreSecret,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStoreListResponse {
+    pub names: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct KeyStoreDeleteResponse {
+    pub name: String,
+}
 
 #[derive(Debug)]
 pub enum KmsRpcCall {
@@ -312,6 +424,10 @@ pub enum KmsRpcCall {
     CreateKey(CreateKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
+    KeyStorePut(KeyStorePutRequest),
+    KeyStoreGet(KeyStoreGetRequest),
+    KeyStoreList(KeyStoreListRequest),
+    KeyStoreDelete(KeyStoreDeleteRequest),
 }
 
 impl KmsRpcCall {
@@ -325,6 +441,10 @@ impl KmsRpcCall {
             Self::CreateKey(req) => KmsService::validate_create_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
+            Self::KeyStorePut(req) => KmsService::validate_key_store_put(req),
+            Self::KeyStoreGet(req) => KmsService::validate_key_store_get(req),
+            Self::KeyStoreList(req) => KmsService::validate_key_store_list(req),
+            Self::KeyStoreDelete(req) => KmsService::validate_key_store_delete(req),
         }
     }
 
@@ -373,6 +493,32 @@ impl KmsRpcCall {
                 req_id,
                 req.key_id
             ),
+            Self::KeyStorePut(req) => {
+                tracing::debug!(
+                    "Executing KMS KeyStorePut RPC [id={} name={}]",
+                    req_id,
+                    req.name
+                )
+            }
+            Self::KeyStoreGet(req) => {
+                tracing::debug!(
+                    "Executing KMS KeyStoreGet RPC [id={} name={}]",
+                    req_id,
+                    req.name
+                )
+            }
+            Self::KeyStoreList(req) => tracing::debug!(
+                "Executing KMS KeyStoreList RPC [id={} prefix={}]",
+                req_id,
+                req.prefix.as_deref().unwrap_or("")
+            ),
+            Self::KeyStoreDelete(req) => {
+                tracing::debug!(
+                    "Executing KMS KeyStoreDelete RPC [id={} name={}]",
+                    req_id,
+                    req.name
+                )
+            }
         }
     }
 }
@@ -388,6 +534,10 @@ pub enum KmsRpcResult {
     CreateKey(CreateKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
+    KeyStorePut(KeyStorePutResponse),
+    KeyStoreGet(KeyStoreGetResponse),
+    KeyStoreList(KeyStoreListResponse),
+    KeyStoreDelete(KeyStoreDeleteResponse),
 }
 
 impl KmsRpcResult {
@@ -446,6 +596,27 @@ impl KmsRpcResult {
                     );
                 }
             }
+            Self::KeyStorePut(result) => tracing::debug!(
+                "KMS KeyStorePut RPC succeeded [id={} name={} version={}]",
+                req_id,
+                result.name,
+                result.version
+            ),
+            Self::KeyStoreGet(result) => tracing::debug!(
+                "KMS KeyStoreGet RPC succeeded [id={} name={}]",
+                req_id,
+                result.name
+            ),
+            Self::KeyStoreList(result) => tracing::debug!(
+                "KMS KeyStoreList RPC succeeded [id={} count={}]",
+                req_id,
+                result.names.len()
+            ),
+            Self::KeyStoreDelete(result) => tracing::debug!(
+                "KMS KeyStoreDelete RPC succeeded [id={} name={}]",
+                req_id,
+                result.name
+            ),
         }
     }
 }
@@ -562,6 +733,25 @@ impl KmsService {
         validate_key_reference("KeyId", &req.key_id)
     }
 
+    pub fn validate_key_store_put(req: &KeyStorePutRequest) -> Result<(), String> {
+        validate_key_store_name("Name", &req.name)
+    }
+
+    pub fn validate_key_store_get(req: &KeyStoreGetRequest) -> Result<(), String> {
+        validate_key_store_name("Name", &req.name)
+    }
+
+    pub fn validate_key_store_list(req: &KeyStoreListRequest) -> Result<(), String> {
+        if let Some(prefix) = req.prefix.as_ref() {
+            validate_key_store_prefix("Prefix", prefix)?;
+        }
+        Ok(())
+    }
+
+    pub fn validate_key_store_delete(req: &KeyStoreDeleteRequest) -> Result<(), String> {
+        validate_key_store_name("Name", &req.name)
+    }
+
     pub fn get_capabilities() -> GetCapabilitiesResponse {
         GetCapabilitiesResponse {
             schemes: vec![
@@ -598,6 +788,18 @@ impl KmsService {
             }
             KmsRpcCall::RotateKey(req) => {
                 KmsRpcResult::RotateKey(self.rotate_key(client_id, req).await?)
+            }
+            KmsRpcCall::KeyStorePut(req) => {
+                KmsRpcResult::KeyStorePut(self.key_store_put(client_id, req).await?)
+            }
+            KmsRpcCall::KeyStoreGet(req) => {
+                KmsRpcResult::KeyStoreGet(self.key_store_get(client_id, req).await?)
+            }
+            KmsRpcCall::KeyStoreList(req) => {
+                KmsRpcResult::KeyStoreList(self.key_store_list(client_id, req).await?)
+            }
+            KmsRpcCall::KeyStoreDelete(req) => {
+                KmsRpcResult::KeyStoreDelete(self.key_store_delete(client_id, req).await?)
             }
         };
 
@@ -791,6 +993,88 @@ impl KmsService {
             key_metadata: response.key_metadata.map(map_key_metadata),
         })
     }
+
+    pub async fn key_store_put(
+        &mut self,
+        client_id: &str,
+        req: KeyStorePutRequest,
+    ) -> Result<KeyStorePutResponse, tonic::Status> {
+        let secret_json = req.secret.as_json_str().to_string();
+        let response: PluginKeyStorePutResponse = self
+            .client
+            .key_store_put(tonic::Request::new(PluginKeyStorePutRequest {
+                name: req.name,
+                secret_json,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(KeyStorePutResponse {
+            name: response.name,
+            version: response.version,
+        })
+    }
+
+    pub async fn key_store_get(
+        &mut self,
+        client_id: &str,
+        req: KeyStoreGetRequest,
+    ) -> Result<KeyStoreGetResponse, tonic::Status> {
+        let response: PluginKeyStoreGetResponse = self
+            .client
+            .key_store_get(tonic::Request::new(PluginKeyStoreGetRequest {
+                name: req.name,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        let secret = KeyStoreSecret::from_json_string(response.secret_json)
+            .map_err(|_| tonic::Status::internal("key-store backend returned invalid secret"))?;
+
+        Ok(KeyStoreGetResponse {
+            name: response.name,
+            secret,
+        })
+    }
+
+    pub async fn key_store_list(
+        &mut self,
+        client_id: &str,
+        req: KeyStoreListRequest,
+    ) -> Result<KeyStoreListResponse, tonic::Status> {
+        let response: PluginKeyStoreListResponse = self
+            .client
+            .key_store_list(tonic::Request::new(PluginKeyStoreListRequest {
+                client_id: client_id.to_string(),
+                prefix: req.prefix,
+            }))
+            .await?
+            .into_inner();
+
+        Ok(KeyStoreListResponse {
+            names: response.names,
+        })
+    }
+
+    pub async fn key_store_delete(
+        &mut self,
+        client_id: &str,
+        req: KeyStoreDeleteRequest,
+    ) -> Result<KeyStoreDeleteResponse, tonic::Status> {
+        let response: PluginKeyStoreDeleteResponse = self
+            .client
+            .key_store_delete(tonic::Request::new(PluginKeyStoreDeleteRequest {
+                name: req.name,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(KeyStoreDeleteResponse {
+            name: response.name,
+        })
+    }
 }
 
 fn transit_capability() -> SchemeCapability {
@@ -982,6 +1266,52 @@ fn validate_alias(value: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_key_store_name(field_name: &str, value: &str) -> Result<(), String> {
+    let trimmed = value.trim();
+    validate_required(field_name, trimmed)?;
+    if trimmed.len() > MAX_KEY_STORE_NAME_LEN {
+        return Err(format!(
+            "{field_name} must be at most {MAX_KEY_STORE_NAME_LEN} characters"
+        ));
+    }
+    if trimmed.starts_with('/') || trimmed.ends_with('/') {
+        return Err(format!("{field_name} must not start or end with /"));
+    }
+    for segment in trimmed.split('/') {
+        validate_key_store_segment(field_name, segment)?;
+    }
+    Ok(())
+}
+
+fn validate_key_store_prefix(field_name: &str, value: &str) -> Result<(), String> {
+    let trimmed = value.trim().trim_matches('/');
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if trimmed.len() > MAX_KEY_STORE_NAME_LEN {
+        return Err(format!(
+            "{field_name} must be at most {MAX_KEY_STORE_NAME_LEN} characters"
+        ));
+    }
+    for segment in trimmed.split('/') {
+        validate_key_store_segment(field_name, segment)?;
+    }
+    Ok(())
+}
+
+fn validate_key_store_segment(field_name: &str, segment: &str) -> Result<(), String> {
+    if segment.is_empty() || matches!(segment, "." | "..") {
+        return Err(format!("{field_name} contains an invalid path segment"));
+    }
+    if !segment
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    {
+        return Err(format!("{field_name} contains unsupported characters"));
+    }
+    Ok(())
+}
+
 fn validate_key_reference(field_name: &str, value: &str) -> Result<(), String> {
     validate_required(field_name, value)?;
     let trimmed = value.trim();
@@ -1021,6 +1351,10 @@ fn map_key_metadata(
 #[cfg(test)]
 mod test {
     use super::*;
+
+    fn key_store_secret(raw: &str) -> KeyStoreSecret {
+        serde_json::from_str(raw).unwrap()
+    }
 
     #[test]
     fn test_validate_create_key_usage() {
@@ -1129,6 +1463,49 @@ mod test {
         };
         let err = KmsService::validate_create_key(&req).unwrap_err();
         assert!(err.to_ascii_lowercase().contains("alias is required"));
+    }
+
+    #[test]
+    fn test_validate_key_store_put_allows_nested_name() {
+        let req = KeyStorePutRequest {
+            name: "github/prod".to_string(),
+            secret: key_store_secret(r#"{"api_key":"secret"}"#),
+        };
+
+        KmsService::validate_key_store_put(&req).unwrap();
+    }
+
+    #[test]
+    fn test_validate_key_store_name_rejects_traversal() {
+        let req = KeyStoreGetRequest {
+            name: "github/../prod".to_string(),
+        };
+
+        let err = KmsService::validate_key_store_get(&req).unwrap_err();
+        assert!(err.contains("invalid path segment"));
+    }
+
+    #[test]
+    fn test_key_store_put_debug_redacts_secret() {
+        let req = KeyStorePutRequest {
+            name: "github/prod".to_string(),
+            secret: key_store_secret(r#"{"api_key":"super-sensitive"}"#),
+        };
+
+        let debug = format!("{req:?}");
+        assert!(debug.contains("<redacted>"));
+        assert!(!debug.contains("super-sensitive"));
+    }
+
+    #[test]
+    fn test_key_store_secret_from_plugin_preserves_precise_json_numbers() {
+        let raw = r#"{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}"#;
+
+        let secret = KeyStoreSecret::from_json_string(raw.to_string()).unwrap();
+        let serialized = serde_json::to_string(&secret).unwrap();
+
+        assert_eq!(secret.as_json_str(), raw);
+        assert_eq!(serialized, raw);
     }
 
     #[test]

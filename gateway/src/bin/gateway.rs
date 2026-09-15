@@ -43,6 +43,8 @@ struct Args {
     rate_limit_window: u64,
     #[clap(long, env = "ORBITPORT_BULK_MAX", default_value = "10")]
     bulk_max: usize,
+    #[clap(long, env = "ORBITPORT_RPC_BODY_MAX_BYTES", default_value = "65536")]
+    rpc_body_max_bytes: u64,
 }
 
 impl Args {
@@ -165,6 +167,7 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit,
         args.rate_limit_window,
         args.bulk_max,
+        args.rpc_body_max_bytes,
     )
     .await;
 

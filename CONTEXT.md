@@ -48,7 +48,7 @@ beacons.yaml                Public beacon registry
 | [`ipfs`](plugins/pkg/plugin/ipfs/README.md) | Kubo wrapper with LRU cache, size ceilings, and IPNS publishing | Backs the beacon |
 | [`masterseed`](plugins/pkg/plugin/masterseed/README.md) | Rolling pool of satellite seeds with offset-reserved derivation | Serves cTRNG to the gateway |
 | [`beacon`](plugins/pkg/plugin/beacon/README.md) | Background service that publishes the randomness beacon to IPFS/IPNS | No RPC; consumes the others |
-| [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate) backed by OpenBao | Wraps Transit + Ethereum secrets engines |
+| [`kms`](plugins/pkg/plugin/kms/README.md) | Multi-tenant Key Management Service (encrypt / decrypt / sign / rotate / key-store) backed by OpenBao | Wraps Transit, Ethereum, PQC, and KV-v2 key-store engines |
 | [`account`](plugins/pkg/plugin/account/README.md) | Per-request credit gating against the dashboard backend account service | Holds credits before serving compute; settles on success, releases on failure |
 | [`patissuer`](plugins/pkg/plugin/patissuer/README.md) | Mints Personal Access Tokens (ES256 JWS) and serves the JWKS verifiers cache | Key custody behind a signer seam: local P-256 key now, OpenBao Transit when provisioned |
 
@@ -72,6 +72,7 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_RATE_LIMIT` | `40` | Max requests per token per window |
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
+| `ORBITPORT_RPC_BODY_MAX_BYTES` | `65536` | Max JSON-RPC request body size |
 
 ### Plugin dispatcher
 
@@ -189,6 +190,8 @@ rather than gRPC and holds no key material. See
 | `ORBITPORT_KMS_ETHEREUM_MOUNT` | `ethereum` | Mount path of the Ethereum Secrets Engine |
 | `ORBITPORT_KMS_PQC_MOUNT` | `pqc` | Mount path of the PQC Secrets Engine |
 | `ORBITPORT_KMS_KV_MOUNT` | `secret` | KV v2 mount used to persist key metadata |
+| `ORBITPORT_KMS_KEY_STORE_MOUNT` | `key-store` | KV v2 mount used by KMS key-store put/get/delete storage |
+| `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Cedar policy document loaded for key-store authorization; compose mounts the default owner policy at `/etc/orbitport/kms/key_store_default.cedar`; Kubernetes deployments should provide it through a ConfigMap |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 
 ### Plugin: `account`
