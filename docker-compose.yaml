@@ -176,6 +176,8 @@ services:
       - ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH=/etc/orbitport/kms/key_store_default.cedar
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
       - ORBITPORT_KMS_PQC_MOUNT=pqc
+    volumes:
+      - ./plugins/pkg/plugin/kms/cedar/key_store_default.cedar:/etc/orbitport/kms/key_store_default.cedar:ro
     depends_on:
       openbao-bootstrap:
         condition: service_completed_successfully

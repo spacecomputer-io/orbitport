@@ -145,12 +145,14 @@ without numeric precision loss. It is separate from operational KMS metadata:
   callers can request that folder as the next prefix when they want to walk
   deeper.
 
-Authorization is enforced in the KMS plugin with Cedar. Docker images include
-the default owner policy file at `/etc/orbitport/kms/key_store_default.cedar`;
-configure `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` to point at that file or a
-custom policy file. If the path is unset, key-store requests are denied by the
-empty policy set. The default policy adds policy control on top of path-based
-tenant isolation and permits the authenticated owner to call
+Authorization is enforced in the KMS plugin with Cedar. The compose stacks mount
+the default owner policy file into the KMS container at
+`/etc/orbitport/kms/key_store_default.cedar`; Kubernetes deployments should
+provide the same file through a ConfigMap. Configure
+`ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` to point at that file or a custom
+policy file. If the path is unset, key-store requests are denied by the empty
+policy set. The default policy adds policy control on top of path-based tenant
+isolation and permits the authenticated owner to call
 `kms_keystore.Put`, `kms_keystore.Get`, `kms_keystore.List`, and
 `kms_keystore.Delete` on their own key-store
 namespace. Operators can copy the default policy and add Cedar `forbid`

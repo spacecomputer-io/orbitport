@@ -31,7 +31,6 @@ RUN apk --no-cache add curl \
     && mkdir -p /etc/orbitport/kms
 
 COPY --from=builder --chown=appuser:appgroup /app/bin/${BUILD_TARGET} /app
-COPY --from=builder --chown=appuser:appgroup /app/pkg/plugin/kms/cedar/key_store_default.cedar /etc/orbitport/kms/key_store_default.cedar
 
 USER appuser
 

@@ -191,7 +191,7 @@ rather than gRPC and holds no key material. See
 | `ORBITPORT_KMS_PQC_MOUNT` | `pqc` | Mount path of the PQC Secrets Engine |
 | `ORBITPORT_KMS_KV_MOUNT` | `secret` | KV v2 mount used to persist key metadata |
 | `ORBITPORT_KMS_KEY_STORE_MOUNT` | `key-store` | KV v2 mount used by KMS key-store put/get/delete storage |
-| `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Cedar policy document loaded for key-store authorization; Docker images include the default owner policy at `/etc/orbitport/kms/key_store_default.cedar` |
+| `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Cedar policy document loaded for key-store authorization; compose mounts the default owner policy at `/etc/orbitport/kms/key_store_default.cedar`; Kubernetes deployments should provide it through a ConfigMap |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
 
 ### Plugin: `account`
