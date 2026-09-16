@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type StatusError struct {
@@ -80,6 +82,27 @@ func (c *Client) List(ctx context.Context, target string, into any) error {
 }
 
 func (c *Client) do(req *http.Request, into any) error {
+	start := time.Now()
+	//delcare status label as default value of transport error, then update it if i get a response
+	statusLabel := "transport_error"
+	defer func() {
+		end := time.Now()
+		total := end.Sub(start)
+		raw := req.Context().Value(metricLabelsKey{})
+		//define default values
+		op := "not_applicable"
+		alg := "not_applicable"
+		committee_size := "not applicable"
+
+		labels, ok := raw.(MetricLabels)
+		if ok == true {
+			op = labels.Operation
+			alg = labels.Algorithm
+			committee_size = labels.CommitteeSize
+		}
+
+		openbaoDurationSeconds.WithLabelValues(op, alg, committee_size, statusLabel).Observe(total.Seconds())
+	}()
 	if c.logger != nil {
 		c.logger.Debugf("OpenBao request %s %s", req.Method, req.URL.Path)
 	}
@@ -90,6 +113,9 @@ func (c *Client) do(req *http.Request, into any) error {
 		}
 		return fmt.Errorf("openbao request failed: %w", err)
 	}
+
+	//convert status code to string after checking that there error IS empty.
+	statusLabel = strconv.Itoa(resp.StatusCode)
 	defer func() {
 		_ = resp.Body.Close()
 	}()
