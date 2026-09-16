@@ -110,6 +110,77 @@ func (c *OpenBaoClient) ReadDKGStatus(ctx context.Context, keyName string) (*DKG
 	return &resp.Data, nil
 }
 
+func (c *OpenBaoClient) StartSign(ctx context.Context, req StartSignRequest) (*SignStatus, error) {
+	participants, err := json.Marshal(req.Participants)
+	if err != nil {
+		return nil, fmt.Errorf("marshal signing participants: %w", err)
+	}
+	pairwiseSeeds, err := json.Marshal(req.PairwiseSeeds)
+	if err != nil {
+		return nil, fmt.Errorf("marshal signing pairwise seeds: %w", err)
+	}
+
+	var resp openBaoDataResponse[SignStatus]
+	if err := c.Post(ctx, c.thresholdPath("keys", req.KeyName, "sign", "start"), map[string]any{
+		"group":          req.GroupName,
+		"session_id":     req.SessionID,
+		"message":        req.Message,
+		"participants":   string(participants),
+		"common_seed":    req.CommonSeed,
+		"pairwise_seeds": string(pairwiseSeeds),
+	}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *OpenBaoClient) DeliverSign(ctx context.Context, keyName string, req DeliverSignRequest) (*SignStatus, error) {
+	var resp openBaoDataResponse[SignStatus]
+	if err := c.Post(ctx, c.thresholdPath("keys", keyName, "sign", "deliver"), map[string]any{
+		"round":     req.Round,
+		"from":      req.From,
+		"broadcast": req.Broadcast,
+		"unicast":   req.Unicast,
+	}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *OpenBaoClient) ProceedSign(ctx context.Context, keyName string, round int) (*SignStatus, error) {
+	var resp openBaoDataResponse[SignStatus]
+	if err := c.Post(ctx, c.thresholdPath("keys", keyName, "sign", "proceed"), map[string]any{
+		"round": round,
+	}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *OpenBaoClient) ReadSignStatus(ctx context.Context, keyName string) (*SignStatus, error) {
+	var resp openBaoDataResponse[SignStatus]
+	if err := c.Get(ctx, c.thresholdPath("keys", keyName, "sign", "status"), &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+func (c *OpenBaoClient) AggregateSign(ctx context.Context, keyName, message string, partialSignatures map[string]string) (*SignStatus, error) {
+	encodedPartials, err := json.Marshal(partialSignatures)
+	if err != nil {
+		return nil, fmt.Errorf("marshal partial signatures: %w", err)
+	}
+
+	var resp openBaoDataResponse[SignStatus]
+	if err := c.Post(ctx, c.thresholdPath("keys", keyName, "sign", "aggregate"), map[string]any{
+		"message":            message,
+		"partial_signatures": string(encodedPartials),
+	}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
 func (c *OpenBaoClient) thresholdPath(parts ...string) string {
 	all := append([]string{"v1", c.mount}, parts...)
 	target, err := url.JoinPath(c.baseURL, all...)

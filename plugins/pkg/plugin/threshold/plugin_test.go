@@ -11,10 +11,13 @@ import (
 )
 
 func TestPluginCoordinateDkg(t *testing.T) {
+	const clientID = "client-a"
+	scopedKeyName := tenantScopedKeyName(clientID, "key-1")
 	nodeIDs := []string{"node-a", "node-b", "node-c"}
 	nodes := make(map[string]*fakeThresholdNode, len(nodeIDs))
 	for _, nodeID := range nodeIDs {
 		nodes[nodeID] = newFakeThresholdNode(t, nodeID, nodeIDs)
+		nodes[nodeID].keyName = scopedKeyName
 	}
 	prepareFakeThresholdNodes(t, nodes, newTestGroupConfig())
 
@@ -27,6 +30,7 @@ func TestPluginCoordinateDkg(t *testing.T) {
 		GroupName: "team-a",
 		SessionId: "dkg-1",
 		Threshold: 2,
+		ClientId:  clientID,
 		Participants: []*proto.GroupMember{
 			{NodeId: "node-a", PartyIndex: 0, OpenbaoUrl: nodes["node-a"].server.URL, Mount: "threshold"},
 			{NodeId: "node-b", PartyIndex: 1, OpenbaoUrl: nodes["node-b"].server.URL, Mount: "threshold"},
@@ -36,7 +40,7 @@ func TestPluginCoordinateDkg(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CoordinateDkg() error = %v", err)
 	}
-	if resp.KeyName != "key-1" || resp.GroupName != "team-a" || resp.SessionId != "dkg-1" {
+	if resp.KeyName != scopedKeyName || resp.GroupName != "team-a" || resp.SessionId != "dkg-1" {
 		t.Fatalf("unexpected response identity: %+v", resp)
 	}
 	if len(resp.Nodes) != 3 {
@@ -60,6 +64,7 @@ func TestPluginCoordinateDkgRejectsInvalidRequest(t *testing.T) {
 		GroupName: "team-a",
 		SessionId: "dkg-1",
 		Threshold: 2,
+		ClientId:  "client-a",
 		Participants: []*proto.GroupMember{
 			{NodeId: "node-a", PartyIndex: 0, OpenbaoUrl: "http://node-a"},
 		},
@@ -84,6 +89,7 @@ func TestPluginCoordinateDkgHonorsTimeout(t *testing.T) {
 		GroupName: "team-a",
 		SessionId: "dkg-1",
 		Threshold: 2,
+		ClientId:  "client-a",
 		Participants: []*proto.GroupMember{
 			{NodeId: "node-a", PartyIndex: 0, OpenbaoUrl: "http://127.0.0.1:1"},
 			{NodeId: "node-b", PartyIndex: 1, OpenbaoUrl: "http://127.0.0.1:1"},
