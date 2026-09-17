@@ -1,5 +1,4 @@
 ENV_FILE?=".dev.env"
-E2E_PROFILE?=happy
 CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl
 DOCKER_TAG?=latest ## DOCKER_TAG=v*.*.*
 
@@ -23,27 +22,19 @@ build: protoc
 	@cd gateway && make build
 
 e2e:
-	@cd gateway && RUST_LOG=info cargo test --test e2e_${E2E_PROFILE} --features localtest
+	@cd gateway && RUST_LOG=info cargo test --test e2e_happy --features localtest
 
 e2e-lazy:
-	@cd gateway && RUST_LOG=info cargo test --test e2e_${E2E_PROFILE}
+	@cd gateway && RUST_LOG=info cargo test --test e2e_happy
 
 e2e-all:
 	@cd gateway && RUST_LOG=info cargo test --test e2e_*
 
-go-e2e:
-	@cd plugins && E2E_PROFILE=happy go test ./test -run 'TestBeacon' -timeout 10m -tags e2e -v
-
-go-e2e-offline:
-	@cd plugins && E2E_PROFILE=offline go test ./test \
-		-run "TestBeacon.*Offline$$" \
-		-timeout 10m -tags e2e -v
-
 devenv:
-	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
+	@docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
 
 devenv-up: devenv-down docker-build
-	@OPMOCK_PROFILE=${E2E_PROFILE} docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
+	@docker-compose --env-file=${ENV_FILE} -f dev.docker-compose.yaml up -d
 
 devenv-down:
 	@docker-compose -f dev.docker-compose.yaml down
@@ -72,7 +63,6 @@ help:
 	@echo ""
 	@echo "Variables:"
 	@echo "  ENV_FILE        Path to the environment file (default: .dev.env)"
-	@echo "  E2E_PROFILE     Profile for end-to-end tests (default: happy)"
 	@echo "  DOCKER_TAG      Tag for the Docker image (default: latest)"
 	@echo "  CONTAINER_TOOL  Tool for managing containers, e.g. nerdctl (default: docker)"
 	@echo ""

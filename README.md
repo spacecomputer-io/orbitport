@@ -9,39 +9,29 @@
 
 ## What is Orbitport?
 
-Orbitport is a unified gateway to space-based orbital services operated by SpaceComputer. It gives web2 and web3 applications a single, secure entry point to services served from multiple providers and satellites — today that means `cTRNG` (cosmic True Random Number Generation) backed by the Aptos Orbital satellites, with more services on the roadmap. This repository ships a local Docker setup (see [Running locally](#running-locally)).
+Orbitport is SpaceComputer's multi-tenant Key Management Service gateway. It gives web2 and web3 applications a single, secure entry point to managed cryptographic operations backed by OpenBao. This repository ships a local Docker setup (see [Running locally](#running-locally)).
 
 ## Services
 
-- **cTRNG** — cosmic true random numbers, served by the `masterseed` plugin from a rolling pool of satellite-harvested entropy.
-- **Randomness Beacon** — a background service that pins a continuously updated beacon record to IPFS and republishes it under a stable IPNS name. Public registry: [`beacons.yaml`](beacons.yaml).
-- **KMS** — multi-tenant Key Management Service backed by OpenBao. Encrypt/decrypt with Transit (`AES_256_GCM96`), sign with Transit (ECDSA, Ed25519, RSA), Ethereum (secp256k1, including EIP-191), use PQC ML-DSA / ML-KEM, and store/retrieve arbitrary JSON secrets through the KMS key-store. See the [`kms`](plugins/pkg/plugin/kms/README.md) plugin.
-- **spaceTEE** — Space Trusted Execution Environment. Planned.
+- **KMS** — multi-tenant Key Management Service backed by OpenBao. Encrypt/decrypt with Transit (`AES_256_GCM96`), sign with Transit (ECDSA, Ed25519, RSA), Ethereum (secp256k1, including EIP-191), use PQC ML-DSA / ML-KEM, and store arbitrary JSON secrets through the KMS key-store. See the [`kms`](plugins/pkg/plugin/kms/README.md) plugin.
 
 ## Architecture
 
 ```
                   ┌──────────┐
-    HTTP/JSON ──▶ │ gateway  │ ──▶ plugin-auth        (AuthPlugin)
-    JSON-RPC      │  (Rust)  │ ──▶ plugin-masterseed  (MasterSeedPlugin)
-                  └──────────┘          │
-                                        ▼
-                                   plugin-aptos-orbital (RandomnessPlugin)
-                                        │
-                                        ▼
-                                   api.aptosorbital.com (satellites)
-
-                  ┌──────────────┐
-                  │ plugin-beacon│ ──▶ plugin-ipfs ──▶ IPFS / IPNS
-                  │ (background) │ ──▶ plugin-aptos-orbital
-                  └──────────────┘ ──▶ plugin-masterseed
+    HTTP/JSON ──▶ │ gateway  │ ──▶ plugin-auth       (AuthPlugin)
+    JSON-RPC      │  (Rust)  │ ──▶ plugin-account    (AccountPlugin)
+                  └──────────┘ ──▶ plugin-kms        (KmsPlugin)
+                                             │
+                                             ▼
+                                         OpenBao KMS
 ```
 
 For a deeper walk-through (gRPC wiring, plugin internals, env-var reference, protobuf workflow, test profiles), see [`CONTEXT.md`](CONTEXT.md). A flat repo map is in [`llms.txt`](llms.txt).
 
 ## Running locally
 
-The fast path uses the dev compose stack, which swaps in the `authnoop` plugin and the Aptos Orbital mocker so no external credentials are required.
+The fast path uses the dev compose stack, which swaps in the `authnoop` plugin so no external Auth0 credentials are required.
 
 ```bash
 git clone https://github.com/spacecomputer-io/orbitport.git
@@ -51,13 +41,13 @@ make devenv-up          # builds images, starts dev compose stack
 curl http://localhost:8080/healthz
 ```
 
-Smoke-test a cTRNG request once the stack is up:
+Smoke-test the KMS capability endpoint once the stack is up:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/rpc \
   -H "Authorization: Bearer dev" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"ctrng.Get","params":{"chunks":3}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"kms.GetCapabilities","params":{}}'
 ```
 
 Teardown:
@@ -74,7 +64,7 @@ The full HTTP and JSON-RPC reference lives in [`swagger.yaml`](swagger.yaml). Ex
 curl -X POST http://localhost:8080/api/v1/rpc \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"ctrng.Get","params":{"chunks":2}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"kms.GetCapabilities","params":{}}'
 ```
 
 ## Configuration
@@ -87,7 +77,6 @@ All env vars are prefixed `ORBITPORT_`. The full list, including defaults, is th
 make test                       # unit tests (Rust + Go)
 make lint                       # clippy + golangci-lint
 make e2e                        # happy-path e2e against dev compose
-make E2E_PROFILE=offline e2e    # fallback path (Aptos unreachable)
 ```
 
 See [`CONTEXT.md`](CONTEXT.md#testing) for the full e2e matrix.
@@ -97,7 +86,6 @@ See [`CONTEXT.md`](CONTEXT.md#testing) for the full e2e matrix.
 * [SpaceComputer docs](https://docs.spacecomputer.io)
 * [Orbitport user guide](https://docs.spacecomputer.io/using-orbitport/user-guide)
 * [Orbitport dev/internal docs](docs/README.md)
-* [Public beacons list](beacons.yaml)
 
 ## Contributing
 

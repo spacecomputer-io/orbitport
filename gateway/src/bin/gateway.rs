@@ -2,7 +2,7 @@ use clap::Parser;
 use std::sync::Arc;
 use tokio::sync::Notify;
 
-use gateway::{logging, plugins, server, service_manager, types::GatewayError};
+use gateway::{logging, plugins, server, types::GatewayError};
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -24,8 +24,6 @@ struct Args {
     threshold_plugin: String,
     #[clap(long, env = "ORBITPORT_THRESHOLD_GROUPS", default_value = "")]
     threshold_groups: String,
-    #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
-    masterseed_plugin: String,
     /// Optional account plugin gRPC URL. When set, JWT-authenticated routes
     /// hold credits via the account plugin before serving the request and
     /// release on downstream failure.
@@ -41,8 +39,6 @@ struct Args {
     rate_limit: u32,
     #[clap(long, env = "ORBITPORT_RATE_LIMIT_WINDOW", default_value = "10")]
     rate_limit_window: u64,
-    #[clap(long, env = "ORBITPORT_BULK_MAX", default_value = "10")]
-    bulk_max: usize,
     #[clap(long, env = "ORBITPORT_RPC_BODY_MAX_BYTES", default_value = "65536")]
     rpc_body_max_bytes: u64,
 }
@@ -101,11 +97,7 @@ async fn main() -> Result<(), GatewayError> {
         });
     }
 
-    let mut plugin_urls = vec![
-        args.auth_plugin.to_string(),
-        args.kms_plugin.to_string(),
-        args.masterseed_plugin.to_string(),
-    ];
+    let mut plugin_urls = vec![args.auth_plugin.to_string(), args.kms_plugin.to_string()];
     if let Some(ref url) = args.account_plugin {
         plugin_urls.push(url.to_string());
     }
@@ -133,15 +125,11 @@ async fn main() -> Result<(), GatewayError> {
         tracing::error!("Failed while waiting for plugins to be healthy: {}", e);
         GatewayError::ServiceConnectionError(e.to_string())
     })?;
-    let service_manager =
-        service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
-
     let metrics_port = args.metric_port;
     tokio::spawn(async move {
         gateway::metrics::start_server(metrics_port).await;
     });
 
-    let service_manager = Arc::new(service_manager);
     let threshold_groups = if args.threshold_enabled {
         gateway::services::threshold::ThresholdGroupRegistry::from_json(&args.threshold_groups)
             .map_err(|e| GatewayError::BadRequest(e.to_string()))?
@@ -150,7 +138,6 @@ async fn main() -> Result<(), GatewayError> {
     };
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
-        &args.masterseed_plugin,
         &args.kms_plugin,
         args.account_plugin.as_deref(),
         args.patissuer_plugin.as_deref(),
@@ -158,15 +145,17 @@ async fn main() -> Result<(), GatewayError> {
         args.threshold_plugin.trim(),
         threshold_groups,
     ));
+    let auth_client = plugin_catalog.get_auth_client().await.map_err(|e| {
+        GatewayError::ServiceConnectionError(format!("Failed to initialize auth plugin: {e}"))
+    })?;
 
     server::start(
         args.http_port,
         args.internal_port,
-        service_manager.clone(),
-        plugin_catalog.clone(),
+        auth_client,
+        plugin_catalog,
         args.rate_limit,
         args.rate_limit_window,
-        args.bulk_max,
         args.rpc_body_max_bytes,
     )
     .await;

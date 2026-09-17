@@ -12,7 +12,7 @@ import (
 type GrpcPluginConfig struct {
 	// Plugin is the name of the plugin.
 	// Can be one of:
-	// - "aptosorbital" (default)
+	// - "kms" (default)
 	// - "auth"
 	// - "authnoop" (development only)
 	// - "accountnoop" (development only)
@@ -49,7 +49,7 @@ func ReadFromEnv() *GrpcPluginConfig {
 }
 
 func setDefaults() {
-	viper.SetDefault("PLUGIN", "aptosorbital")
-	viper.SetDefault("GRPC_PORT", 50001)
-	viper.SetDefault("METRICS_PORT", 9000)
+	viper.SetDefault("PLUGIN", "kms")
+	viper.SetDefault("GRPC_PORT", 50005)
+	viper.SetDefault("METRICS_PORT", 9005)
 }

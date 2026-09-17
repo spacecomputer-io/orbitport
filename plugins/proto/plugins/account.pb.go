@@ -27,7 +27,7 @@ type HoldRequest struct {
 	ClientId string `protobuf:"bytes,1,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
 	// Compute units consumed by this request. MVP: always 1.
 	Units uint32 `protobuf:"varint,2,opt,name=units,proto3" json:"units,omitempty"`
-	// Operation tag for ledger description + metrics ("trng", "kms_sign", ...).
+	// Canonical operation tag for ledger description and pricing ("kms.Sign:ED25519", ...).
 	Operation string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
 	// Non-empty jti = the token was a PAT (dual-validation discriminator);
 	// empty = legacy Auth0 M2M.

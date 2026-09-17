@@ -4,7 +4,6 @@ DOCKER_TAG?=latest
 DOCKER_CONTAINER_NAME?=plugin
 GOLOG_LOG_LEVEL?=debug
 ENV_FILE?=.env
-MOCKER_DOCKER_IMAGE?=op-mocker
 CONTAINER_TOOL?=docker ## CONTAINER_TOOL=nerdctl 
 
 deps:
@@ -54,9 +53,6 @@ docker-clean:
 docker-run: docker-clean docker-build
 	@${CONTAINER_TOOL} run -p 8080:8080 -e GOLOG_LOG_LEVEL=${GOLOG_LOG_LEVEL} -v ./${ENV_FILE}:/.env \
 		--name ${DOCKER_CONTAINER_NAME} ${DOCKER_IMAGE}:${DOCKER_TAG}
-
-mocker-docker-build:
-	@${CONTAINER_TOOL} build -t ${MOCKER_DOCKER_IMAGE}:${DOCKER_TAG} --build-arg BUILD_TARGET=mocker .
 
 help:
 	@echo ""

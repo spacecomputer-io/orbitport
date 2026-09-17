@@ -14,13 +14,7 @@
 #   export ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=...      # <-- pending from team
 #   export ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=...  # <-- pending from team
 #   docker compose -f dev.docker-compose.yaml -f local-account.compose.yaml \
-#     up -d --build plugin-auth plugin-aptos-orbital aptos-orbital-api \
-#     aptos-orbital-auth plugin-account gateway
-#
-# NOTE: this intentionally starts only the services needed for the cTRNG +
-# credit path (no kms/openbao/ipfs), since the openbao-eth-plugin-poc sibling
-# repo is missing locally. The gateway in the base compose depends_on kms +
-# masterseed; if compose refuses, add `--no-deps` and start masterseed too.
+#     up -d --build plugin-auth plugin-kms plugin-account gateway
 #
 # Values below mirror the dashboard backend/.env (dev tenant). Confirm the
 # AUTH0_DOMAIN — the account M2M token must be minted from the tenant whose

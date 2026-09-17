@@ -1,15 +1,13 @@
-use crate::{plugins::PluginCatalog, proto::services::ctrng::CTrngResponse};
+use crate::plugins::PluginCatalog;
 use serde::de::{self, DeserializeOwned};
 use serde::{Deserialize, Serialize};
 
-use crate::proto::services::ctrng::CTrngRequest;
 use crate::proto::services::kms::{
     CreateKeyRequest, DecapsulateRequest, DecryptRequest, EncapsulateRequest, EncryptRequest,
     GenerateDataKeyRequest, GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
 };
 use crate::proto::services::threshold::DkgRequest;
 
-use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{
     KeyStoreDeleteRequest, KeyStoreGetRequest, KeyStoreListRequest, KeyStorePutRequest, KmsRpcCall,
     KmsService,
@@ -103,7 +101,6 @@ impl<T> JsonRpcResponse<T> {
 /// This allows for easy routing of RPC calls to the appropriate service handlers.
 #[derive(Debug)]
 pub enum RpcCall {
-    GetCTRNG(CTrngRequest),
     GetCapabilities(GetCapabilitiesRequest),
     CreateKey(CreateKeyRequest),
     Decrypt(DecryptRequest),
@@ -123,7 +120,6 @@ pub enum RpcCall {
 impl RpcCall {
     fn from_method_and_params(method: &str, params_json: &str) -> Result<Self, String> {
         match method {
-            "ctrng.Get" => Ok(Self::GetCTRNG(Self::parse_params(method, params_json)?)),
             "kms.GetCapabilities" => Ok(Self::GetCapabilities(Self::parse_params(
                 method,
                 params_json,
@@ -164,16 +160,6 @@ impl RpcCall {
     /// Validates the parameters of the RPC call.
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            RpcCall::GetCTRNG(req) => {
-                if let Some(chunks) = req.chunks {
-                    if chunks > MAX_CHUNKS {
-                        return Err("Max chunks exceeded".to_string());
-                    }
-                    if chunks < 1 {
-                        return Err("Chunks must be at least 1".to_string());
-                    }
-                }
-            }
             RpcCall::GetCapabilities(_) => {}
             RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
             RpcCall::Decrypt(req) => KmsService::validate_decrypt(req)?,
@@ -198,13 +184,16 @@ impl RpcCall {
     /// `validate()` passes, which pins the variant to an exact known value.
     pub fn operation(&self) -> String {
         match self {
-            RpcCall::GetCTRNG(_) => "ctrng.Get".to_string(),
             RpcCall::GetCapabilities(_) => "kms.GetCapabilities".to_string(),
             RpcCall::CreateKey(req) => format!("kms.CreateKey:{}", req.key_spec),
             RpcCall::Decrypt(_) => "kms.Decrypt".to_string(),
             RpcCall::Encrypt(_) => "kms.Encrypt".to_string(),
             RpcCall::GenerateDataKey(_) => "kms.GenerateDataKey".to_string(),
             RpcCall::RotateKey(_) => "kms.RotateKey".to_string(),
+            RpcCall::KeyStorePut(_) => "kms_keystore.Put".to_string(),
+            RpcCall::KeyStoreGet(_) => "kms_keystore.Get".to_string(),
+            RpcCall::KeyStoreList(_) => "kms_keystore.List".to_string(),
+            RpcCall::KeyStoreDelete(_) => "kms_keystore.Delete".to_string(),
             RpcCall::Sign(req) => format!("kms.Sign:{}", req.signing_algorithm),
             RpcCall::Encapsulate(_) => "kms.Encapsulate".to_string(),
             RpcCall::Decapsulate(_) => "kms.Decapsulate".to_string(),
@@ -220,19 +209,6 @@ impl RpcCall {
         plugin_catalog: &PluginCatalog,
     ) -> Result<JsonRpcRawResponse, tonic::Status> {
         match self {
-            RpcCall::GetCTRNG(req) => {
-                let grpc_client = plugin_catalog
-                    .get_masterseed_client()
-                    .await
-                    .map_err(|_| tonic::Status::unavailable("Masterseed plugin unavailable"))?;
-                let mut svc = CTrngService::new(grpc_client);
-                let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
-                    // We can log _e here for debugging, but we don't want to expose internal errors to the client
-                    tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
-                    tonic::Status::internal("Failed to get mixed cTRNG")
-                })?;
-                serialize_success_response(req_id, results)
-            }
             RpcCall::GetCapabilities(_) => {
                 serialize_success_response(req_id, KmsService::get_capabilities())
             }
@@ -663,8 +639,29 @@ mod test {
             "kms.GetCapabilities"
         );
         assert_eq!(
-            operation_of("ctrng.Get", serde_json::json!({})),
-            "ctrng.Get"
+            operation_of(
+                "kms_keystore.Put",
+                serde_json::json!({"Name": "github/prod", "Secret": {"api_key": "secret"}})
+            ),
+            "kms_keystore.Put"
+        );
+        assert_eq!(
+            operation_of(
+                "kms_keystore.Get",
+                serde_json::json!({"Name": "github/prod"})
+            ),
+            "kms_keystore.Get"
+        );
+        assert_eq!(
+            operation_of("kms_keystore.List", serde_json::json!({"Prefix": "github"})),
+            "kms_keystore.List"
+        );
+        assert_eq!(
+            operation_of(
+                "kms_keystore.Delete",
+                serde_json::json!({"Name": "github/prod"})
+            ),
+            "kms_keystore.Delete"
         );
     }
 
@@ -672,7 +669,6 @@ mod test {
     async fn test_threshold_coordinate_dkg_disabled() {
         let plugin_catalog = PluginCatalog::new(
             "http://auth:50000",
-            "http://masterseed:50003",
             "http://kms:50004",
             None,
             None,

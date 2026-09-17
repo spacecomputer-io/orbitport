@@ -8,8 +8,6 @@ use tonic_health::pb::{
     health_client::HealthClient,
 };
 
-use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
-
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
@@ -125,10 +123,8 @@ pub struct PluginCatalog {
 }
 
 impl PluginCatalog {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_url: &str,
-        masterseed_url: &str,
         kms_url: &str,
         account_url: Option<&str>,
         patissuer_url: Option<&str>,
@@ -139,7 +135,6 @@ impl PluginCatalog {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
         urls.insert("kms".to_string(), kms_url.to_string());
-        urls.insert("masterseed".to_string(), masterseed_url.to_string());
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
         }
@@ -174,13 +169,6 @@ impl PluginCatalog {
     pub async fn get_auth_client(&self) -> Result<AuthPluginClient<Channel>, PluginError> {
         let channel = self.get_client("auth").await?;
         Ok(AuthPluginClient::new(channel))
-    }
-
-    pub async fn get_masterseed_client(
-        &self,
-    ) -> Result<MasterSeedPluginClient<Channel>, PluginError> {
-        let channel = self.get_client("masterseed").await?;
-        Ok(MasterSeedPluginClient::new(channel))
     }
 
     pub async fn get_kms_client(&self) -> Result<KmsPluginClient<Channel>, PluginError> {
