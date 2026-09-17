@@ -67,8 +67,6 @@ The raw OpenBao dev server uses the root token `root`. The proxy injects that to
 Run e2e tests on that environment:
 ```bash
 make e2e-lazy
-make E2E_PROFILE=load e2e-lazy
-make E2E_PROFILE=offline e2e-lazy
 ```
 
 
