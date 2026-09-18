@@ -81,8 +81,10 @@ pub async fn start(
 
     // The hold is placed inside handle_rpc: its operation tag comes from the
     // validated body, which a filter ahead of body parsing cannot see.
-    let rpc_route = warp::post()
-        .and(warp::path("api").and(warp::path("v1").and(warp::path("rpc"))))
+    // Path before method, so an unknown path is 404 rather than the 405 warp
+    // returns when the method filter rejects first
+    let rpc_route = warp::path!("api" / "v1" / "rpc")
+        .and(warp::post())
         .and(with_rate_limiter(
             with_auth(service_manager.get_auth_client()),
             rate_limiter.clone(),
