@@ -24,8 +24,12 @@ struct Args {
     threshold_plugin: String,
     #[clap(long, env = "ORBITPORT_THRESHOLD_GROUPS", default_value = "")]
     threshold_groups: String,
+    /// Off by default: KMS-only deployments do not run the masterseed plugin
+    #[clap(long, env = "ORBITPORT_CTRNG_ENABLED", default_value = "false")]
+    ctrng_enabled: bool,
+    /// Required when ORBITPORT_CTRNG_ENABLED=true
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
-    masterseed_plugin: String,
+    masterseed_plugin: Option<String>,
     /// Optional account plugin gRPC URL. When set, JWT-authenticated routes
     /// hold credits via the account plugin before serving the request and
     /// release on downstream failure.
@@ -101,11 +105,21 @@ async fn main() -> Result<(), GatewayError> {
         });
     }
 
-    let mut plugin_urls = vec![
-        args.auth_plugin.to_string(),
-        args.kms_plugin.to_string(),
-        args.masterseed_plugin.to_string(),
-    ];
+    let masterseed_plugin = match (args.ctrng_enabled, args.masterseed_plugin.as_deref()) {
+        (true, Some(url)) if !url.trim().is_empty() => Some(url.trim().to_string()),
+        (true, _) => {
+            return Err(GatewayError::BadRequest(
+                "ORBITPORT_MASTERSEED_PLUGIN is required when ORBITPORT_CTRNG_ENABLED=true"
+                    .to_string(),
+            ));
+        }
+        (false, _) => None,
+    };
+
+    let mut plugin_urls = vec![args.auth_plugin.to_string(), args.kms_plugin.to_string()];
+    if let Some(ref url) = masterseed_plugin {
+        plugin_urls.push(url.to_string());
+    }
     if let Some(ref url) = args.account_plugin {
         plugin_urls.push(url.to_string());
     }
@@ -134,7 +148,8 @@ async fn main() -> Result<(), GatewayError> {
         GatewayError::ServiceConnectionError(e.to_string())
     })?;
     let service_manager =
-        service_manager::ServiceManager::new(&args.auth_plugin, &args.masterseed_plugin).await?;
+        service_manager::ServiceManager::new(&args.auth_plugin, masterseed_plugin.as_deref())
+            .await?;
 
     let metrics_port = args.metric_port;
     tokio::spawn(async move {
@@ -150,7 +165,7 @@ async fn main() -> Result<(), GatewayError> {
     };
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
-        &args.masterseed_plugin,
+        masterseed_plugin.as_deref(),
         &args.kms_plugin,
         args.account_plugin.as_deref(),
         args.patissuer_plugin.as_deref(),
@@ -168,6 +183,7 @@ async fn main() -> Result<(), GatewayError> {
         args.rate_limit_window,
         args.bulk_max,
         args.rpc_body_max_bytes,
+        args.ctrng_enabled,
     )
     .await;
 
