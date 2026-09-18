@@ -211,6 +211,8 @@ The plugin is fail-closed: missing required env refuses startup; non-https dashb
 
 Credit lifecycle: the gateway `Hold`s (deduct + gate) before serving, then reports the terminal outcome — `Settle` on success (commits the hold), `Release` on failure (refunds). Both settle and release are best-effort with a hard 2 s timeout; a dropped call leaves the hold unresolved, and the dashboard sweeper refunds unresolved orphans after its TTL. This errs toward revenue loss, never overcharge.
 
+JSON-RPC requests are parsed and validated before the hold, so a malformed or invalid request never takes one. The hold's `operation` is the dashboard's ledger label and price key: the RPC method, with `kms.CreateKey:<KeySpec>` and `kms.Sign:<SigningAlgorithm>` adding their validated variant; the `/api/v1/services/*` routes use `ctrng.Get`. Full table in the [account plugin README](plugins/pkg/plugin/account/README.md#operation-tags).
+
 ## Protobuf workflow
 
 Proto sources live at top-level [`proto/`](proto/). After editing:

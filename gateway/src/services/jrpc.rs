@@ -194,6 +194,28 @@ impl RpcCall {
         Ok(())
     }
 
+    /// Account-plugin hold tag: `method` or `method:variant`. Call only after
+    /// `validate()` passes, which pins the variant to an exact known value.
+    pub fn operation(&self) -> String {
+        match self {
+            RpcCall::GetCTRNG(_) => "ctrng.Get".to_string(),
+            RpcCall::GetCapabilities(_) => "kms.GetCapabilities".to_string(),
+            RpcCall::CreateKey(req) => format!("kms.CreateKey:{}", req.key_spec),
+            RpcCall::Decrypt(_) => "kms.Decrypt".to_string(),
+            RpcCall::Encrypt(_) => "kms.Encrypt".to_string(),
+            RpcCall::GenerateDataKey(_) => "kms.GenerateDataKey".to_string(),
+            RpcCall::RotateKey(_) => "kms.RotateKey".to_string(),
+            RpcCall::KeyStorePut(_) => "kms_keystore.Put".to_string(),
+            RpcCall::KeyStoreGet(_) => "kms_keystore.Get".to_string(),
+            RpcCall::KeyStoreList(_) => "kms_keystore.List".to_string(),
+            RpcCall::KeyStoreDelete(_) => "kms_keystore.Delete".to_string(),
+            RpcCall::Sign(req) => format!("kms.Sign:{}", req.signing_algorithm),
+            RpcCall::Encapsulate(_) => "kms.Encapsulate".to_string(),
+            RpcCall::Decapsulate(_) => "kms.Decapsulate".to_string(),
+            RpcCall::CoordinateDKG(_) => "kms_threshold.CoordinateDKG".to_string(),
+        }
+    }
+
     /// Executes the RPC call using the provided plugin catalog.
     pub async fn execute(
         self,
@@ -595,6 +617,84 @@ mod test {
             }
             _ => panic!("expected kms_threshold.CoordinateDKG"),
         }
+    }
+
+    fn operation_of(method: &str, params: serde_json::Value) -> String {
+        let raw =
+            serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
+        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
+        req.call.validate().unwrap();
+        req.call.operation()
+    }
+
+    #[test]
+    fn test_operation_tags() {
+        assert_eq!(
+            operation_of(
+                "kms.CreateKey",
+                serde_json::json!({
+                    "Alias": "pq-key",
+                    "Description": "",
+                    "KeySpec": "ML_DSA_65",
+                    "KeyUsage": "SIGN_VERIFY",
+                    "Scheme": "PQC",
+                    "Tags": []
+                })
+            ),
+            "kms.CreateKey:ML_DSA_65"
+        );
+        assert_eq!(
+            operation_of(
+                "kms.Sign",
+                serde_json::json!({
+                    "KeyId": "kms:abc",
+                    "Message": "aGVsbG8=",
+                    "SigningAlgorithm": "ECDSA_SHA_256",
+                    "MessageType": "RAW"
+                })
+            ),
+            "kms.Sign:ECDSA_SHA_256"
+        );
+        assert_eq!(
+            operation_of(
+                "kms.Encrypt",
+                serde_json::json!({"KeyId": "kms:abc", "Plaintext": "Zm9v"})
+            ),
+            "kms.Encrypt"
+        );
+        assert_eq!(
+            operation_of("kms.GetCapabilities", serde_json::json!({})),
+            "kms.GetCapabilities"
+        );
+        assert_eq!(
+            operation_of("ctrng.Get", serde_json::json!({})),
+            "ctrng.Get"
+        );
+        assert_eq!(
+            operation_of(
+                "kms_keystore.Put",
+                serde_json::json!({"Name": "github/prod", "Secret": {"api_key": "secret"}})
+            ),
+            "kms_keystore.Put"
+        );
+        assert_eq!(
+            operation_of(
+                "kms_keystore.Get",
+                serde_json::json!({"Name": "github/prod"})
+            ),
+            "kms_keystore.Get"
+        );
+        assert_eq!(
+            operation_of("kms_keystore.List", serde_json::json!({"Prefix": "github"})),
+            "kms_keystore.List"
+        );
+        assert_eq!(
+            operation_of(
+                "kms_keystore.Delete",
+                serde_json::json!({"Name": "github/prod"})
+            ),
+            "kms_keystore.Delete"
+        );
     }
 
     #[tokio::test]

@@ -277,8 +277,7 @@ pub fn with_account_hold(
 ) -> impl Filter<Extract = (AuthContextWithHold,), Error = warp::Rejection> + Clone {
     auth_filter
         .and(warp::any().map(move || account_client.clone()))
-        .and(warp::any().map(move || (units, operation)))
-        .and_then(account_hold)
+        .and_then(move |auth, account_client| account_hold(auth, account_client, units, operation))
 }
 
 /// Legacy Auth0 tenancy: the raw sub the auth plugin validated. Falling back
@@ -291,10 +290,13 @@ fn legacy_tenant(auth: &AuthContext) -> String {
     }
 }
 
-async fn account_hold(
+/// Places a credit hold tagged with `operation`. Callable directly when the tag
+/// depends on the request body (the RPC route), which a filter cannot see.
+pub async fn account_hold(
     auth: AuthContext,
     account_client: Option<AccountPluginClient<Channel>>,
-    (units, operation): (u32, &'static str),
+    units: u32,
+    operation: &str,
 ) -> Result<AuthContextWithHold, warp::Rejection> {
     let Some(mut client) = account_client else {
         // No Hold means no authoritative tenancy, and a PAT's own claim is

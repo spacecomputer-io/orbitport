@@ -55,7 +55,7 @@ func TestDashboardClient_Hold_Success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	held, err := client.Hold(context.Background(), "client-x", 2, "trng", "pat-jti-1")
+	held, err := client.Hold(context.Background(), "client-x", 2, "kms.Sign:ED25519", "pat-jti-1")
 	require.NoError(t, err)
 	require.Equal(t, "ledger-abc", held.LedgerID)
 	require.Equal(t, int64(42), held.Balance)
@@ -64,7 +64,7 @@ func TestDashboardClient_Hold_Success(t *testing.T) {
 	require.Equal(t, "/service/credits/hold", capturedPath)
 	require.Equal(t, "client-x", capturedBody.ClientID)
 	require.Equal(t, uint32(2), capturedBody.Units)
-	require.Equal(t, "trng", capturedBody.Operation)
+	require.Equal(t, "kms.Sign:ED25519", capturedBody.Operation)
 	require.Equal(t, "pat-jti-1", capturedBody.Jti)
 }
 
@@ -75,7 +75,7 @@ func TestDashboardClient_Hold_Accepts201(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	held, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	held, err := client.Hold(context.Background(), "client-x", 1, "kms.Sign:ED25519", "")
 	require.NoError(t, err)
 	require.Equal(t, "ledger-201", held.LedgerID)
 	require.Equal(t, int64(7), held.Balance)
@@ -100,7 +100,7 @@ func TestDashboardClient_Hold_InsufficientCredits(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	_, err := client.Hold(context.Background(), "client-x", 1, "kms.Sign:ED25519", "")
 	require.ErrorIs(t, err, ErrInsufficientCredits)
 }
 
@@ -123,7 +123,7 @@ func TestDashboardClient_Hold_OtherErrors(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+			_, err := client.Hold(context.Background(), "client-x", 1, "kms.Sign:ED25519", "")
 			require.Error(t, err)
 			require.False(t, errors.Is(err, ErrInsufficientCredits))
 		})
@@ -206,7 +206,7 @@ func TestDashboardClient_NoToken_Errors(t *testing.T) {
 	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
 	client := newDashboardClient(cfg, &staticTokens{err: errors.New("no token")})
 
-	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	_, err := client.Hold(context.Background(), "client-x", 1, "kms.Sign:ED25519", "")
 	require.Error(t, err)
 }
 
@@ -230,7 +230,7 @@ func TestDashboardClient_Hold_RetriesOnceAfter401(t *testing.T) {
 	cfg := &accountConfig{DashboardURL: srv.URL, HTTPTimeoutSecs: 5}
 	client := newDashboardClient(cfg, tokens)
 
-	held, err := client.Hold(context.Background(), "client-x", 1, "trng", "jti-1")
+	held, err := client.Hold(context.Background(), "client-x", 1, "kms.Sign:ED25519", "jti-1")
 	require.NoError(t, err)
 	require.Equal(t, "ledger-retry", held.LedgerID)
 	require.Equal(t, int64(7), held.Balance)
@@ -248,7 +248,7 @@ func TestDashboardClient_Hold_401RetryHappensOnce(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "")
+	_, err := client.Hold(context.Background(), "client-x", 1, "kms.Sign:ED25519", "")
 	require.Error(t, err)
 	require.Equal(t, 2, calls)
 }
@@ -262,6 +262,6 @@ func TestDashboardClient_Hold_404IsUnknownCredential(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := client.Hold(context.Background(), "client-x", 1, "trng", "revoked-jti")
+	_, err := client.Hold(context.Background(), "client-x", 1, "kms.Sign:ED25519", "revoked-jti")
 	require.ErrorIs(t, err, ErrUnknownCredential)
 }
