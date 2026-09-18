@@ -293,7 +293,7 @@ async fn filter_release_fires_when_handler_errors_after_hold() {
     let client = connect(addr).await;
     let release_client = connect(addr).await;
 
-    // Mirrors what server.rs does when a metered request fails after a hold.
+    // Mirrors what server.rs does on service failure.
     let release_client_filter = warp::any().map(move || release_client.clone());
     let route = warp::path("test")
         .and(with_account_hold(
@@ -308,7 +308,7 @@ async fn filter_release_fires_when_handler_errors_after_hold() {
                 assert_eq!(ctx.ledger_id, "ledger-warp");
                 account_release(Some(rc), &ctx.ledger_id).await;
                 Err::<warp::reply::Json, Rejection>(warp::reject::custom(
-                    GatewayError::InternalError("request failed".to_string()),
+                    GatewayError::ServiceTimeout,
                 ))
             },
         )

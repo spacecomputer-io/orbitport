@@ -3,6 +3,8 @@ use std::env;
 use thiserror::Error;
 use tokio::process::Command;
 
+use gateway::structures::service::ServiceResult;
+
 const THRESHOLD_GROUP: &str = "e2e-group";
 const THRESHOLD_MOUNT: &str = "threshold";
 
@@ -20,6 +22,88 @@ pub enum E2EError {
     RequestError(String),
     #[error("Assertion failed: {0}")]
     AssertionFailed(String),
+}
+
+/// Get the TRNG service from the orbitport gateway.
+#[allow(dead_code)]
+pub async fn get_trng(
+    base_url: &str,
+    access_token: &str,
+    src: Option<Vec<String>>,
+    bulk: Option<usize>,
+    tpk: Option<String>,
+) -> Result<ServiceResult, E2EError> {
+    let srcs = src.unwrap_or(vec![]);
+    let src = srcs
+        .into_iter()
+        .map(|s| format!("src={s}"))
+        .collect::<Vec<String>>()
+        .join("&");
+    let client = reqwest::Client::new();
+    let start_time = std::time::Instant::now();
+    tracing::debug!("Making request to gateway with src: {}", src);
+    let bulk = bulk.unwrap_or(0);
+    let bulk = if bulk > 0 {
+        format!("&bulk={bulk}")
+    } else {
+        String::new()
+    };
+    let tpk = if let Some(tpk) = tpk {
+        format!("&key={tpk}")
+    } else {
+        String::new()
+    };
+    let response = client
+        .get(format!("{base_url}/api/v1/services/trng?{src}{bulk}{tpk}"))
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .bearer_auth(access_token)
+        .send()
+        .await
+        .map_err(|e| E2EError::RequestError(e.to_string()))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        tracing::error!("Gateway returned Error: {} | Body: {}", status, text);
+        return Err(E2EError::AssertionFailed(format!(
+            "Server returned error {}: {}",
+            status, text
+        )));
+    }
+
+    let raw = response
+        .text()
+        .await
+        .map_err(|e| E2EError::ParseError(e.to_string()))?;
+    tracing::debug!("Raw response: {}", raw);
+    let parsed = serde_json::from_str::<ServiceResult>(&raw)
+        .map_err(|e| E2EError::ParseError(e.to_string()))?;
+
+    let elapsed_time = start_time.elapsed();
+    tracing::debug!("Request completed in {:?}", elapsed_time);
+
+    Ok(parsed)
+}
+
+#[allow(dead_code)]
+pub async fn rpc_ctrng_get(
+    base_url: &str,
+    access_token: &str,
+    count: u32,
+) -> Result<gateway::proto::services::ctrng::CTrngResponse, E2EError> {
+    let req_id = 1;
+    let payload = serde_json::json!(
+        {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "ctrng.Get",
+            "params": serde_json::json!({
+                "chunks": count
+            }),
+        }
+    );
+    rpc_success_result(base_url, access_token, req_id, payload).await
 }
 
 #[allow(dead_code)]

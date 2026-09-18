@@ -706,6 +706,7 @@ dependencies = [
  "lazy_static",
  "prometheus",
  "prost",
+ "rand 0.9.4",
  "reqwest",
  "serde",
  "serde_json",

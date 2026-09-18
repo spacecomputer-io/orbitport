@@ -29,8 +29,7 @@ fn public_url() -> String {
 }
 
 /// Host port for the gateway's internal listener. Container-side it is 8081;
-/// the dev stack publishes it on 8090 to keep the internal API separate from
-/// the public gateway listener.
+/// the dev stack publishes it on 8090 because ipfs-node already takes 8081.
 fn internal_url() -> String {
     env::var("OPTEST_INTERNAL_URL").unwrap_or("http://localhost:8090".to_string())
 }

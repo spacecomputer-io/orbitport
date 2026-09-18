@@ -68,6 +68,7 @@ ledger description and per-operation price lookup:
 
 | RPC method | Hold tag |
 | --- | --- |
+| `ctrng.Get` and `/api/v1/services/*` | `ctrng.Get` |
 | `kms.GetCapabilities` | `kms.GetCapabilities` |
 | `kms.CreateKey` | `kms.CreateKey:<KeySpec>` |
 | `kms.Sign` | `kms.Sign:<SigningAlgorithm>` |

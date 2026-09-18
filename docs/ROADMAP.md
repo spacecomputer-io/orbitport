@@ -1,15 +1,15 @@
 # Orbitport | Roadmap 
 
-Orbitport’s long-term vision is to be a trust-minimized gateway for managed cryptographic operations.
+Orbitport’s long-term vision is to be a trust-minimized gateway for secure, verifiable communication with space infrastructure.
 
 ---
 
 ## v1 – Centralized Gateway (MVP)
 
 - **Functionality:**  
-  - Orbitport operates as a managed gateway to OpenBao-backed KMS capabilities.
+  - Orbitport operates as an on-Earth gateway to Aptos Orbital infrastructure.
   - Only SpaceComputer can deploy and manage the gateway.
-  - Provides a unified API for key creation, encryption, signing, and key agreement.
+  - Provides unified API for orbital services (e.g., cTRNG, spaceTEE).
 - **Trust Model:**  
   - Trust is placed in SpaceComputer’s operations and infrastructure.
 - **Deployment:**  
@@ -26,9 +26,11 @@ Orbitport’s long-term vision is to be a trust-minimized gateway for managed cr
   - Trust is minimized:  
     - Critical parts run in a TEE, enabling verifiable logic and reproducible attestation.
     - Open-source codebase allows public verification of logic.
-- **Managed cryptography:**
-  - Critical execution can run in a TEE, enabling verifiable logic and reproducible attestation.
-  - KMS operations remain tenant-scoped and key material remains in the KMS.
+- **End-to-end Encryption:**
+  - Messages are encrypted and signed on the satellite.
+  - Decryption and processing occur in TEE-based Orbitport, then securely delivered to customers.
+- **Verifiable Randomness:**  
+  - Allow users to verify that the random number is originated from the satellite, not from an untrusted source on earth.
 - **Deployment:**  
   - Multi-cloud, leveraging TEEs for verifiable execution.
 
@@ -38,11 +40,13 @@ Orbitport’s long-term vision is to be a trust-minimized gateway for managed cr
 
 - **Functionality:**  
   - Anyone meeting requirements can deploy their own Orbitport instance.
-  - Focus on removing the gateway as a single point of trust.
-  - Enables independently operated, interoperable KMS nodes.
+  - Focus on removing the on-Earth gateway as a single point of trust.
+  - Enables direct communication with space infrastructure (e.g., via Iridium terminals).
 - **Trust Model:**  
   - Decentralized, trust-minimized RPC nodes.
   - Further reduces reliance on any single operator or gateway.
+- **Verifiable Randomness:**  
+  - Allow users to verify that the random number is truly random / to verify the entropy of the randomness.
 - **Deployment:**  
   - Permissionless, community-driven, and potentially peer-to-peer if deployed as part of a decentralized network.
 

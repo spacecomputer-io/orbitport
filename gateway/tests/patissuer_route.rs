@@ -239,7 +239,11 @@ async fn internal_listener_serves_nothing_else() {
     let (auth_addr, _) = start_mock_auth().await;
     let routes = internal_routes(connect(addr).await, connect_auth(auth_addr).await);
 
-    for path in ["/healthz", "/api/v1/rpc", "/.well-known/jwks.json"] {
+    for path in [
+        "/healthz",
+        "/api/v1/services/trng",
+        "/.well-known/jwks.json",
+    ] {
         let resp = warp::test::request()
             .method("GET")
             .path(path)

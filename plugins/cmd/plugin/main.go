@@ -11,10 +11,14 @@ import (
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/core/health"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/account"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/accountnoop"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/aptosorbital"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/auth"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/authnoop"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/beacon"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/ipfs"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/jwks"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/kms"
+	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/masterseed"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/patissuer"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/plugin/threshold"
 	"github.com/spacecomputer-io/orbitport/plugins/pkg/utils"
@@ -39,6 +43,13 @@ func main() {
 	}
 
 	switch cfg.Plugin {
+	case "aptosorbital":
+		plugin, err := aptosorbital.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterRandomnessPluginServer(grpcServer, plugin)
+		logger.Info("Aptos Orbital plugin ready")
 	case "auth":
 		plugin, err := auth.NewPlugin()
 		if err != nil {
@@ -60,6 +71,50 @@ func main() {
 		}
 		proto.RegisterAccountPluginServer(grpcServer, plugin)
 		logger.Info("Noop account plugin ready")
+	case "ipfs":
+		plugin, err := ipfs.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterIpfsPluginServer(grpcServer, plugin)
+
+		// Override health check for IPFS plugin
+		healthCheck = beacon.IpfsHealthCheck
+
+		logger.Info("IPFS plugin ready")
+	case "beacon":
+		beaconpn, err := beacon.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+
+		logger.Info("Beacon plugin ready")
+
+		err = beaconpn.Start(context.Background())
+		if err != nil {
+			logger.Errorf("error starting beacon plugin: %v", err)
+		}
+		defer func() {
+			err := beaconpn.Close()
+			if err != nil {
+				logger.Errorf("error closing beacon plugin: %v", err)
+			}
+		}()
+
+	case "masterseed":
+		plugin, err := masterseed.NewPlugin()
+		if err != nil {
+			panic(err)
+		}
+		proto.RegisterMasterSeedPluginServer(grpcServer, plugin)
+		logger.Info("MasterSeed plugin ready")
+
+		defer func() {
+			err := plugin.Close()
+			if err != nil {
+				logger.Errorf("error closing masterseed plugin: %v", err)
+			}
+		}()
 	case "patissuer":
 		plugin, err := patissuer.NewPlugin()
 		if err != nil {

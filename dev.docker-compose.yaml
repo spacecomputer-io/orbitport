@@ -12,6 +12,14 @@ x-plugin-base:
     retries: 3
     start_period: 5s
 
+x-mocker-base:
+  &mocker-base
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
   openbao-eth-plugin-builder:
     container_name: openbao-eth-plugin-builder
@@ -259,6 +267,91 @@ services:
       retries: 12
       start_period: 2s
 
+  plugin-ipfs:
+    <<: *plugin-base
+    container_name: plugin-ipfs
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=ipfs
+      - ORBITPORT_GRPC_PORT=50002
+      - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
+    ports:
+      - 50002:50002 # expose the port for integration tests
+
+  aptos-orbital-api:
+    <<: *mocker-base
+    container_name: aptos-orbital-api
+    build:
+      context: ./plugins
+      args:
+        - BUILD_TARGET=mocker
+    image: op-mocker:latest
+    environment:
+      - OPMOCK_SERVICE=aptosorbital_api
+      - OPMOCK_PORT=8001
+      - OPMOCK_PROFILE=${OPMOCK_PROFILE}
+    depends_on:
+      - aptos-orbital-auth
+
+  aptos-orbital-auth:
+    <<: *mocker-base
+    container_name: aptos-orbital-auth
+    build:
+      context: ./plugins
+      args:
+        - BUILD_TARGET=mocker
+    image: op-mocker:latest
+    environment:
+      - OPMOCK_SERVICE=aptosorbital_auth
+      - OPMOCK_PORT=8002
+    ports:
+      - "8002:8002"
+
+  plugin-aptos-orbital:
+    <<: *plugin-base
+    container_name: plugin-aptos-orbital
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=aptosorbital
+      - ORBITPORT_GRPC_PORT=50001
+      # Mock credentials for the local dev mocker only. These are not real secrets.
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=dev-client-id
+      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=dev-client-secret
+      - ORBITPORT_APTOS_ORBITAL_API_URL=http://aptos-orbital-api:8001
+      - ORBITPORT_APTOS_ORBITAL_AUTH_URL=http://aptos-orbital-auth:8002
+    depends_on:
+      - plugin-auth
+      - aptos-orbital-api
+      - aptos-orbital-auth
+
+  plugin-masterseed:
+    <<: *plugin-base
+    container_name: plugin-masterseed
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=masterseed
+      - ORBITPORT_GRPC_PORT=50003
+      - ORBITPORT_APTOS_PLUGIN=plugin-aptos-orbital:50001
+      # Configurable defaults for seed management
+      - ORBITPORT_DEFAULT_MASTER_SEEDS=${ORBITPORT_DEFAULT_MASTER_SEEDS}
+      - ORBITPORT_MASTERSEED_TRNG_SIZE=32
+      - ORBITPORT_MASTERSEED_MAX_SEEDS=100
+      - ORBITPORT_MASTERSEED_PERIOD=3600
+      - ORBITPORT_MASTER_SEED_MAX_COUNT_PER_REQUEST=1000
+    ports:
+      - 9003:9000
+    depends_on:
+      - plugin-aptos-orbital
+
   plugin-kms:
     <<: *plugin-base
     container_name: plugin-kms
@@ -393,10 +486,20 @@ services:
       - ORBITPORT_JWKS_PATISSUER_PLUGIN=plugin-patissuer:50006
       - ORBITPORT_JWKS_HTTP_PORT=8080
     ports:
-      # Host 8091 because 8080 is the gateway and 8081 is its internal listener.
+      # Host 8091 because 8080 is the gateway and 8081 is ipfs-node.
       - 8091:8080
     depends_on:
       - plugin-patissuer
+
+  ipfs-node:
+    image: ipfs/kubo:release
+    ports:
+      - "4001:4001"  # IPFS Swarm Port
+      - "5001:5001"  # IPFS API Port
+      - "8081:8080"  # IPFS Gateway Port
+    volumes:
+      - ./.data/ipfs_dev:/data/ipfs
+    command: ["daemon", "--migrate=true"]
 
   gateway:
     container_name: gateway 
@@ -419,13 +522,15 @@ services:
       - ORBITPORT_RPC_BODY_MAX_BYTES=65536
       - ORBITPORT_THRESHOLD_ENABLED=${ORBITPORT_THRESHOLD_ENABLED:-true}
       - ORBITPORT_THRESHOLD_PLUGIN=http://plugin-threshold:50005
+      - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
+      - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
       - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
       - ORBITPORT_PATISSUER_PLUGIN=http://plugin-patissuer:50006
       - ORBITPORT_INTERNAL_PORT=8081
     ports:
       - 8080:8080
       # The no-op auth plugin is development-only, so never expose issuance
-      # beyond localhost.
+      # beyond localhost. Host 8090 avoids ipfs-node's 8081 binding.
       - 127.0.0.1:8090:8081
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
@@ -437,8 +542,26 @@ services:
       - plugin-auth
       - plugin-kms
       - plugin-threshold
+      - plugin-masterseed
       - plugin-account
       - plugin-patissuer
+
+  plugin-beacon:
+    <<: *plugin-base
+    container_name: plugin-beacon
+    build:
+      context: ./plugins
+    image: op-plugin:latest
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=beacon
+      - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
+      - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
+      - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
+      - ORBITPORT_BEACON_UPDATE_INTERVAL=10
+      - ORBITPORT_DEFAULT_BEACON_NAME=randomness-beacon-dev1.0
+      - ORBITPORT_BEACON_REGISTRY=orbitport-dev-registry
+      - ORBITPORT_REGISTRY_RETRIEVAL_TIMEOUT=90
 
 volumes:
   openbao-plugins:
