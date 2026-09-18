@@ -238,6 +238,8 @@ services:
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
       - ORBITPORT_RPC_BODY_MAX_BYTES=65536
+      # This stack runs the cTRNG plugins
+      - ORBITPORT_CTRNG_ENABLED=${ORBITPORT_CTRNG_ENABLED:-true}
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
       - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
       - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005

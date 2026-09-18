@@ -128,7 +128,7 @@ impl PluginCatalog {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_url: &str,
-        masterseed_url: &str,
+        masterseed_url: Option<&str>,
         kms_url: &str,
         account_url: Option<&str>,
         patissuer_url: Option<&str>,
@@ -139,7 +139,10 @@ impl PluginCatalog {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
         urls.insert("kms".to_string(), kms_url.to_string());
-        urls.insert("masterseed".to_string(), masterseed_url.to_string());
+        // Absent when cTRNG is off, so get_masterseed_client fails with PluginNotFound
+        if let Some(url) = masterseed_url {
+            urls.insert("masterseed".to_string(), url.to_string());
+        }
         if let Some(url) = account_url {
             urls.insert("account".to_string(), url.to_string());
         }
@@ -212,6 +215,11 @@ impl PluginCatalog {
 
     pub fn threshold_enabled(&self) -> bool {
         self.threshold_enabled
+    }
+
+    /// cTRNG is served only when the masterseed plugin is configured
+    pub fn ctrng_enabled(&self) -> bool {
+        self.urls.contains_key("masterseed")
     }
 
     pub fn threshold_groups(&self) -> ThresholdGroupRegistry {
