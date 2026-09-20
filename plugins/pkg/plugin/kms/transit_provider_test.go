@@ -128,3 +128,53 @@ func TestTransitProviderEncrypt(t *testing.T) {
 		require.Equal(t, encryptionAlgorithmAES256GCM96, blob.Algorithm)
 	})
 }
+func TestTransitProviderSign(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		ctx := context.Background()
+		metadata := &keyMetadataRecord{
+			KeyID:       "kms:test-key",
+			Scheme:      schemeTransit,
+			ProviderKey: "tenant-test_test-key",
+			KeySpec:     keySpecECDSAP256,
+			KeyUsage:    signVerifyUsage,
+		}
+
+		req := &proto.SignRequest{
+			Message:          "dGVzdA==",
+			SigningAlgorithm: "ECDSA_SHA_256",
+		}
+
+		fakeOpenBao := func(w http.ResponseWriter, r *http.Request) {
+			switch {
+			case r.Method == http.MethodPost:
+				_, _ = w.Write([]byte(`{"data":{"signature":"vault:v1:test-signature"}}`))
+
+			default:
+				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				http.Error(w, "unexpected request", http.StatusInternalServerError)
+			}
+
+		}
+
+		handler := http.HandlerFunc(fakeOpenBao)
+		server := httptest.NewServer(handler)
+		defer server.Close()
+
+		cfg := &kmsConfig{
+			OpenBaoProxyURL: server.URL,
+		}
+
+		client := newOpenBaoClient(cfg)
+		provider := &transitProvider{
+			client: client,
+		}
+		response, err := provider.Sign(ctx, metadata, req)
+		require.NoError(t, err)
+		require.NotNil(t, response)
+
+		require.Equal(t, "kms:test-key", response.KeyId)
+		require.Equal(t, "vault:v1:test-signature", response.Signature)
+		require.Equal(t, "ECDSA_SHA_256", response.SigningAlgorithm)
+	})
+
+}
