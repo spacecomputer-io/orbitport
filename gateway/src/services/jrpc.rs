@@ -225,10 +225,13 @@ impl RpcCall {
     ) -> Result<JsonRpcRawResponse, tonic::Status> {
         match self {
             RpcCall::GetCTRNG(req) => {
-                let grpc_client = plugin_catalog
-                    .get_masterseed_client()
-                    .await
-                    .map_err(|_| tonic::Status::unavailable("Masterseed plugin unavailable"))?;
+                let grpc_client = plugin_catalog.get_masterseed_client().await.map_err(|_| {
+                    if plugin_catalog.ctrng_enabled() {
+                        tonic::Status::unavailable("Masterseed plugin unavailable")
+                    } else {
+                        tonic::Status::unavailable("cTRNG feature disabled")
+                    }
+                })?;
                 let mut svc = CTrngService::new(grpc_client);
                 let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
                     // We can log _e here for debugging, but we don't want to expose internal errors to the client
@@ -701,7 +704,7 @@ mod test {
     async fn test_threshold_coordinate_dkg_disabled() {
         let plugin_catalog = PluginCatalog::new(
             "http://auth:50000",
-            "http://masterseed:50003",
+            Some("http://masterseed:50003"),
             "http://kms:50004",
             None,
             None,

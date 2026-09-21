@@ -64,6 +64,7 @@ pub async fn start(
     limit_window: u64,
     bulk_max: usize,
     rpc_body_max_bytes: u64,
+    ctrng_enabled: bool,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -80,8 +81,10 @@ pub async fn start(
 
     // The hold is placed inside handle_rpc: its operation tag comes from the
     // validated body, which a filter ahead of body parsing cannot see.
-    let rpc_route = warp::post()
-        .and(warp::path("api").and(warp::path("v1").and(warp::path("rpc"))))
+    // Path before method, so an unknown path is 404 rather than the 405 warp
+    // returns when the method filter rejects first
+    let rpc_route = warp::path!("api" / "v1" / "rpc")
+        .and(warp::post())
         .and(with_rate_limiter(
             with_auth(service_manager.get_auth_client()),
             rate_limiter.clone(),
@@ -139,9 +142,18 @@ pub async fn start(
         }))
     });
 
-    let routes: BoxedFilter<(Response,)> = get_route
-        .or(post_route)
-        .or(rpc_route)
+    // REST service routes are cTRNG-only: unregistered means 404 before auth or hold
+    let metered_routes: BoxedFilter<(Response,)> = if ctrng_enabled {
+        get_route
+            .or(post_route)
+            .or(rpc_route)
+            .map(warp::reply::Reply::into_response)
+            .boxed()
+    } else {
+        rpc_route.map(warp::reply::Reply::into_response).boxed()
+    };
+
+    let routes: BoxedFilter<(Response,)> = metered_routes
         .or(health_route.with(warp::log("health_check")))
         .map(warp::reply::Reply::into_response)
         .boxed();
