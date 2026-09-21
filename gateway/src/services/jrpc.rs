@@ -310,6 +310,37 @@ mod test {
     }
 
     #[test]
+    fn test_serialize_kms_get_capabilities_includes_pascal_case_tags() {
+        let response =
+            serialize_success_response(8, KmsService::get_capabilities()).expect("serialize");
+        let schemes = response["result"]["Schemes"]
+            .as_array()
+            .expect("Schemes should be an array");
+        let pqc = schemes
+            .iter()
+            .find(|scheme| scheme["Scheme"] == "PQC")
+            .expect("missing PQC capability");
+
+        assert_eq!(pqc["Tags"], serde_json::json!(["experimental"]));
+
+        let signing = pqc["SigningCapabilities"]
+            .as_array()
+            .expect("SigningCapabilities should be an array")
+            .iter()
+            .find(|capability| capability["SigningAlgorithm"] == "ML_DSA")
+            .expect("missing ML_DSA signing capability");
+        assert_eq!(signing["Tags"], serde_json::json!(["experimental"]));
+
+        let key_agreement = pqc["KeyAgreementCapabilities"]
+            .as_array()
+            .expect("KeyAgreementCapabilities should be an array")
+            .iter()
+            .find(|capability| capability["KeyAgreementAlgorithm"] == "ML_KEM")
+            .expect("missing ML_KEM key agreement capability");
+        assert_eq!(key_agreement["Tags"], serde_json::json!(["experimental"]));
+    }
+
+    #[test]
     fn test_deserialize_kms_decapsulate_pascal_case() {
         let raw = serde_json::json!({
             "jsonrpc": "2.0",

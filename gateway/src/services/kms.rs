@@ -301,6 +301,7 @@ impl DataKeySpec {
 
 const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "kms:";
+const EXPERIMENTAL_TAG: &str = "experimental";
 
 #[derive(Debug)]
 pub enum KmsRpcCall {
@@ -819,22 +820,27 @@ fn transit_capability() -> SchemeCapability {
             signing_capability(
                 SigningAlgorithm::EcdsaSha256,
                 &[MessageType::Raw, MessageType::Digest],
+                &[],
             ),
             signing_capability(
                 SigningAlgorithm::EcdsaSha384,
                 &[MessageType::Raw, MessageType::Digest],
+                &[],
             ),
             signing_capability(
                 SigningAlgorithm::Ed25519,
                 &[MessageType::Raw, MessageType::Digest],
+                &[],
             ),
             signing_capability(
                 SigningAlgorithm::RsassaPkcs1V15Sha256,
                 &[MessageType::Raw, MessageType::Digest],
+                &[],
             ),
             signing_capability(
                 SigningAlgorithm::RsassaPssSha256,
                 &[MessageType::Raw, MessageType::Digest],
+                &[],
             ),
         ],
         supports_encrypt: true,
@@ -844,6 +850,7 @@ fn transit_capability() -> SchemeCapability {
         key_agreement_capabilities: vec![],
         supports_encapsulate: false,
         supports_decapsulate: false,
+        tags: vec![],
     }
 }
 
@@ -857,6 +864,7 @@ fn ethereum_capability() -> SchemeCapability {
         signing_capabilities: vec![signing_capability(
             SigningAlgorithm::EthereumSecp256k1,
             &[MessageType::Raw, MessageType::Digest, MessageType::Eip191],
+            &[],
         )],
         supports_encrypt: false,
         supports_decrypt: false,
@@ -865,6 +873,7 @@ fn ethereum_capability() -> SchemeCapability {
         key_agreement_capabilities: vec![],
         supports_encapsulate: false,
         supports_decapsulate: false,
+        tags: vec![],
     }
 }
 
@@ -890,28 +899,36 @@ fn pqc_capability() -> SchemeCapability {
         signing_capabilities: vec![signing_capability(
             SigningAlgorithm::MlDsa,
             &[MessageType::Raw],
+            &[EXPERIMENTAL_TAG],
         )],
         supports_encrypt: false,
         supports_decrypt: false,
         supports_generate_data_key: false,
         supports_rotate_key: false,
-        key_agreement_capabilities: vec![key_agreement_capability(KeyAgreementAlgorithm::MlKem)],
+        key_agreement_capabilities: vec![key_agreement_capability(
+            KeyAgreementAlgorithm::MlKem,
+            &[EXPERIMENTAL_TAG],
+        )],
         supports_encapsulate: true,
         supports_decapsulate: true,
+        tags: capability_tags(&[EXPERIMENTAL_TAG]),
     }
 }
 
 fn key_agreement_capability(
     key_agreement_algorithm: KeyAgreementAlgorithm,
+    tags: &[&str],
 ) -> KeyAgreementCapability {
     KeyAgreementCapability {
         key_agreement_algorithm: key_agreement_algorithm.as_str().to_string(),
+        tags: capability_tags(tags),
     }
 }
 
 fn signing_capability(
     signing_algorithm: SigningAlgorithm,
     message_types: &[MessageType],
+    tags: &[&str],
 ) -> SigningCapability {
     SigningCapability {
         signing_algorithm: signing_algorithm.as_str().to_string(),
@@ -919,7 +936,12 @@ fn signing_capability(
             .iter()
             .map(|message_type| message_type.as_str().to_string())
             .collect(),
+        tags: capability_tags(tags),
     }
+}
+
+fn capability_tags(tags: &[&str]) -> Vec<String> {
+    tags.iter().map(|tag| (*tag).to_string()).collect()
 }
 
 fn validate_required(field_name: &str, value: &str) -> Result<(), String> {
@@ -1183,6 +1205,13 @@ mod test {
         assert!(transit.supports_decrypt);
         assert!(transit.supports_generate_data_key);
         assert!(transit.supports_rotate_key);
+        assert!(transit.tags.is_empty());
+        assert!(
+            transit
+                .signing_capabilities
+                .iter()
+                .all(|capability| capability.tags.is_empty())
+        );
 
         let ethereum = capabilities
             .schemes
@@ -1197,6 +1226,13 @@ mod test {
         assert!(!ethereum.supports_encrypt);
         assert!(!ethereum.supports_generate_data_key);
         assert!(!ethereum.supports_rotate_key);
+        assert!(ethereum.tags.is_empty());
+        assert!(
+            ethereum
+                .signing_capabilities
+                .iter()
+                .all(|capability| capability.tags.is_empty())
+        );
 
         let pqc = capabilities
             .schemes
@@ -1207,15 +1243,20 @@ mod test {
         assert!(pqc.key_specs.contains(&"ML_KEM_768".to_string()));
         assert!(pqc.key_usages.contains(&"SIGN_VERIFY".to_string()));
         assert!(pqc.key_usages.contains(&"KEY_AGREEMENT".to_string()));
-        assert!(pqc.signing_capabilities.iter().any(|capability| {
-            capability.signing_algorithm == "ML_DSA"
-                && capability.message_types == vec!["RAW".to_string()]
-        }));
-        assert!(
-            pqc.key_agreement_capabilities
-                .iter()
-                .any(|capability| capability.key_agreement_algorithm == "ML_KEM")
-        );
+        assert_eq!(pqc.tags, vec![EXPERIMENTAL_TAG.to_string()]);
+        let pqc_signing = pqc
+            .signing_capabilities
+            .iter()
+            .find(|capability| capability.signing_algorithm == "ML_DSA")
+            .expect("missing PQC signing capability");
+        assert_eq!(pqc_signing.message_types, vec!["RAW".to_string()]);
+        assert_eq!(pqc_signing.tags, vec![EXPERIMENTAL_TAG.to_string()]);
+        let pqc_key_agreement = pqc
+            .key_agreement_capabilities
+            .iter()
+            .find(|capability| capability.key_agreement_algorithm == "ML_KEM")
+            .expect("missing PQC key agreement capability");
+        assert_eq!(pqc_key_agreement.tags, vec![EXPERIMENTAL_TAG.to_string()]);
         assert!(!pqc.supports_encrypt);
         assert!(!pqc.supports_generate_data_key);
         assert!(!pqc.supports_rotate_key);

@@ -138,10 +138,12 @@ message GetCapabilitiesRequest {}
 message SigningCapability {
   string signing_algorithm = 1;
   repeated string message_types = 2;
+  repeated string tags = 3;
 }
 
 message KeyAgreementCapability {
   string key_agreement_algorithm = 1;
+  repeated string tags = 2;
 }
 
 message SchemeCapability {
@@ -158,6 +160,7 @@ message SchemeCapability {
   repeated KeyAgreementCapability key_agreement_capabilities = 11;
   bool supports_encapsulate = 12;
   bool supports_decapsulate = 13;
+  repeated string tags = 14;
 }
 
 message GetCapabilitiesResponse {
