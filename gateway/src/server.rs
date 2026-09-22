@@ -10,8 +10,8 @@ use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
 
 use crate::auth::pat_issue_route;
 use crate::filters::{
-    AuthContextWithHold, RateLimiter, account_release, account_settle, with_account_hold,
-    with_auth, with_rate_limiter,
+    AuthContext, AuthContextWithHold, RateLimiter, account_hold, account_release, account_settle,
+    with_account_hold, with_auth, with_rate_limiter,
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
@@ -63,6 +63,8 @@ pub async fn start(
     limit: u32,
     limit_window: u64,
     bulk_max: usize,
+    rpc_body_max_bytes: u64,
+    ctrng_enabled: bool,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -77,23 +79,17 @@ pub async fn start(
     let account_client_get = account_client.clone();
     let account_client_post = account_client.clone();
 
-    // MVP: account-plugin `operation` is a coarse HTTP-method tag, not the
-    // semantic op (e.g. "trng", "kms_sign"). Path-derived tagging requires
-    // pushing the matched path into `with_account_hold`, which the warp
-    // filter signature doesn't carry today.
-    // TODO(account-plugin): derive semantic operation tag from path.
-    let rpc_route = warp::post()
-        .and(warp::path("api").and(warp::path("v1").and(warp::path("rpc"))))
-        .and(with_account_hold(
-            with_rate_limiter(
-                with_auth(service_manager.get_auth_client()),
-                rate_limiter.clone(),
-            ),
-            account_client_rpc.clone(),
-            1,
-            "rpc",
+    // The hold is placed inside handle_rpc: its operation tag comes from the
+    // validated body, which a filter ahead of body parsing cannot see.
+    // Path before method, so an unknown path is 404 rather than the 405 warp
+    // returns when the method filter rejects first
+    let rpc_route = warp::path!("api" / "v1" / "rpc")
+        .and(warp::post())
+        .and(with_rate_limiter(
+            with_auth(service_manager.get_auth_client()),
+            rate_limiter.clone(),
         ))
-        .and(warp::body::content_length_limit(1024))
+        .and(warp::body::content_length_limit(rpc_body_max_bytes))
         .and(warp::body::json())
         .and(warp::any().map(move || plugin_catalog.clone()))
         .and(warp::any().map(move || account_client_rpc.clone()))
@@ -109,7 +105,7 @@ pub async fn start(
             ),
             account_client_get.clone(),
             1,
-            "service_get",
+            "ctrng.Get",
         ))
         .and(warp::query::<QueryParams>())
         .and(warp::any().map(move || service_manager_clone.clone()))
@@ -127,7 +123,7 @@ pub async fn start(
             ),
             account_client_post.clone(),
             1,
-            "service_post",
+            "ctrng.Get",
         ))
         .and(warp::body::content_length_limit(1024)) // limit to 1 KB payload
         .and(warp::body::json())
@@ -137,7 +133,7 @@ pub async fn start(
         .and(warp::any().map(move || account_client_post.clone()))
         .and_then(handle_post);
 
-    // Allowlist: `/healthz` is the only route that bypasses `with_account_hold`.
+    // Allowlist: `/healthz` is the only route that skips the account hold.
     // It runs without auth or rate-limiting so probes from k8s / load balancers
     // never spend credits. There is no `/version` route today.
     let health_route = warp::path("healthz").map(|| {
@@ -146,9 +142,18 @@ pub async fn start(
         }))
     });
 
-    let routes: BoxedFilter<(Response,)> = get_route
-        .or(post_route)
-        .or(rpc_route)
+    // REST service routes are cTRNG-only: unregistered means 404 before auth or hold
+    let metered_routes: BoxedFilter<(Response,)> = if ctrng_enabled {
+        get_route
+            .or(post_route)
+            .or(rpc_route)
+            .map(warp::reply::Reply::into_response)
+            .boxed()
+    } else {
+        rpc_route.map(warp::reply::Reply::into_response).boxed()
+    };
+
+    let routes: BoxedFilter<(Response,)> = metered_routes
         .or(health_route.with(warp::log("health_check")))
         .map(warp::reply::Reply::into_response)
         .boxed();
@@ -311,7 +316,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 }
 
 async fn handle_rpc(
-    ctx: AuthContextWithHold,
+    auth: AuthContext,
     body: JsonRpcRequest,
     plugin_catalog: Arc<PluginCatalog>,
     account_client: Option<AccountPluginClient<Channel>>,
@@ -319,14 +324,16 @@ async fn handle_rpc(
     tracing::debug!("Handling RPC request [id={}] {:?}", body.id, body);
     let req_id = body.id;
     let rpc_call = body.call;
-    let ledger_id = ctx.ledger_id.clone();
+    // Validate before holding, so an invalid request costs nothing and needs
+    // no release.
     if let Err(e) = rpc_call.validate() {
         tracing::error!("RPC validation error [id={}]: {}", req_id, e);
-        account_release(account_client.clone(), &ledger_id).await;
         let res: JsonRpcResponse<()> =
             JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {e}"));
         return Ok(warp::reply::json(&res));
     }
+    let ctx = account_hold(auth, account_client.clone(), 1, &rpc_call.operation()).await?;
+    let ledger_id = ctx.ledger_id.clone();
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
     let client_id = ctx.kms_tenant;
 

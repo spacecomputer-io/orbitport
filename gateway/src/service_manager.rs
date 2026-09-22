@@ -7,16 +7,24 @@ use crate::types::{GatewayError, ServiceHandler, ServiceRequest, ServiceResponse
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
 pub struct ServiceManager {
     auth_client: AuthPluginClient<Channel>,
-    trng_svc: TrngService,
+    /// None when cTRNG is off: connecting at startup would block the gateway
+    trng_svc: Option<TrngService>,
 }
 
 impl ServiceManager {
-    pub async fn new(auth_url: &str, masterseed_url: &str) -> Result<ServiceManager, GatewayError> {
-        let masterseed_client = MasterSeedPluginClient::connect(masterseed_url.to_string())
-            .await
-            .map_err(|e| GatewayError::ServiceConnectionError(e.to_string()))?;
-
-        let trng_svc = TrngService::new(masterseed_client);
+    pub async fn new(
+        auth_url: &str,
+        masterseed_url: Option<&str>,
+    ) -> Result<ServiceManager, GatewayError> {
+        let trng_svc = match masterseed_url {
+            Some(url) => {
+                let masterseed_client = MasterSeedPluginClient::connect(url.to_string())
+                    .await
+                    .map_err(|e| GatewayError::ServiceConnectionError(e.to_string()))?;
+                Some(TrngService::new(masterseed_client))
+            }
+            None => None,
+        };
 
         let auth_client = AuthPluginClient::connect(auth_url.to_string())
             .await
@@ -38,7 +46,9 @@ impl ServiceManager {
     pub async fn handle(&self, svc_req: ServiceRequest) -> Result<ServiceResponse, GatewayError> {
         match svc_req.service {
             ref service if service == "trng" => {
-                let mut svc = self.trng_svc.clone();
+                let Some(mut svc) = self.trng_svc.clone() else {
+                    return Err(GatewayError::ServiceNotFoundError(service.clone()));
+                };
                 let response = svc.handle(svc_req).await?;
                 Ok(response)
             }

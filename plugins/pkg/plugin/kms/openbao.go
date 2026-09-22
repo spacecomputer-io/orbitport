@@ -16,6 +16,7 @@ type openBaoClient struct {
 	*openbao.Client
 	baseURL       string
 	ethereumMount string
+	keyStoreMount string
 	kvMount       string
 	pqcMount      string
 	transitMount  string
@@ -85,11 +86,13 @@ type pqcDecapsulateInfo struct {
 }
 
 func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
+	cfg = withKMSConfigDefaults(cfg)
 	logger.Infof(
-		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
+		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s key_store_mount=%s ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
 		strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		cfg.TransitMount,
 		cfg.KVMount,
+		cfg.KeyStoreMount,
 		cfg.EthereumMount,
 		cfg.PQCMount,
 		cfg.TimeoutSecs,
@@ -100,6 +103,7 @@ func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 		}, logger),
 		baseURL:       strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		ethereumMount: cfg.EthereumMount,
+		keyStoreMount: cfg.KeyStoreMount,
 		kvMount:       cfg.KVMount,
 		pqcMount:      cfg.PQCMount,
 		transitMount:  cfg.TransitMount,

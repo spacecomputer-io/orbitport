@@ -119,7 +119,7 @@ async fn hold_success_returns_ledger_id() {
         .hold(HoldRequest {
             client_id: "client-1".to_string(),
             units: 1,
-            operation: "trng".to_string(),
+            operation: "kms.Sign:ED25519".to_string(),
             jti: String::new(),
         })
         .await
@@ -140,7 +140,7 @@ async fn hold_insufficient_credits_maps_to_failed_precondition() {
         .hold(HoldRequest {
             client_id: "client-1".to_string(),
             units: 1,
-            operation: "trng".to_string(),
+            operation: "kms.Sign:ED25519".to_string(),
             jti: String::new(),
         })
         .await
@@ -159,7 +159,7 @@ async fn hold_unavailable_propagates() {
         .hold(HoldRequest {
             client_id: "client-1".to_string(),
             units: 1,
-            operation: "trng".to_string(),
+            operation: "kms.Sign:ED25519".to_string(),
             jti: String::new(),
         })
         .await

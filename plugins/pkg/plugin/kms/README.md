@@ -2,12 +2,13 @@
 
 Multi-tenant Key Management Service. Wraps an OpenBao backend behind a small,
 provider-agnostic gRPC contract so the gateway can offer encrypt / decrypt /
-sign / key-agreement / data-key / key-rotation operations to clients without
-leaking the underlying engine.
+sign / key-agreement / data-key / key-rotation operations and a simple
+agent-oriented key-store to clients without leaking the underlying engine.
 
 ## Overview
 
-Implements `KmsPlugin` (`proto/plugins/kms.proto`) with eight RPCs:
+Implements `KmsPlugin` (`proto/plugins/kms.proto`) with crypto RPCs and
+key-store RPCs:
 
 - `CreateKey(alias, scheme, key_spec, key_usage, …)` — provisions a new key
   in the chosen provider and persists its metadata. Returns a stable
@@ -35,10 +36,18 @@ Implements `KmsPlugin` (`proto/plugins/kms.proto`) with eight RPCs:
   fresh data key as `{plaintext, ciphertext_blob}` so callers can do
   envelope encryption (Transit only).
 - `RotateKey(key_id)` — bumps the OpenBao key version (Transit only).
+- `Put(name, secret)` — stores or overwrites an arbitrary JSON secret in the
+  KMS key-store under the authenticated client.
+- `Get(name)` — returns the stored JSON object for a key-store entry owned by
+  the authenticated client.
+- `List(prefix)` / `Delete(name)` — list or delete key-store entries owned by
+  the authenticated client.
 
-The gateway-facing service proto (`proto/services/kms.proto`) mirrors these
-RPCs and adds `GetCapabilities`, which the gateway answers locally without a
-plugin round-trip — it advertises the static capability matrix below.
+The gateway-facing service proto (`proto/services/kms.proto`) covers the
+consumer-facing crypto message shapes and adds `GetCapabilities`, which the
+gateway answers locally without a plugin round-trip. Key-store JSON-RPC request
+shapes live in the gateway adapter, while the internal plugin gRPC contract is
+defined in `proto/plugins/kms.proto`.
 
 ## Providers
 
@@ -109,6 +118,47 @@ Aliases are user-chosen, validated to `[A-Za-z0-9._-]{1,128}`, and may not
 start with the reserved `kms:` prefix. The canonical external identifier is
 always `kms:<alias>`; both forms resolve to the same backend key.
 
+## Key-store
+
+The key-store is for agentic workloads that need a simple place to persist and
+retrieve arbitrary JSON secrets, API tokens, and agent credentials through
+Orbitport KMS. Secrets are treated as opaque JSON objects and are returned
+without numeric precision loss. It is separate from operational KMS metadata:
+
+- **Storage path** — OpenBao KV v2 mount `ORBITPORT_KMS_KEY_STORE_MOUNT`
+  (default `key-store`) under `owners/<tenant>/<name>`.
+- **Tenant scope** — the same authenticated `client_id` model as the existing
+  KMS. The plugin hashes it into `tenant_<sha256(client_id)[:16]>`.
+- **Names** — slash-separated paths such as `github/prod`; each segment must
+  match `[A-Za-z0-9._-]+`. `.` and `..` are rejected, and the full name is
+  capped at 256 characters.
+- **Tenant isolation** — enforced by the authenticated `client_id`, validated
+  slash-separated names, and OpenBao paths constructed as
+  `owners/<tenant>/<name>` after each path segment is revalidated.
+- **Retrieval** — `Get` reads the stored JSON object directly from the
+  authenticated client's key-store namespace.
+- **Versioning** — `Put` uses KV v2 and returns the new version. A second `Put`
+  with the same name intentionally overwrites the stored value with a new
+  version.
+- **Listing** — `List` performs one OpenBao LIST at the requested prefix and
+  returns only immediate entries and folders. Folder results end with `/` so
+  callers can request that folder as the next prefix when they want to walk
+  deeper.
+
+Authorization is enforced in the KMS plugin with Cedar. The compose stacks mount
+the default owner policy file into the KMS container at
+`/etc/orbitport/kms/key_store_default.cedar`; Kubernetes deployments should
+provide the same file through a ConfigMap. Configure
+`ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` to point at that file or a custom
+policy file. If the path is unset, key-store requests are denied by the empty
+policy set. The default policy adds policy control on top of path-based tenant
+isolation and permits the authenticated owner to call
+`kms_keystore.Put`, `kms_keystore.Get`, `kms_keystore.List`, and
+`kms_keystore.Delete` on their own key-store
+namespace. Operators can copy the default policy and add Cedar `forbid`
+policies, which override permits, to block operations such as deleting
+production entries.
+
 ## Capabilities
 
 `GetCapabilities` (gateway-side) advertises the supported scheme matrix:
@@ -126,8 +176,8 @@ scheme, signing, and key agreement capability entries are tagged
 ## Dependencies
 
 This plugin requires a reachable OpenBao instance with the Transit, KV v2,
-Ethereum, and PQC mounts already provisioned for the schemes you use. Both
-compose stacks (`docker-compose.yaml`, `dev.docker-compose.yaml`) ship the full stack:
+key-store KV v2, Ethereum, and PQC mounts already provisioned for the schemes
+you use. Both compose stacks (`docker-compose.yaml`, `dev.docker-compose.yaml`) ship the full stack:
 `openbao` (dev mode), `openbao-bootstrap` (one-shot init of mounts and
 tokens), `openbao-proxy` (handles auth headers in front of OpenBao), and
 this plugin as `plugin-kms`. The compose stacks build the Ethereum plugin and

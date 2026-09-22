@@ -17,6 +17,10 @@ service KmsPlugin {
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+  rpc KeyStorePut(KeyStorePutRequest) returns (KeyStorePutResponse);
+  rpc KeyStoreGet(KeyStoreGetRequest) returns (KeyStoreGetResponse);
+  rpc KeyStoreList(KeyStoreListRequest) returns (KeyStoreListResponse);
+  rpc KeyStoreDelete(KeyStoreDeleteRequest) returns (KeyStoreDeleteResponse);
 }
 
 message Tag {
@@ -137,4 +141,44 @@ message RotateKeyRequest {
 
 message RotateKeyResponse {
   KeyMetadata key_metadata = 1;
+}
+
+message KeyStorePutRequest {
+  string name = 1;
+  string secret_json = 2;
+  string client_id = 3;
+}
+
+message KeyStorePutResponse {
+  string name = 1;
+  uint32 version = 2;
+}
+
+message KeyStoreGetRequest {
+  string name = 1;
+  string client_id = 2;
+}
+
+message KeyStoreGetResponse {
+  string name = 1;
+  string secret_json = 2;
+}
+
+message KeyStoreListRequest {
+  string client_id = 1;
+  optional string prefix = 2;
+}
+
+message KeyStoreListResponse {
+  repeated string names = 1;
+}
+
+message KeyStoreDeleteRequest {
+  string name = 1;
+  string client_id = 2;
+}
+
+message KeyStoreDeleteResponse {
+  string name = 1;
+  reserved 2;
 }
