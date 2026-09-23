@@ -46,7 +46,7 @@ func TestCreateKeyStoresMetadata(t *testing.T) {
 			createdType = body["type"]
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
-			_, _ = w.Write([]byte(`{"data":{"latest_version":3,"type":"aes256-gcm96"}}`))
+			_, _ = w.Write([]byte(`{"data":{"latest_version":3,"type":"aes256-gcm96","keys":{"1":1700000000,"2":1700000100,"3":1700000200}}}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
 			_ = json.NewDecoder(r.Body).Decode(&kvBody)
 			_, _ = w.Write([]byte(`{}`))
@@ -139,6 +139,7 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 	}
 
 	var kvBody map[string]any
+	const oldPublicKey = "-----BEGIN PUBLIC KEY-----old-----END PUBLIC KEY-----"
 	const publicKey = "-----BEGIN PUBLIC KEY-----demo-----END PUBLIC KEY-----"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +149,7 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
 			_, _ = w.Write([]byte(`{}`))
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
-			_, _ = w.Write([]byte(`{"data":{"latest_version":1,"type":"ecdsa-p256","public_key":"` + publicKey + `"}}`))
+			_, _ = w.Write([]byte(`{"data":{"latest_version":2,"type":"ecdsa-p256","keys":{"1":{"name":"P-256","public_key":"` + oldPublicKey + `","creation_time":"2024-01-01T00:00:00Z"},"2":{"name":"P-256","public_key":"` + publicKey + `","creation_time":"2024-01-02T00:00:00Z"}}}}`))
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitSignKeyID):
 			_ = json.NewDecoder(r.Body).Decode(&kvBody)
 			_, _ = w.Write([]byte(`{}`))
@@ -177,6 +178,9 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("CreateKey returned error: %v", err)
+	}
+	if resp.KeyMetadata.PrimaryVersion != 2 {
+		t.Fatalf("expected primary version 2, got %+v", resp.KeyMetadata)
 	}
 	if resp.KeyMetadata.PublicKey == nil || *resp.KeyMetadata.PublicKey != publicKey {
 		t.Fatalf("expected transit public key in response, got %+v", resp.KeyMetadata)
