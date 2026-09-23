@@ -41,7 +41,7 @@ func TestPlugin_Hold_Success(t *testing.T) {
 	defer srv.Close()
 
 	resp, err := plugin.Hold(context.Background(), &proto.HoldRequest{
-		ClientId: "client-1", Units: 1, Operation: "trng",
+		ClientId: "client-1", Units: 1, Operation: "kms.Sign:ED25519",
 	})
 	require.NoError(t, err)
 	require.True(t, resp.Ok)
@@ -57,7 +57,7 @@ func TestPlugin_Hold_InsufficientCreditsMapsToFailedPrecondition(t *testing.T) {
 	defer srv.Close()
 
 	resp, err := plugin.Hold(context.Background(), &proto.HoldRequest{
-		ClientId: "client-1", Units: 1, Operation: "trng",
+		ClientId: "client-1", Units: 1, Operation: "kms.Sign:ED25519",
 	})
 	require.Error(t, err)
 	require.Nil(t, resp)
@@ -75,7 +75,7 @@ func TestPlugin_Hold_TransportFailureMapsToUnavailable(t *testing.T) {
 	defer srv.Close()
 
 	_, err := plugin.Hold(context.Background(), &proto.HoldRequest{
-		ClientId: "client-1", Units: 1, Operation: "trng",
+		ClientId: "client-1", Units: 1, Operation: "kms.Sign:ED25519",
 	})
 	require.Error(t, err)
 	st, ok := status.FromError(err)

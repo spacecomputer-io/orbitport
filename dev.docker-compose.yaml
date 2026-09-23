@@ -171,6 +171,7 @@ services:
     restart: "no"
     environment:
       - OPENBAO_ADDR=http://openbao:8200
+      - OPENBAO_KEY_STORE_MOUNT=key-store
     volumes:
       - openbao-plugins:/openbao/plugins
       - ./docker/openbao:/orbitport/docker/openbao:ro
@@ -191,6 +192,7 @@ services:
     restart: "no"
     environment:
       - OPENBAO_ADDR=http://openbao-1:8200
+      - OPENBAO_KEY_STORE_MOUNT=key-store
     volumes:
       - openbao-plugins:/openbao/plugins
       - ./docker/openbao:/orbitport/docker/openbao:ro
@@ -211,6 +213,7 @@ services:
     restart: "no"
     environment:
       - OPENBAO_ADDR=http://openbao-2:8200
+      - OPENBAO_KEY_STORE_MOUNT=key-store
     volumes:
       - openbao-plugins:/openbao/plugins
       - ./docker/openbao:/orbitport/docker/openbao:ro
@@ -362,8 +365,12 @@ services:
       - ORBITPORT_KMS_OPENBAO_PROXY_URL=http://openbao-proxy:8200
       - ORBITPORT_KMS_TRANSIT_MOUNT=transit
       - ORBITPORT_KMS_KV_MOUNT=orbitport-kv
+      - ORBITPORT_KMS_KEY_STORE_MOUNT=key-store
+      - ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH=/etc/orbitport/kms/key_store_default.cedar
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
       - ORBITPORT_KMS_PQC_MOUNT=pqc
+    volumes:
+      - ./plugins/pkg/plugin/kms/cedar/key_store_default.cedar:/etc/orbitport/kms/key_store_default.cedar:ro
     ports:
       - 9004:9000
     depends_on:
@@ -512,6 +519,9 @@ services:
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
+      # On locally so the beacon e2e tests keep working
+      - ORBITPORT_CTRNG_ENABLED=${ORBITPORT_CTRNG_ENABLED:-true}
+      - ORBITPORT_RPC_BODY_MAX_BYTES=65536
       - ORBITPORT_THRESHOLD_ENABLED=${ORBITPORT_THRESHOLD_ENABLED:-true}
       - ORBITPORT_THRESHOLD_PLUGIN=http://plugin-threshold:50005
       - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001

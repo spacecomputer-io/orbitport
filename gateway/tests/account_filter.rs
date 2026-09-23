@@ -14,7 +14,9 @@ use tonic::transport::{Channel, Server};
 use tonic::{Request, Response, Status};
 use warp::{Filter, Rejection, Reply, http::StatusCode};
 
-use gateway::filters::{AuthContext, AuthContextWithHold, account_release, with_account_hold};
+use gateway::filters::{
+    AuthContext, AuthContextWithHold, account_hold, account_release, with_account_hold,
+};
 use gateway::proto::plugins::account::{
     HoldRequest, HoldResponse, ReleaseRequest, ReleaseResponse, SettleRequest, SettleResponse,
     account_plugin_client::AccountPluginClient,
@@ -36,8 +38,8 @@ enum HoldBehavior {
 struct MockAccountPlugin {
     hold_calls: Arc<AtomicU32>,
     release_calls: Arc<AtomicU32>,
-    /// (client_id, jti) of the last Hold.
-    last_hold: Arc<Mutex<(String, String)>>,
+    /// (client_id, jti, operation) of the last Hold.
+    last_hold: Arc<Mutex<(String, String, String)>>,
     behavior: HoldBehavior,
 }
 
@@ -47,7 +49,7 @@ impl AccountPlugin for MockAccountPlugin {
         self.hold_calls.fetch_add(1, Ordering::SeqCst);
         {
             let body = req.into_inner();
-            *self.last_hold.lock().unwrap() = (body.client_id, body.jti);
+            *self.last_hold.lock().unwrap() = (body.client_id, body.jti, body.operation);
         }
         match self.behavior {
             HoldBehavior::Ok => Ok(Response::new(HoldResponse {
@@ -106,11 +108,11 @@ async fn start_mock_plugin_capturing(
     SocketAddr,
     Arc<AtomicU32>,
     Arc<AtomicU32>,
-    Arc<Mutex<(String, String)>>,
+    Arc<Mutex<(String, String, String)>>,
 ) {
     let hold_calls = Arc::new(AtomicU32::new(0));
     let release_calls = Arc::new(AtomicU32::new(0));
-    let last_hold = Arc::new(Mutex::new((String::new(), String::new())));
+    let last_hold = Arc::new(Mutex::new((String::new(), String::new(), String::new())));
     let plugin = MockAccountPlugin {
         hold_calls: hold_calls.clone(),
         release_calls: release_calls.clone(),
@@ -218,7 +220,12 @@ async fn filter_insufficient_credits_returns_402() {
     let client = connect(addr).await;
 
     let route = warp::path("test")
-        .and(with_account_hold(synthetic_auth(), Some(client), 1, "trng"))
+        .and(with_account_hold(
+            synthetic_auth(),
+            Some(client),
+            1,
+            "kms.GetCapabilities",
+        ))
         .and_then(ok_handler)
         .recover(handle_rejection);
 
@@ -236,7 +243,12 @@ async fn filter_plugin_unreachable_returns_503() {
     let client = AccountPluginClient::new(channel);
 
     let route = warp::path("test")
-        .and(with_account_hold(synthetic_auth(), Some(client), 1, "trng"))
+        .and(with_account_hold(
+            synthetic_auth(),
+            Some(client),
+            1,
+            "kms.GetCapabilities",
+        ))
         .and_then(ok_handler)
         .recover(handle_rejection);
 
@@ -250,7 +262,12 @@ async fn filter_no_client_passes_through_and_does_not_release() {
     // With the account plugin unset the handler must still run, with an
     // empty ledger_id.
     let route = warp::path("test")
-        .and(with_account_hold(synthetic_auth(), None, 1, "trng"))
+        .and(with_account_hold(
+            synthetic_auth(),
+            None,
+            1,
+            "kms.GetCapabilities",
+        ))
         .and_then(|ctx: AuthContextWithHold| async move {
             assert!(
                 ctx.ledger_id.is_empty(),
@@ -279,7 +296,12 @@ async fn filter_release_fires_when_handler_errors_after_hold() {
     // Mirrors what server.rs does on service failure.
     let release_client_filter = warp::any().map(move || release_client.clone());
     let route = warp::path("test")
-        .and(with_account_hold(synthetic_auth(), Some(client), 1, "trng"))
+        .and(with_account_hold(
+            synthetic_auth(),
+            Some(client),
+            1,
+            "kms.GetCapabilities",
+        ))
         .and(release_client_filter)
         .and_then(
             |ctx: AuthContextWithHold, rc: AccountPluginClient<Channel>| async move {
@@ -311,7 +333,7 @@ async fn filter_revoked_credential_returns_401() {
             synthetic_auth_as("acct-1", "revoked-jti"),
             Some(client),
             1,
-            "trng",
+            "kms.GetCapabilities",
         ))
         .and_then(ok_handler)
         .recover(handle_rejection);
@@ -335,7 +357,7 @@ async fn filter_pat_forwards_client_id_unstripped_with_jti() {
             synthetic_auth_as("acct-abc@clients", "pat-jti-9"),
             Some(client),
             1,
-            "trng",
+            "kms.GetCapabilities",
         ))
         .and_then(ok_handler)
         .recover(handle_rejection);
@@ -343,12 +365,44 @@ async fn filter_pat_forwards_client_id_unstripped_with_jti() {
     let resp = warp::test::request().path("/test").reply(&route).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (client_id, jti) = last_hold.lock().unwrap().clone();
+    let (client_id, jti, _) = last_hold.lock().unwrap().clone();
     assert_eq!(
         client_id, "acct-abc@clients",
         "PAT sub must not be stripped"
     );
     assert_eq!(jti, "pat-jti-9");
+}
+
+/// The RPC route holds from the handler with a tag derived from the validated
+/// body; that runtime tag must reach Hold verbatim.
+#[tokio::test]
+async fn account_hold_forwards_dynamic_operation_tag() {
+    let (addr, hold_calls, _, last_hold) = start_mock_plugin_capturing(HoldBehavior::Ok).await;
+    let client = connect(addr).await;
+
+    let req: gateway::services::jrpc::JsonRpcRequest = serde_json::from_value(serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "kms.Sign",
+        "params": {"KeyId": "kms:abc", "Message": "aGk=", "SigningAlgorithm": "ED25519"}
+    }))
+    .unwrap();
+    req.call.validate().unwrap();
+
+    let auth = AuthContext {
+        jwt: "test-jwt".to_string(),
+        client_id: "acct-1".to_string(),
+        jti: "pat-jti-1".to_string(),
+        kms_tenant: String::new(),
+    };
+    let ctx = account_hold(auth, Some(client), 1, &req.call.operation())
+        .await
+        .unwrap();
+
+    assert_eq!(ctx.ledger_id, "ledger-warp");
+    assert_eq!(hold_calls.load(Ordering::SeqCst), 1);
+    let (_, _, operation) = last_hold.lock().unwrap().clone();
+    assert_eq!(operation, "kms.Sign:ED25519");
 }
 
 /// Legacy Auth0 M2M tokens (empty jti) keep the existing `@clients` stripping.
@@ -362,7 +416,7 @@ async fn filter_legacy_m2m_strips_clients_suffix() {
             synthetic_auth_as("cid-123@clients", ""),
             Some(client),
             1,
-            "trng",
+            "kms.GetCapabilities",
         ))
         .and_then(ok_handler)
         .recover(handle_rejection);
@@ -370,7 +424,7 @@ async fn filter_legacy_m2m_strips_clients_suffix() {
     let resp = warp::test::request().path("/test").reply(&route).await;
     assert_eq!(resp.status(), StatusCode::OK);
 
-    let (client_id, jti) = last_hold.lock().unwrap().clone();
+    let (client_id, jti, _) = last_hold.lock().unwrap().clone();
     assert_eq!(client_id, "cid-123");
     assert!(jti.is_empty());
 }
@@ -387,7 +441,7 @@ async fn filter_pat_ignores_token_tenant_and_uses_hold() {
             synthetic_auth_claiming("acct-1", "pat-jti-1", "attacker-chosen-tenant"),
             Some(client),
             1,
-            "trng",
+            "kms.GetCapabilities",
         ))
         .and_then(tenant_handler)
         .recover(handle_rejection);
@@ -411,7 +465,7 @@ async fn filter_pat_without_hold_tenant_returns_503() {
             synthetic_auth_claiming("acct-1", "pat-jti-1", "attacker-chosen-tenant"),
             Some(client),
             1,
-            "trng",
+            "kms.GetCapabilities",
         ))
         .and_then(tenant_handler)
         .recover(handle_rejection);
@@ -429,7 +483,7 @@ async fn filter_pat_without_account_plugin_returns_503() {
             synthetic_auth_claiming("acct-1", "pat-jti-1", "attacker-chosen-tenant"),
             None,
             1,
-            "trng",
+            "kms.GetCapabilities",
         ))
         .and_then(tenant_handler)
         .recover(handle_rejection);
@@ -447,7 +501,7 @@ async fn filter_legacy_without_account_plugin_keeps_token_tenant() {
             synthetic_auth_claiming("cid-123@clients", "", "cid-123@clients"),
             None,
             1,
-            "trng",
+            "kms.GetCapabilities",
         ))
         .and_then(tenant_handler)
         .recover(handle_rejection);

@@ -27,7 +27,8 @@ ARG BUILD_TARGET=plugin
 
 RUN apk --no-cache add curl \
     && addgroup -S appgroup \
-    && adduser -S -G appgroup appuser
+    && adduser -S -G appgroup appuser \
+    && mkdir -p /etc/orbitport/kms
 
 COPY --from=builder --chown=appuser:appgroup /app/bin/${BUILD_TARGET} /app
 

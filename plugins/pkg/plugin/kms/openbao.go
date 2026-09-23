@@ -2,10 +2,12 @@ package kms
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +18,7 @@ type openBaoClient struct {
 	*openbao.Client
 	baseURL       string
 	ethereumMount string
+	keyStoreMount string
 	kvMount       string
 	pqcMount      string
 	transitMount  string
@@ -45,9 +48,14 @@ type pluginTag struct {
 }
 
 type transitKeyInfo struct {
-	LatestVersion uint32 `json:"latest_version"`
-	Type          string `json:"type"`
-	PublicKey     string `json:"public_key"`
+	LatestVersion uint32                     `json:"latest_version"`
+	Type          string                     `json:"type"`
+	PublicKey     string                     `json:"public_key"`
+	Keys          map[string]json.RawMessage `json:"keys"`
+}
+
+type transitKeyVersionInfo struct {
+	PublicKey string `json:"public_key"`
 }
 
 type ethereumKeyInfo struct {
@@ -85,11 +93,13 @@ type pqcDecapsulateInfo struct {
 }
 
 func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
+	cfg = withKMSConfigDefaults(cfg)
 	logger.Infof(
-		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
+		"initializing OpenBao client with base_url=%s transit_mount=%s kv_mount=%s key_store_mount=%s ethereum_mount=%s pqc_mount=%s timeout_secs=%d",
 		strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		cfg.TransitMount,
 		cfg.KVMount,
+		cfg.KeyStoreMount,
 		cfg.EthereumMount,
 		cfg.PQCMount,
 		cfg.TimeoutSecs,
@@ -100,6 +110,7 @@ func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 		}, logger),
 		baseURL:       strings.TrimRight(cfg.OpenBaoProxyURL, "/"),
 		ethereumMount: cfg.EthereumMount,
+		keyStoreMount: cfg.KeyStoreMount,
 		kvMount:       cfg.KVMount,
 		pqcMount:      cfg.PQCMount,
 		transitMount:  cfg.TransitMount,
@@ -120,6 +131,50 @@ func (m *keyMetadataRecord) backendKey() string {
 		return m.ProviderKey
 	}
 	return m.TransitKey
+}
+
+func (t *transitKeyInfo) exportedPublicKey() string {
+	if t.PublicKey != "" {
+		return t.PublicKey
+	}
+	if len(t.Keys) == 0 {
+		return ""
+	}
+
+	if t.LatestVersion != 0 {
+		if publicKey := transitVersionPublicKey(t.Keys[strconv.FormatUint(uint64(t.LatestVersion), 10)]); publicKey != "" {
+			return publicKey
+		}
+	}
+
+	latestVersion := -1
+	var latestPublicKey string
+	for version, raw := range t.Keys {
+		publicKey := transitVersionPublicKey(raw)
+		if publicKey == "" {
+			continue
+		}
+		versionNum, err := strconv.Atoi(version)
+		if err != nil {
+			continue
+		}
+		if versionNum > latestVersion {
+			latestVersion = versionNum
+			latestPublicKey = publicKey
+		}
+	}
+	return latestPublicKey
+}
+
+func transitVersionPublicKey(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var version transitKeyVersionInfo
+	if err := json.Unmarshal(raw, &version); err != nil {
+		return ""
+	}
+	return version.PublicKey
 }
 
 func (c *openBaoClient) createTransitKey(ctx context.Context, name, keyType string) (*transitKeyInfo, error) {

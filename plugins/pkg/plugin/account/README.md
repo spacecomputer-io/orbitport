@@ -59,13 +59,23 @@ set `ORBITPORT_ACCOUNT_ALLOW_INSECURE=true`. The plugin refuses to start
 otherwise — the Auth0 M2M bearer would leak in plaintext. Never enable in
 production.
 
-## MVP simplifications
+## Operation tags
 
-- `operation` tag sent to the dashboard is the HTTP-method bucket
-  (`rpc` / `service_get` / `service_post`), not the semantic op
-  (`trng` / `kms_sign`). The warp filter chain doesn't surface the matched
-  path at hold time today. Tracked as a TODO in `gateway/src/server.rs`.
-- Allowlist of routes that bypass the credit hold is `/healthz`. There's no
-  `/version` route in the gateway.
+The gateway parses and validates a JSON-RPC request before asking the account
+plugin to hold credits. Invalid or malformed requests never create a hold.
+Validated requests use stable operation tags, which the dashboard uses for the
+ledger description and per-operation price lookup:
+
+| RPC method | Hold tag |
+| --- | --- |
+| `ctrng.Get` and `/api/v1/services/*` | `ctrng.Get` |
+| `kms.GetCapabilities` | `kms.GetCapabilities` |
+| `kms.CreateKey` | `kms.CreateKey:<KeySpec>` |
+| `kms.Sign` | `kms.Sign:<SigningAlgorithm>` |
+| `kms.Encrypt`, `kms.Decrypt`, `kms.GenerateDataKey`, `kms.RotateKey`, `kms.Encapsulate`, `kms.Decapsulate` | Method name unchanged |
+| `kms_keystore.Put`, `kms_keystore.Get`, `kms_keystore.List`, `kms_keystore.Delete` | Method name unchanged |
+| `kms_threshold.CoordinateDKG` | `kms_threshold.CoordinateDKG` |
+
+`/healthz` is the only public route that bypasses the credit hold.
 
 Configuration: see [CONTEXT.md → Plugin: `account`](../../../../CONTEXT.md#plugin-account).

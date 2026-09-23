@@ -51,6 +51,7 @@ This will start the gateway and all plugins in docker containers, as well as moc
 - a one-shot bootstrap that enables:
   - `transit`
   - `orbitport-kv` (KV v2)
+  - `key-store` (KV v2 for KMS key-store put/get/delete)
   - `ethereum-secrets-plugin` at `ethereum`
 
 The dev stack expects a plugin repo to exist at `../openbao-eth-plugin` by default. If your checkout lives elsewhere, set:
@@ -122,6 +123,49 @@ curl -X POST http://localhost:8080/api/v1/rpc \
       "Message": "Hello Orbitport",
       "SigningAlgorithm": "ETHEREUM_SECP256K1",
       "MessageType": "EIP191"
+    }
+  }'
+```
+
+Store an arbitrary JSON secret in the KMS key-store:
+
+Key-store names are slash-separated, capped at 256 characters, and each segment
+must use `[A-Za-z0-9._-]+`. `List` returns only immediate entries and folders
+for the requested prefix; folder results end with `/` so callers can walk deeper
+by sending that value as the next `Prefix`. Secrets are treated as opaque JSON
+objects and are returned without numeric precision loss.
+
+```bash
+curl -X POST http://localhost:8080/api/v1/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 51,
+    "method": "kms_keystore.Put",
+    "params": {
+      "Name": "github/prod",
+      "Secret": {
+        "api_key": "replace-me"
+      }
+    }
+  }'
+```
+
+Retrieve the stored key-store entry:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 52,
+    "method": "kms_keystore.Get",
+    "params": {
+      "Name": "github/prod"
     }
   }'
 ```

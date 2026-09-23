@@ -19,9 +19,10 @@ import (
 type Plugin struct {
 	proto.UnimplementedKmsPluginServer
 
-	client    *openBaoClient
-	now       func() time.Time
-	providers map[string]kmsProvider
+	client             *openBaoClient
+	now                func() time.Time
+	providers          map[string]kmsProvider
+	keyStoreAuthorizer *keyStoreAuthorizer
 }
 
 var logger = utils.GetLogger("orbitport:kms")
@@ -30,31 +31,46 @@ var reservedKmsRe = regexp.MustCompile(`^kms:`)
 
 func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
+	cfg = withKMSConfigDefaults(cfg)
 	if cfg.OpenBaoProxyURL == "" {
 		return nil, fmt.Errorf("ORBITPORT_KMS_OPENBAO_PROXY_URL is required")
 	}
 	logger.Infof(
-		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, ethereum mount=%s, pqc mount=%s",
+		"creating KMS plugin with proxy url=%s, transit mount=%s, kv mount=%s, key-store mount=%s, ethereum mount=%s, pqc mount=%s",
 		cfg.OpenBaoProxyURL,
 		cfg.TransitMount,
 		cfg.KVMount,
+		cfg.KeyStoreMount,
 		cfg.EthereumMount,
 		cfg.PQCMount,
 	)
-	return newPlugin(cfg, newOpenBaoClient(cfg)), nil
+	return newPluginWithConfig(cfg, newOpenBaoClient(cfg))
 }
 
 func newPlugin(cfg *kmsConfig, client *openBaoClient) *Plugin {
-	_ = cfg
+	plugin, err := newPluginWithConfig(cfg, client)
+	if err != nil {
+		panic(err)
+	}
+	return plugin
+}
+
+func newPluginWithConfig(cfg *kmsConfig, client *openBaoClient) (*Plugin, error) {
+	cfg = withKMSConfigDefaults(cfg)
+	authorizer, err := newKeyStoreAuthorizer(cfg)
+	if err != nil {
+		return nil, err
+	}
 	return &Plugin{
-		client: client,
-		now:    time.Now,
+		client:             client,
+		now:                time.Now,
+		keyStoreAuthorizer: authorizer,
 		providers: map[string]kmsProvider{
 			schemeTransit:  newTransitProvider(client),
 			schemeEthereum: newEthereumProvider(client),
 			schemePQC:      newPQCProvider(client),
 		},
-	}
+	}, nil
 }
 
 func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto.EncryptResponse, error) {
@@ -262,6 +278,42 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 
 	return &proto.CreateKeyResponse{
 		KeyMetadata: toProtoMetadata(record),
+	}, nil
+}
+
+func (p *Plugin) GetKeyMetadata(ctx context.Context, req *proto.GetKeyMetadataRequest) (*proto.GetKeyMetadataResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
+	logger.Debugf("GetKeyMetadata request received for key_id=%s", req.KeyId)
+	metadata, _, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	if err != nil {
+		logger.Warnf("GetKeyMetadata failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	logger.Debugf("GetKeyMetadata completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	return &proto.GetKeyMetadataResponse{
+		KeyMetadata: toProtoMetadata(metadata),
+	}, nil
+}
+
+func (p *Plugin) GetPublicKey(ctx context.Context, req *proto.GetPublicKeyRequest) (*proto.GetPublicKeyResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
+	logger.Debugf("GetPublicKey request received for key_id=%s", req.KeyId)
+	metadata, _, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	if err != nil {
+		logger.Warnf("GetPublicKey failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	if metadata.PublicKey == "" {
+		logger.Warnf("GetPublicKey rejected key without public key key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, status.Error(codes.FailedPrecondition, "key does not have a public key")
+	}
+	logger.Debugf("GetPublicKey completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	return &proto.GetPublicKeyResponse{
+		PublicKey: metadata.PublicKey,
 	}, nil
 }
 

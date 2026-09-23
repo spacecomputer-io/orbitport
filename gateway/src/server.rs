@@ -7,8 +7,8 @@ use crate::types::GatewayError;
 
 use crate::auth::pat_issue_route;
 use crate::filters::{
-    AuthContextWithHold, RateLimiter, account_release, account_settle, with_account_hold,
-    with_auth, with_rate_limiter,
+    AuthContext, AuthContextWithHold, RateLimiter, account_hold, account_release, account_settle,
+    with_account_hold, with_auth, with_rate_limiter,
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
@@ -31,6 +31,7 @@ pub async fn start(
     plugin_catalog: Arc<PluginCatalog>,
     limit: u32,
     limit_window: u64,
+    rpc_body_max_bytes: u64,
 ) {
     let rate_limiter = Arc::new(RateLimiter::new(limit, Duration::from_secs(limit_window))); // 100 requests per minute
 
@@ -61,7 +62,7 @@ pub async fn start(
             1,
             "rpc",
         ))
-        .and(warp::body::content_length_limit(1024))
+        .and(warp::body::content_length_limit(rpc_body_max_bytes))
         .and(warp::body::json())
         .and(warp::any().map(move || plugin_catalog.clone()))
         .and(warp::any().map(move || account_client_rpc.clone()))
@@ -239,7 +240,7 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
 }
 
 async fn handle_rpc(
-    ctx: AuthContextWithHold,
+    auth: AuthContext,
     body: JsonRpcRequest,
     plugin_catalog: Arc<PluginCatalog>,
     account_client: Option<AccountPluginClient<Channel>>,
@@ -247,14 +248,16 @@ async fn handle_rpc(
     tracing::debug!("Handling RPC request [id={}] {:?}", body.id, body);
     let req_id = body.id;
     let rpc_call = body.call;
-    let ledger_id = ctx.ledger_id.clone();
+    // Validate before holding, so an invalid request costs nothing and needs
+    // no release.
     if let Err(e) = rpc_call.validate() {
         tracing::error!("RPC validation error [id={}]: {}", req_id, e);
-        account_release(account_client.clone(), &ledger_id).await;
         let res: JsonRpcResponse<()> =
             JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {e}"));
         return Ok(warp::reply::json(&res));
     }
+    let ctx = account_hold(auth, account_client.clone(), 1, &rpc_call.operation()).await?;
+    let ledger_id = ctx.ledger_id.clone();
     const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
     let client_id = ctx.kms_tenant;
 

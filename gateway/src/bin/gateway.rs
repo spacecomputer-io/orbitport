@@ -27,7 +27,7 @@ struct Args {
     threshold_groups: String,
     #[cfg(feature = "ctrng")]
     #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
-    masterseed_plugin: String,
+    masterseed_plugin: Option<String>,
     /// Optional account plugin gRPC URL. When set, JWT-authenticated routes
     /// hold credits via the account plugin before serving the request and
     /// release on downstream failure.
@@ -43,6 +43,8 @@ struct Args {
     rate_limit: u32,
     #[clap(long, env = "ORBITPORT_RATE_LIMIT_WINDOW", default_value = "10")]
     rate_limit_window: u64,
+    #[clap(long, env = "ORBITPORT_RPC_BODY_MAX_BYTES", default_value = "65536")]
+    rpc_body_max_bytes: u64,
 }
 
 impl Args {
@@ -165,6 +167,7 @@ async fn main() -> Result<(), GatewayError> {
         plugin_catalog.clone(),
         args.rate_limit,
         args.rate_limit_window,
+        args.rpc_body_max_bytes,
     )
     .await;
 

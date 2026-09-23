@@ -52,7 +52,7 @@ func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyReq
 		Enabled:        true,
 		PrimaryVersion: transitInfo.LatestVersion,
 		CreatedAt:      now.UTC().Format(time.RFC3339),
-		PublicKey:      transitInfo.PublicKey,
+		PublicKey:      transitInfo.exportedPublicKey(),
 		Tags:           toRecordTags(req.Tags),
 	}, nil
 }
@@ -155,6 +155,6 @@ func (p *transitProvider) RotateKey(ctx context.Context, metadata *keyMetadataRe
 	}
 
 	metadata.PrimaryVersion = transitInfo.LatestVersion
-	metadata.PublicKey = transitInfo.PublicKey
+	metadata.PublicKey = transitInfo.exportedPublicKey()
 	return metadata, nil
 }

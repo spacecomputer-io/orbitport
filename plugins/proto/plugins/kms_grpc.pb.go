@@ -30,8 +30,14 @@ const (
 	KmsPlugin_Encapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Encapsulate"
 	KmsPlugin_Decapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Decapsulate"
 	KmsPlugin_CreateKey_FullMethodName       = "/kmsapi.KmsPlugin/CreateKey"
+	KmsPlugin_GetKeyMetadata_FullMethodName  = "/kmsapi.KmsPlugin/GetKeyMetadata"
+	KmsPlugin_GetPublicKey_FullMethodName    = "/kmsapi.KmsPlugin/GetPublicKey"
 	KmsPlugin_GenerateDataKey_FullMethodName = "/kmsapi.KmsPlugin/GenerateDataKey"
 	KmsPlugin_RotateKey_FullMethodName       = "/kmsapi.KmsPlugin/RotateKey"
+	KmsPlugin_KeyStorePut_FullMethodName     = "/kmsapi.KmsPlugin/KeyStorePut"
+	KmsPlugin_KeyStoreGet_FullMethodName     = "/kmsapi.KmsPlugin/KeyStoreGet"
+	KmsPlugin_KeyStoreList_FullMethodName    = "/kmsapi.KmsPlugin/KeyStoreList"
+	KmsPlugin_KeyStoreDelete_FullMethodName  = "/kmsapi.KmsPlugin/KeyStoreDelete"
 )
 
 // KmsPluginClient is the client API for KmsPlugin service.
@@ -44,8 +50,14 @@ type KmsPluginClient interface {
 	Encapsulate(ctx context.Context, in *EncapsulateRequest, opts ...grpc.CallOption) (*EncapsulateResponse, error)
 	Decapsulate(ctx context.Context, in *DecapsulateRequest, opts ...grpc.CallOption) (*DecapsulateResponse, error)
 	CreateKey(ctx context.Context, in *CreateKeyRequest, opts ...grpc.CallOption) (*CreateKeyResponse, error)
+	GetKeyMetadata(ctx context.Context, in *GetKeyMetadataRequest, opts ...grpc.CallOption) (*GetKeyMetadataResponse, error)
+	GetPublicKey(ctx context.Context, in *GetPublicKeyRequest, opts ...grpc.CallOption) (*GetPublicKeyResponse, error)
 	GenerateDataKey(ctx context.Context, in *GenerateDataKeyRequest, opts ...grpc.CallOption) (*GenerateDataKeyResponse, error)
 	RotateKey(ctx context.Context, in *RotateKeyRequest, opts ...grpc.CallOption) (*RotateKeyResponse, error)
+	KeyStorePut(ctx context.Context, in *KeyStorePutRequest, opts ...grpc.CallOption) (*KeyStorePutResponse, error)
+	KeyStoreGet(ctx context.Context, in *KeyStoreGetRequest, opts ...grpc.CallOption) (*KeyStoreGetResponse, error)
+	KeyStoreList(ctx context.Context, in *KeyStoreListRequest, opts ...grpc.CallOption) (*KeyStoreListResponse, error)
+	KeyStoreDelete(ctx context.Context, in *KeyStoreDeleteRequest, opts ...grpc.CallOption) (*KeyStoreDeleteResponse, error)
 }
 
 type kmsPluginClient struct {
@@ -116,6 +128,26 @@ func (c *kmsPluginClient) CreateKey(ctx context.Context, in *CreateKeyRequest, o
 	return out, nil
 }
 
+func (c *kmsPluginClient) GetKeyMetadata(ctx context.Context, in *GetKeyMetadataRequest, opts ...grpc.CallOption) (*GetKeyMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetKeyMetadataResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_GetKeyMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) GetPublicKey(ctx context.Context, in *GetPublicKeyRequest, opts ...grpc.CallOption) (*GetPublicKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPublicKeyResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_GetPublicKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *kmsPluginClient) GenerateDataKey(ctx context.Context, in *GenerateDataKeyRequest, opts ...grpc.CallOption) (*GenerateDataKeyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GenerateDataKeyResponse)
@@ -136,6 +168,46 @@ func (c *kmsPluginClient) RotateKey(ctx context.Context, in *RotateKeyRequest, o
 	return out, nil
 }
 
+func (c *kmsPluginClient) KeyStorePut(ctx context.Context, in *KeyStorePutRequest, opts ...grpc.CallOption) (*KeyStorePutResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KeyStorePutResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_KeyStorePut_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) KeyStoreGet(ctx context.Context, in *KeyStoreGetRequest, opts ...grpc.CallOption) (*KeyStoreGetResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KeyStoreGetResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_KeyStoreGet_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) KeyStoreList(ctx context.Context, in *KeyStoreListRequest, opts ...grpc.CallOption) (*KeyStoreListResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KeyStoreListResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_KeyStoreList_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) KeyStoreDelete(ctx context.Context, in *KeyStoreDeleteRequest, opts ...grpc.CallOption) (*KeyStoreDeleteResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(KeyStoreDeleteResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_KeyStoreDelete_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // KmsPluginServer is the server API for KmsPlugin service.
 // All implementations must embed UnimplementedKmsPluginServer
 // for forward compatibility.
@@ -146,8 +218,14 @@ type KmsPluginServer interface {
 	Encapsulate(context.Context, *EncapsulateRequest) (*EncapsulateResponse, error)
 	Decapsulate(context.Context, *DecapsulateRequest) (*DecapsulateResponse, error)
 	CreateKey(context.Context, *CreateKeyRequest) (*CreateKeyResponse, error)
+	GetKeyMetadata(context.Context, *GetKeyMetadataRequest) (*GetKeyMetadataResponse, error)
+	GetPublicKey(context.Context, *GetPublicKeyRequest) (*GetPublicKeyResponse, error)
 	GenerateDataKey(context.Context, *GenerateDataKeyRequest) (*GenerateDataKeyResponse, error)
 	RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error)
+	KeyStorePut(context.Context, *KeyStorePutRequest) (*KeyStorePutResponse, error)
+	KeyStoreGet(context.Context, *KeyStoreGetRequest) (*KeyStoreGetResponse, error)
+	KeyStoreList(context.Context, *KeyStoreListRequest) (*KeyStoreListResponse, error)
+	KeyStoreDelete(context.Context, *KeyStoreDeleteRequest) (*KeyStoreDeleteResponse, error)
 	mustEmbedUnimplementedKmsPluginServer()
 }
 
@@ -176,11 +254,29 @@ func (UnimplementedKmsPluginServer) Decapsulate(context.Context, *DecapsulateReq
 func (UnimplementedKmsPluginServer) CreateKey(context.Context, *CreateKeyRequest) (*CreateKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateKey not implemented")
 }
+func (UnimplementedKmsPluginServer) GetKeyMetadata(context.Context, *GetKeyMetadataRequest) (*GetKeyMetadataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetKeyMetadata not implemented")
+}
+func (UnimplementedKmsPluginServer) GetPublicKey(context.Context, *GetPublicKeyRequest) (*GetPublicKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPublicKey not implemented")
+}
 func (UnimplementedKmsPluginServer) GenerateDataKey(context.Context, *GenerateDataKeyRequest) (*GenerateDataKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GenerateDataKey not implemented")
 }
 func (UnimplementedKmsPluginServer) RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RotateKey not implemented")
+}
+func (UnimplementedKmsPluginServer) KeyStorePut(context.Context, *KeyStorePutRequest) (*KeyStorePutResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method KeyStorePut not implemented")
+}
+func (UnimplementedKmsPluginServer) KeyStoreGet(context.Context, *KeyStoreGetRequest) (*KeyStoreGetResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method KeyStoreGet not implemented")
+}
+func (UnimplementedKmsPluginServer) KeyStoreList(context.Context, *KeyStoreListRequest) (*KeyStoreListResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method KeyStoreList not implemented")
+}
+func (UnimplementedKmsPluginServer) KeyStoreDelete(context.Context, *KeyStoreDeleteRequest) (*KeyStoreDeleteResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method KeyStoreDelete not implemented")
 }
 func (UnimplementedKmsPluginServer) mustEmbedUnimplementedKmsPluginServer() {}
 func (UnimplementedKmsPluginServer) testEmbeddedByValue()                   {}
@@ -311,6 +407,42 @@ func _KmsPlugin_CreateKey_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KmsPlugin_GetKeyMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetKeyMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).GetKeyMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_GetKeyMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).GetKeyMetadata(ctx, req.(*GetKeyMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_GetPublicKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPublicKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).GetPublicKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_GetPublicKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).GetPublicKey(ctx, req.(*GetPublicKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KmsPlugin_GenerateDataKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GenerateDataKeyRequest)
 	if err := dec(in); err != nil {
@@ -347,6 +479,78 @@ func _KmsPlugin_RotateKey_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KmsPlugin_KeyStorePut_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KeyStorePutRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).KeyStorePut(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_KeyStorePut_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).KeyStorePut(ctx, req.(*KeyStorePutRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_KeyStoreGet_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KeyStoreGetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).KeyStoreGet(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_KeyStoreGet_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).KeyStoreGet(ctx, req.(*KeyStoreGetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_KeyStoreList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KeyStoreListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).KeyStoreList(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_KeyStoreList_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).KeyStoreList(ctx, req.(*KeyStoreListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_KeyStoreDelete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(KeyStoreDeleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).KeyStoreDelete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_KeyStoreDelete_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).KeyStoreDelete(ctx, req.(*KeyStoreDeleteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // KmsPlugin_ServiceDesc is the grpc.ServiceDesc for KmsPlugin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -379,12 +583,36 @@ var KmsPlugin_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _KmsPlugin_CreateKey_Handler,
 		},
 		{
+			MethodName: "GetKeyMetadata",
+			Handler:    _KmsPlugin_GetKeyMetadata_Handler,
+		},
+		{
+			MethodName: "GetPublicKey",
+			Handler:    _KmsPlugin_GetPublicKey_Handler,
+		},
+		{
 			MethodName: "GenerateDataKey",
 			Handler:    _KmsPlugin_GenerateDataKey_Handler,
 		},
 		{
 			MethodName: "RotateKey",
 			Handler:    _KmsPlugin_RotateKey_Handler,
+		},
+		{
+			MethodName: "KeyStorePut",
+			Handler:    _KmsPlugin_KeyStorePut_Handler,
+		},
+		{
+			MethodName: "KeyStoreGet",
+			Handler:    _KmsPlugin_KeyStoreGet_Handler,
+		},
+		{
+			MethodName: "KeyStoreList",
+			Handler:    _KmsPlugin_KeyStoreList_Handler,
+		},
+		{
+			MethodName: "KeyStoreDelete",
+			Handler:    _KmsPlugin_KeyStoreDelete_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

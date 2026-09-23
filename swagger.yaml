@@ -79,3 +79,204 @@ paths:
                     description: Error message
               example:
                 message: "Internal Server Error"
+  /api/v1/rpc:
+    post:
+      summary: JSON-RPC endpoint
+      description: |
+        Authenticated JSON-RPC endpoint for Orbitport services. KMS key-store
+        methods use the existing `/api/v1/rpc` path with methods
+        `kms_keystore.Put`, `kms_keystore.Get`, `kms_keystore.List`, and
+        `kms_keystore.Delete`. Key-store tenant isolation is enforced by the
+        authenticated `client_id`, validated names, and OpenBao path
+        construction under the caller's tenant namespace; Cedar adds policy
+        control on top of that isolation boundary.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JsonRpcRequest'
+            examples:
+              kmsKeyStorePut:
+                summary: Store a key-store secret
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: kms_keystore.Put
+                  params:
+                    Name: github/prod
+                    Secret:
+                      api_key: replace-me
+              kmsKeyStoreGet:
+                summary: Retrieve a key-store secret
+                value:
+                  jsonrpc: "2.0"
+                  id: 2
+                  method: kms_keystore.Get
+                  params:
+                    Name: github/prod
+      responses:
+        '200':
+          description: JSON-RPC response. Application errors are returned in the JSON-RPC `error` object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JsonRpcResponse'
+              examples:
+                kmsKeyStorePut:
+                  summary: Put response
+                  value:
+                    jsonrpc: "2.0"
+                    id: 1
+                    result:
+                      Name: github/prod
+                      Version: 1
+                kmsKeyStoreGet:
+                  summary: Get response
+                  value:
+                    jsonrpc: "2.0"
+                    id: 2
+                    result:
+                      Name: github/prod
+                      Secret:
+                        api_key: replace-me
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    JsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - id
+        - method
+        - params
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          type: integer
+          format: int64
+        method:
+          type: string
+          enum:
+            - ctrng.Get
+            - kms.GetCapabilities
+            - kms.CreateKey
+            - kms.Encrypt
+            - kms.Decrypt
+            - kms.Sign
+            - kms.Encapsulate
+            - kms.Decapsulate
+            - kms.GenerateDataKey
+            - kms.RotateKey
+            - kms_keystore.Put
+            - kms_keystore.Get
+            - kms_keystore.List
+            - kms_keystore.Delete
+            - kms_threshold.CoordinateDKG
+        params:
+          type: object
+          additionalProperties: true
+          description: Method-specific params. See examples and key-store param schemas below.
+          nullable: true
+    JsonRpcResponse:
+      type: object
+      required:
+        - jsonrpc
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          type: integer
+          format: int64
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          $ref: '#/components/schemas/JsonRpcError'
+    JsonRpcError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data:
+          nullable: true
+    KmsKeyStorePutParams:
+      type: object
+      required:
+        - Name
+        - Secret
+      properties:
+        Name:
+          $ref: '#/components/schemas/KmsKeyStoreName'
+        Secret:
+          type: object
+          additionalProperties: true
+          description: Arbitrary JSON object stored durably in the KMS key-store. Secrets are treated as opaque JSON and returned without numeric precision loss.
+    KmsKeyStoreGetParams:
+      type: object
+      required:
+        - Name
+      properties:
+        Name:
+          $ref: '#/components/schemas/KmsKeyStoreName'
+    KmsKeyStoreListParams:
+      type: object
+      properties:
+        Prefix:
+          type: string
+          maxLength: 256
+          description: Optional key-store prefix to list. The response includes only immediate children for this prefix.
+    KmsKeyStoreDeleteParams:
+      type: object
+      required:
+        - Name
+      properties:
+        Name:
+          $ref: '#/components/schemas/KmsKeyStoreName'
+    KmsKeyStorePutResult:
+      type: object
+      properties:
+        Name:
+          type: string
+        Version:
+          type: integer
+    KmsKeyStoreGetResult:
+      type: object
+      properties:
+        Name:
+          type: string
+        Secret:
+          type: object
+          additionalProperties: true
+    KmsKeyStoreListResult:
+      type: object
+      properties:
+        Names:
+          type: array
+          items:
+            type: string
+          description: Immediate key-store entries and folders under the requested prefix. Folder prefixes end with `/`.
+    KmsKeyStoreDeleteResult:
+      type: object
+      properties:
+        Name:
+          type: string
+    KmsKeyStoreName:
+      type: string
+      maxLength: 256
+      pattern: '^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'
+      description: Slash-separated key-store name. `.` and `..` path segments are rejected.

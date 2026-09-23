@@ -16,6 +16,8 @@ service KmsService {
   rpc Encapsulate(EncapsulateRequest) returns (EncapsulateResponse);
   rpc Decapsulate(DecapsulateRequest) returns (DecapsulateResponse);
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
+  rpc GetKeyMetadata(GetKeyMetadataRequest) returns (GetKeyMetadataResponse);
+  rpc GetPublicKey(GetPublicKeyRequest) returns (GetPublicKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
   rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
@@ -113,6 +115,24 @@ message CreateKeyResponse {
   KeyMetadata key_metadata = 1;
 }
 
+message GetKeyMetadataRequest {
+  // Accepts either the canonical "kms:<alias>" key id or the raw alias.
+  string key_id = 1;
+}
+
+message GetKeyMetadataResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message GetPublicKeyRequest {
+  // Accepts either the canonical "kms:<alias>" key id or the raw alias.
+  string key_id = 1;
+}
+
+message GetPublicKeyResponse {
+  string public_key = 1;
+}
+
 message GenerateDataKeyRequest {
   string key_id = 1;
   optional string data_key_spec = 2;
@@ -138,10 +158,12 @@ message GetCapabilitiesRequest {}
 message SigningCapability {
   string signing_algorithm = 1;
   repeated string message_types = 2;
+  repeated string tags = 3;
 }
 
 message KeyAgreementCapability {
   string key_agreement_algorithm = 1;
+  repeated string tags = 2;
 }
 
 message SchemeCapability {
@@ -158,6 +180,7 @@ message SchemeCapability {
   repeated KeyAgreementCapability key_agreement_capabilities = 11;
   bool supports_encapsulate = 12;
   bool supports_decapsulate = 13;
+  repeated string tags = 14;
 }
 
 message GetCapabilitiesResponse {
