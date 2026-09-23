@@ -17,6 +17,8 @@ const KMS_PASCAL_CASE_TYPES: &[&str] = &[
     "kms.DecapsulateResponse",
     "kms.CreateKeyRequest",
     "kms.CreateKeyResponse",
+    "kms.DescribeKeyRequest",
+    "kms.DescribeKeyResponse",
     "kms.GenerateDataKeyRequest",
     "kms.GenerateDataKeyResponse",
     "kms.RotateKeyRequest",

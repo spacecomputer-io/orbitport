@@ -30,6 +30,7 @@ const (
 	KmsPlugin_Encapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Encapsulate"
 	KmsPlugin_Decapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Decapsulate"
 	KmsPlugin_CreateKey_FullMethodName       = "/kmsapi.KmsPlugin/CreateKey"
+	KmsPlugin_DescribeKey_FullMethodName     = "/kmsapi.KmsPlugin/DescribeKey"
 	KmsPlugin_GenerateDataKey_FullMethodName = "/kmsapi.KmsPlugin/GenerateDataKey"
 	KmsPlugin_RotateKey_FullMethodName       = "/kmsapi.KmsPlugin/RotateKey"
 	KmsPlugin_KeyStorePut_FullMethodName     = "/kmsapi.KmsPlugin/KeyStorePut"
@@ -48,6 +49,7 @@ type KmsPluginClient interface {
 	Encapsulate(ctx context.Context, in *EncapsulateRequest, opts ...grpc.CallOption) (*EncapsulateResponse, error)
 	Decapsulate(ctx context.Context, in *DecapsulateRequest, opts ...grpc.CallOption) (*DecapsulateResponse, error)
 	CreateKey(ctx context.Context, in *CreateKeyRequest, opts ...grpc.CallOption) (*CreateKeyResponse, error)
+	DescribeKey(ctx context.Context, in *DescribeKeyRequest, opts ...grpc.CallOption) (*DescribeKeyResponse, error)
 	GenerateDataKey(ctx context.Context, in *GenerateDataKeyRequest, opts ...grpc.CallOption) (*GenerateDataKeyResponse, error)
 	RotateKey(ctx context.Context, in *RotateKeyRequest, opts ...grpc.CallOption) (*RotateKeyResponse, error)
 	KeyStorePut(ctx context.Context, in *KeyStorePutRequest, opts ...grpc.CallOption) (*KeyStorePutResponse, error)
@@ -124,6 +126,16 @@ func (c *kmsPluginClient) CreateKey(ctx context.Context, in *CreateKeyRequest, o
 	return out, nil
 }
 
+func (c *kmsPluginClient) DescribeKey(ctx context.Context, in *DescribeKeyRequest, opts ...grpc.CallOption) (*DescribeKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DescribeKeyResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_DescribeKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *kmsPluginClient) GenerateDataKey(ctx context.Context, in *GenerateDataKeyRequest, opts ...grpc.CallOption) (*GenerateDataKeyResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GenerateDataKeyResponse)
@@ -194,6 +206,7 @@ type KmsPluginServer interface {
 	Encapsulate(context.Context, *EncapsulateRequest) (*EncapsulateResponse, error)
 	Decapsulate(context.Context, *DecapsulateRequest) (*DecapsulateResponse, error)
 	CreateKey(context.Context, *CreateKeyRequest) (*CreateKeyResponse, error)
+	DescribeKey(context.Context, *DescribeKeyRequest) (*DescribeKeyResponse, error)
 	GenerateDataKey(context.Context, *GenerateDataKeyRequest) (*GenerateDataKeyResponse, error)
 	RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error)
 	KeyStorePut(context.Context, *KeyStorePutRequest) (*KeyStorePutResponse, error)
@@ -227,6 +240,9 @@ func (UnimplementedKmsPluginServer) Decapsulate(context.Context, *DecapsulateReq
 }
 func (UnimplementedKmsPluginServer) CreateKey(context.Context, *CreateKeyRequest) (*CreateKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CreateKey not implemented")
+}
+func (UnimplementedKmsPluginServer) DescribeKey(context.Context, *DescribeKeyRequest) (*DescribeKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DescribeKey not implemented")
 }
 func (UnimplementedKmsPluginServer) GenerateDataKey(context.Context, *GenerateDataKeyRequest) (*GenerateDataKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GenerateDataKey not implemented")
@@ -375,6 +391,24 @@ func _KmsPlugin_CreateKey_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KmsPlugin_DescribeKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DescribeKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).DescribeKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_DescribeKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).DescribeKey(ctx, req.(*DescribeKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KmsPlugin_GenerateDataKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GenerateDataKeyRequest)
 	if err := dec(in); err != nil {
@@ -513,6 +547,10 @@ var KmsPlugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateKey",
 			Handler:    _KmsPlugin_CreateKey_Handler,
+		},
+		{
+			MethodName: "DescribeKey",
+			Handler:    _KmsPlugin_DescribeKey_Handler,
 		},
 		{
 			MethodName: "GenerateDataKey",

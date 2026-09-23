@@ -15,6 +15,7 @@ service KmsPlugin {
   rpc Encapsulate(EncapsulateRequest) returns (EncapsulateResponse);
   rpc Decapsulate(DecapsulateRequest) returns (DecapsulateResponse);
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
+  rpc DescribeKey(DescribeKeyRequest) returns (DescribeKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
   rpc KeyStorePut(KeyStorePutRequest) returns (KeyStorePutResponse);
@@ -118,6 +119,15 @@ message CreateKeyRequest {
 }
 
 message CreateKeyResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message DescribeKeyRequest {
+  string key_id = 1;
+  string client_id = 2;
+}
+
+message DescribeKeyResponse {
   KeyMetadata key_metadata = 1;
 }
 

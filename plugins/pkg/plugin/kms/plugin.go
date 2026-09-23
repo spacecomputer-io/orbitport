@@ -281,6 +281,22 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	}, nil
 }
 
+func (p *Plugin) DescribeKey(ctx context.Context, req *proto.DescribeKeyRequest) (*proto.DescribeKeyResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
+	logger.Debugf("DescribeKey request received for key_id=%s", req.KeyId)
+	metadata, _, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	if err != nil {
+		logger.Warnf("DescribeKey failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	logger.Debugf("DescribeKey completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	return &proto.DescribeKeyResponse{
+		KeyMetadata: toProtoMetadata(metadata),
+	}, nil
+}
+
 func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKeyRequest) (*proto.GenerateDataKeyResponse, error) {
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err

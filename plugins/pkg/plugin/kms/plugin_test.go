@@ -187,6 +187,98 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 	}
 }
 
+func TestDescribeKeyReturnsMetadataByKeyIDAndAlias(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+	const publicKey = "-----BEGIN PUBLIC KEY-----demo-----END PUBLIC KEY-----"
+
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitSignKeyID):
+			requests++
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitSignKeyID + `","client_id":"` + clientID + `","alias":"` + testTransitSignAlias + `","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"ECDSA_P256","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"` + publicKey + `","tags":[]}}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	for _, keyRef := range []string{testTransitSignKeyID, testTransitSignAlias} {
+		resp, err := plugin.DescribeKey(context.Background(), &proto.DescribeKeyRequest{
+			KeyId:    keyRef,
+			ClientId: clientID,
+		})
+		if err != nil {
+			t.Fatalf("DescribeKey(%q) returned error: %v", keyRef, err)
+		}
+		if resp.KeyMetadata.KeyId != testTransitSignKeyID || resp.KeyMetadata.Alias != testTransitSignAlias {
+			t.Fatalf("unexpected metadata for %q: %+v", keyRef, resp.KeyMetadata)
+		}
+		if resp.KeyMetadata.PublicKey == nil || *resp.KeyMetadata.PublicKey != publicKey {
+			t.Fatalf("expected public key for %q, got %+v", keyRef, resp.KeyMetadata)
+		}
+	}
+
+	if requests != 2 {
+		t.Fatalf("expected 2 metadata lookups, got %d", requests)
+	}
+}
+
+func TestDescribeKeyRejectsMissingClientID(t *testing.T) {
+	plugin := newPlugin(&kmsConfig{
+		OpenBaoProxyURL: "http://127.0.0.1:1",
+		EthereumMount:   "ethereum",
+		TransitMount:    "transit",
+		KVMount:         "secret",
+		TimeoutSecs:     10,
+	}, nil)
+
+	_, err := plugin.DescribeKey(context.Background(), &proto.DescribeKeyRequest{
+		KeyId: testTransitSignKeyID,
+	})
+	if err == nil {
+		t.Fatal("expected DescribeKey to reject missing client_id")
+	}
+	if status.Code(err) != codes.InvalidArgument {
+		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
+	}
+}
+
+func TestDescribeKeyDeniesWrongTenant(t *testing.T) {
+	requestClientID := "client-b"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(requestClientID)+"/"+testTransitSignKeyID):
+			http.NotFound(w, r)
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	_, err := plugin.DescribeKey(context.Background(), &proto.DescribeKeyRequest{
+		KeyId:    testTransitSignKeyID,
+		ClientId: requestClientID,
+	})
+	if err == nil {
+		t.Fatal("expected DescribeKey to deny wrong tenant")
+	}
+	if status.Code(err) != codes.PermissionDenied {
+		t.Fatalf("expected PermissionDenied, got %v", status.Code(err))
+	}
+}
+
 func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitAlias)

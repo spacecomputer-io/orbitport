@@ -8,7 +8,9 @@ use crate::proto::plugins::kms::{
     CreateKeyRequest as PluginCreateKeyRequest, CreateKeyResponse as PluginCreateKeyResponse,
     DecapsulateRequest as PluginDecapsulateRequest,
     DecapsulateResponse as PluginDecapsulateResponse, DecryptRequest as PluginDecryptRequest,
-    DecryptResponse as PluginDecryptResponse, EncapsulateRequest as PluginEncapsulateRequest,
+    DecryptResponse as PluginDecryptResponse, DescribeKeyRequest as PluginDescribeKeyRequest,
+    DescribeKeyResponse as PluginDescribeKeyResponse,
+    EncapsulateRequest as PluginEncapsulateRequest,
     EncapsulateResponse as PluginEncapsulateResponse, EncryptRequest as PluginEncryptRequest,
     EncryptResponse as PluginEncryptResponse,
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
@@ -26,10 +28,10 @@ use crate::proto::plugins::kms::{
 };
 use crate::proto::services::kms::{
     CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
-    DecryptResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest, EncryptResponse,
-    GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
-    KeyAgreementCapability, RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest,
-    SignResponse, SigningCapability, Tag,
+    DecryptResponse, DescribeKeyRequest, DescribeKeyResponse, EncapsulateRequest,
+    EncapsulateResponse, EncryptRequest, EncryptResponse, GenerateDataKeyRequest,
+    GenerateDataKeyResponse, GetCapabilitiesResponse, KeyAgreementCapability, RotateKeyRequest,
+    RotateKeyResponse, SchemeCapability, SignRequest, SignResponse, SigningCapability, Tag,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -423,6 +425,7 @@ pub enum KmsRpcCall {
     Encapsulate(EncapsulateRequest),
     Decapsulate(DecapsulateRequest),
     CreateKey(CreateKeyRequest),
+    DescribeKey(DescribeKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
     KeyStorePut(KeyStorePutRequest),
@@ -440,6 +443,7 @@ impl KmsRpcCall {
             Self::Encapsulate(req) => KmsService::validate_encapsulate(req),
             Self::Decapsulate(req) => KmsService::validate_decapsulate(req),
             Self::CreateKey(req) => KmsService::validate_create_key(req),
+            Self::DescribeKey(req) => KmsService::validate_describe_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
             Self::KeyStorePut(req) => KmsService::validate_key_store_put(req),
@@ -483,6 +487,11 @@ impl KmsRpcCall {
                 req.scheme.as_deref().unwrap_or("TRANSIT"),
                 req.key_spec,
                 req.key_usage
+            ),
+            Self::DescribeKey(req) => tracing::debug!(
+                "Executing KMS DescribeKey RPC [id={} key_id={}]",
+                req_id,
+                req.key_id
             ),
             Self::GenerateDataKey(req) => tracing::debug!(
                 "Executing KMS GenerateDataKey RPC [id={} key_id={}]",
@@ -533,6 +542,7 @@ pub enum KmsRpcResult {
     Encapsulate(EncapsulateResponse),
     Decapsulate(DecapsulateResponse),
     CreateKey(CreateKeyResponse),
+    DescribeKey(DescribeKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
     KeyStorePut(KeyStorePutResponse),
@@ -576,6 +586,16 @@ impl KmsRpcResult {
                 if let Some(metadata) = result.key_metadata.as_ref() {
                     tracing::debug!(
                         "KMS CreateKey RPC succeeded [id={} key_id={} scheme={}]",
+                        req_id,
+                        metadata.key_id,
+                        metadata.scheme
+                    );
+                }
+            }
+            Self::DescribeKey(result) => {
+                if let Some(metadata) = result.key_metadata.as_ref() {
+                    tracing::debug!(
+                        "KMS DescribeKey RPC succeeded [id={} key_id={} scheme={}]",
                         req_id,
                         metadata.key_id,
                         metadata.scheme
@@ -730,6 +750,10 @@ impl KmsService {
         Ok(())
     }
 
+    pub fn validate_describe_key(req: &DescribeKeyRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)
+    }
+
     pub fn validate_rotate_key(req: &RotateKeyRequest) -> Result<(), String> {
         validate_key_reference("KeyId", &req.key_id)
     }
@@ -783,6 +807,9 @@ impl KmsService {
             }
             KmsRpcCall::CreateKey(req) => {
                 KmsRpcResult::CreateKey(self.create_key(client_id, req).await?)
+            }
+            KmsRpcCall::DescribeKey(req) => {
+                KmsRpcResult::DescribeKey(self.describe_key(client_id, req).await?)
             }
             KmsRpcCall::GenerateDataKey(req) => {
                 KmsRpcResult::GenerateDataKey(self.generate_data_key(client_id, req).await?)
@@ -949,6 +976,25 @@ impl KmsService {
             .into_inner();
 
         Ok(CreateKeyResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn describe_key(
+        &mut self,
+        client_id: &str,
+        req: DescribeKeyRequest,
+    ) -> Result<DescribeKeyResponse, tonic::Status> {
+        let response: PluginDescribeKeyResponse = self
+            .client
+            .describe_key(tonic::Request::new(PluginDescribeKeyRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+
+        Ok(DescribeKeyResponse {
             key_metadata: response.key_metadata.map(map_key_metadata),
         })
     }
@@ -1539,6 +1585,30 @@ mod test {
         };
         let err = KmsService::validate_generate_data_key(&req).unwrap_err();
         assert!(err.contains("Exactly one"));
+    }
+
+    #[test]
+    fn test_validate_describe_key_reference() {
+        KmsService::validate_describe_key(&DescribeKeyRequest {
+            key_id: "kms:telemetry-signing".to_string(),
+        })
+        .unwrap();
+        KmsService::validate_describe_key(&DescribeKeyRequest {
+            key_id: "telemetry-signing".to_string(),
+        })
+        .unwrap();
+
+        let err = KmsService::validate_describe_key(&DescribeKeyRequest {
+            key_id: String::new(),
+        })
+        .unwrap_err();
+        assert!(err.to_ascii_lowercase().contains("keyid is required"));
+
+        let err = KmsService::validate_describe_key(&DescribeKeyRequest {
+            key_id: "telemetry/signing".to_string(),
+        })
+        .unwrap_err();
+        assert!(err.contains("unsupported characters"));
     }
 
     #[test]
