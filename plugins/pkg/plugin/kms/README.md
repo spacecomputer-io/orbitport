@@ -14,11 +14,14 @@ key-store RPCs:
   in the chosen provider and persists its metadata. Returns a stable
   `key_id = "kms:<alias>"` plus, for asymmetric keys, the `public_key` (and
   for Ethereum keys, the derived `address`).
-- `DescribeKey(key_id)` — returns metadata for an authenticated client's key.
+- `GetKeyMetadata(key_id)` — returns metadata for an authenticated client's key.
   `key_id` may be either the canonical `kms:<alias>` identifier or the raw
   alias. For asymmetric signing and key-agreement keys, this includes
   `KeyMetadata.public_key`, which callers can share with third parties for
   verification. Private key material is never returned.
+- `GetPublicKey(key_id)` — returns only the public key for an authenticated
+  client's asymmetric signing or key-agreement key. Symmetric keys do not have
+  a public key and are rejected for this operation.
 - `Encrypt(key_id, plaintext, …)` / `Decrypt(ciphertext_blob, …)` —
   symmetric crypto (Transit only). The ciphertext is wrapped in a
   versioned, base64-JSON envelope (`v`, `scheme`, `key_id`, `provider_key`,
@@ -130,13 +133,14 @@ private key:
 
 1. Create a signing key with an alias such as `telemetry-signing`.
 2. Sign telemetry with `Sign(key_id = "telemetry-signing", ...)`.
-3. Call `DescribeKey(key_id = "telemetry-signing")` or
-   `DescribeKey(key_id = "kms:telemetry-signing")`.
-4. Share the returned `KeyMetadata.public_key` together with the signing
-   algorithm and key spec so a third party can verify signatures outside KMS.
+3. Call `GetPublicKey(key_id = "telemetry-signing")` or
+   `GetPublicKey(key_id = "kms:telemetry-signing")`.
+4. Share the returned `PublicKey` together with the signing algorithm and key
+   spec so a third party can verify signatures outside KMS.
 
-`DescribeKey` is authenticated and tenant-scoped. A tenant can reuse another
-tenant's alias string without gaining access to that tenant's metadata.
+`GetKeyMetadata` and `GetPublicKey` are authenticated and tenant-scoped. A
+tenant can reuse another tenant's alias string without gaining access to that
+tenant's metadata or public keys.
 
 ## Key-store
 

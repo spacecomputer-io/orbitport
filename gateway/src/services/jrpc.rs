@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::proto::services::ctrng::CTrngRequest;
 use crate::proto::services::kms::{
-    CreateKeyRequest, DecapsulateRequest, DecryptRequest, DescribeKeyRequest, EncapsulateRequest,
-    EncryptRequest, GenerateDataKeyRequest, GetCapabilitiesRequest, RotateKeyRequest, SignRequest,
+    CreateKeyRequest, DecapsulateRequest, DecryptRequest, EncapsulateRequest, EncryptRequest,
+    GenerateDataKeyRequest, GetCapabilitiesRequest, GetKeyMetadataRequest, GetPublicKeyRequest,
+    RotateKeyRequest, SignRequest,
 };
 use crate::proto::services::threshold::DkgRequest;
 
@@ -118,7 +119,8 @@ pub enum RpcCall {
     Encapsulate(EncapsulateRequest),
     Decapsulate(DecapsulateRequest),
     CoordinateDKG(DkgRequest),
-    DescribeKey(DescribeKeyRequest),
+    GetKeyMetadata(GetKeyMetadataRequest),
+    GetPublicKey(GetPublicKeyRequest),
 }
 
 impl RpcCall {
@@ -130,7 +132,11 @@ impl RpcCall {
                 params_json,
             )?)),
             "kms.CreateKey" => Ok(Self::CreateKey(Self::parse_params(method, params_json)?)),
-            "kms.DescribeKey" => Ok(Self::DescribeKey(Self::parse_params(method, params_json)?)),
+            "kms.GetKeyMetadata" => Ok(Self::GetKeyMetadata(Self::parse_params(
+                method,
+                params_json,
+            )?)),
+            "kms.GetPublicKey" => Ok(Self::GetPublicKey(Self::parse_params(method, params_json)?)),
             "kms.Decrypt" => Ok(Self::Decrypt(Self::parse_params(method, params_json)?)),
             "kms.Encrypt" => Ok(Self::Encrypt(Self::parse_params(method, params_json)?)),
             "kms.GenerateDataKey" => Ok(Self::GenerateDataKey(Self::parse_params(
@@ -183,7 +189,8 @@ impl RpcCall {
             RpcCall::Encapsulate(req) => KmsService::validate_encapsulate(req)?,
             RpcCall::Decapsulate(req) => KmsService::validate_decapsulate(req)?,
             RpcCall::CreateKey(req) => KmsService::validate_create_key(req)?,
-            RpcCall::DescribeKey(req) => KmsService::validate_describe_key(req)?,
+            RpcCall::GetKeyMetadata(req) => KmsService::validate_get_key_metadata(req)?,
+            RpcCall::GetPublicKey(req) => KmsService::validate_get_public_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
             RpcCall::KeyStorePut(req) => KmsService::validate_key_store_put(req)?,
@@ -204,7 +211,8 @@ impl RpcCall {
             RpcCall::GetCTRNG(_) => "ctrng.Get".to_string(),
             RpcCall::GetCapabilities(_) => "kms.GetCapabilities".to_string(),
             RpcCall::CreateKey(req) => format!("kms.CreateKey:{}", req.key_spec),
-            RpcCall::DescribeKey(_) => "kms.DescribeKey".to_string(),
+            RpcCall::GetKeyMetadata(_) => "kms.GetKeyMetadata".to_string(),
+            RpcCall::GetPublicKey(_) => "kms.GetPublicKey".to_string(),
             RpcCall::Decrypt(_) => "kms.Decrypt".to_string(),
             RpcCall::Encrypt(_) => "kms.Encrypt".to_string(),
             RpcCall::GenerateDataKey(_) => "kms.GenerateDataKey".to_string(),
@@ -283,12 +291,21 @@ impl RpcCall {
                 )
                 .await
             }
-            RpcCall::DescribeKey(req) => {
+            RpcCall::GetKeyMetadata(req) => {
                 execute_kms(
                     req_id,
                     client_id,
                     plugin_catalog,
-                    KmsRpcCall::DescribeKey(req),
+                    KmsRpcCall::GetKeyMetadata(req),
+                )
+                .await
+            }
+            RpcCall::GetPublicKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::GetPublicKey(req),
                 )
                 .await
             }
@@ -455,11 +472,11 @@ mod test {
     }
 
     #[test]
-    fn test_deserialize_kms_describe_key_pascal_case() {
+    fn test_deserialize_kms_get_key_metadata_pascal_case() {
         let raw = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 8,
-            "method": "kms.DescribeKey",
+            "method": "kms.GetKeyMetadata",
             "params": {
                 "KeyId": "kms:telemetry-signing"
             }
@@ -467,19 +484,19 @@ mod test {
 
         let req = request_from_value(raw);
         match req.call {
-            RpcCall::DescribeKey(params) => {
+            RpcCall::GetKeyMetadata(params) => {
                 assert_eq!(params.key_id, "kms:telemetry-signing");
             }
-            _ => panic!("expected kms.DescribeKey"),
+            _ => panic!("expected kms.GetKeyMetadata"),
         }
     }
 
     #[test]
-    fn test_deserialize_kms_describe_key_accepts_alias() {
+    fn test_deserialize_kms_get_key_metadata_accepts_alias() {
         let raw = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 8,
-            "method": "kms.DescribeKey",
+            "method": "kms.GetKeyMetadata",
             "params": {
                 "KeyId": "telemetry-signing"
             }
@@ -487,10 +504,30 @@ mod test {
 
         let req = request_from_value(raw);
         match req.call {
-            RpcCall::DescribeKey(params) => {
+            RpcCall::GetKeyMetadata(params) => {
                 assert_eq!(params.key_id, "telemetry-signing");
             }
-            _ => panic!("expected kms.DescribeKey"),
+            _ => panic!("expected kms.GetKeyMetadata"),
+        }
+    }
+
+    #[test]
+    fn test_deserialize_kms_get_public_key_accepts_alias() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "kms.GetPublicKey",
+            "params": {
+                "KeyId": "telemetry-signing"
+            }
+        });
+
+        let req = request_from_value(raw);
+        match req.call {
+            RpcCall::GetPublicKey(params) => {
+                assert_eq!(params.key_id, "telemetry-signing");
+            }
+            _ => panic!("expected kms.GetPublicKey"),
         }
     }
 
@@ -527,10 +564,10 @@ mod test {
     }
 
     #[test]
-    fn test_serialize_kms_describe_key_includes_pascal_case_public_key() {
+    fn test_serialize_kms_get_key_metadata_includes_pascal_case_public_key() {
         let response = serialize_success_response(
             8,
-            crate::proto::services::kms::DescribeKeyResponse {
+            crate::proto::services::kms::GetKeyMetadataResponse {
                 key_metadata: Some(crate::proto::services::kms::KeyMetadata {
                     key_id: "kms:telemetry-signing".to_string(),
                     description: "telemetry signing".to_string(),
@@ -557,6 +594,26 @@ mod test {
         assert_eq!(
             response["result"]["KeyMetadata"]["KeyId"],
             "kms:telemetry-signing"
+        );
+    }
+
+    #[test]
+    fn test_serialize_kms_get_public_key_only_includes_public_key() {
+        let response = serialize_success_response(
+            8,
+            crate::proto::services::kms::GetPublicKeyResponse {
+                public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+                    .to_string(),
+            },
+        )
+        .expect("serialize");
+
+        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
+        assert_eq!(
+            response["result"],
+            serde_json::json!({
+                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+            })
         );
     }
 
@@ -790,10 +847,17 @@ mod test {
         );
         assert_eq!(
             operation_of(
-                "kms.DescribeKey",
+                "kms.GetKeyMetadata",
                 serde_json::json!({"KeyId": "telemetry-signing"})
             ),
-            "kms.DescribeKey"
+            "kms.GetKeyMetadata"
+        );
+        assert_eq!(
+            operation_of(
+                "kms.GetPublicKey",
+                serde_json::json!({"KeyId": "telemetry-signing"})
+            ),
+            "kms.GetPublicKey"
         );
         assert_eq!(
             operation_of("ctrng.Get", serde_json::json!({})),
