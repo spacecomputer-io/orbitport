@@ -16,6 +16,8 @@ service KmsService {
   rpc Encapsulate(EncapsulateRequest) returns (EncapsulateResponse);
   rpc Decapsulate(DecapsulateRequest) returns (DecapsulateResponse);
   rpc CreateKey(CreateKeyRequest) returns (CreateKeyResponse);
+  rpc GetKeyMetadata(GetKeyMetadataRequest) returns (GetKeyMetadataResponse);
+  rpc GetPublicKey(GetPublicKeyRequest) returns (GetPublicKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
   rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
@@ -111,6 +113,24 @@ message CreateKeyRequest {
 
 message CreateKeyResponse {
   KeyMetadata key_metadata = 1;
+}
+
+message GetKeyMetadataRequest {
+  // Accepts either the canonical "kms:<alias>" key id or the raw alias.
+  string key_id = 1;
+}
+
+message GetKeyMetadataResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message GetPublicKeyRequest {
+  // Accepts either the canonical "kms:<alias>" key id or the raw alias.
+  string key_id = 1;
+}
+
+message GetPublicKeyResponse {
+  string public_key = 1;
 }
 
 message GenerateDataKeyRequest {

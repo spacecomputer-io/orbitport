@@ -281,6 +281,42 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	}, nil
 }
 
+func (p *Plugin) GetKeyMetadata(ctx context.Context, req *proto.GetKeyMetadataRequest) (*proto.GetKeyMetadataResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
+	logger.Debugf("GetKeyMetadata request received for key_id=%s", req.KeyId)
+	metadata, _, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	if err != nil {
+		logger.Warnf("GetKeyMetadata failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	logger.Debugf("GetKeyMetadata completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	return &proto.GetKeyMetadataResponse{
+		KeyMetadata: toProtoMetadata(metadata),
+	}, nil
+}
+
+func (p *Plugin) GetPublicKey(ctx context.Context, req *proto.GetPublicKeyRequest) (*proto.GetPublicKeyResponse, error) {
+	if err := requireClientID(req.ClientId); err != nil {
+		return nil, err
+	}
+	logger.Debugf("GetPublicKey request received for key_id=%s", req.KeyId)
+	metadata, _, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	if err != nil {
+		logger.Warnf("GetPublicKey failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	if metadata.PublicKey == "" {
+		logger.Warnf("GetPublicKey rejected key without public key key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, status.Error(codes.FailedPrecondition, "key does not have a public key")
+	}
+	logger.Debugf("GetPublicKey completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	return &proto.GetPublicKeyResponse{
+		PublicKey: metadata.PublicKey,
+	}, nil
+}
+
 func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKeyRequest) (*proto.GenerateDataKeyResponse, error) {
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err

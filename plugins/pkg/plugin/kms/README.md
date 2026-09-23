@@ -14,6 +14,14 @@ key-store RPCs:
   in the chosen provider and persists its metadata. Returns a stable
   `key_id = "kms:<alias>"` plus, for asymmetric keys, the `public_key` (and
   for Ethereum keys, the derived `address`).
+- `GetKeyMetadata(key_id)` — returns metadata for an authenticated client's key.
+  `key_id` may be either the canonical `kms:<alias>` identifier or the raw
+  alias. For asymmetric signing and key-agreement keys, this includes
+  `KeyMetadata.public_key`, which callers can share with third parties for
+  verification. Private key material is never returned.
+- `GetPublicKey(key_id)` — returns only the public key for an authenticated
+  client's asymmetric signing or key-agreement key. Symmetric keys do not have
+  a public key and are rejected for this operation.
 - `Encrypt(key_id, plaintext, …)` / `Decrypt(ciphertext_blob, …)` —
   symmetric crypto (Transit only). The ciphertext is wrapped in a
   versioned, base64-JSON envelope (`v`, `scheme`, `key_id`, `provider_key`,
@@ -117,6 +125,22 @@ keys. Tenant isolation is enforced in two places:
 Aliases are user-chosen, validated to `[A-Za-z0-9._-]{1,128}`, and may not
 start with the reserved `kms:` prefix. The canonical external identifier is
 always `kms:<alias>`; both forms resolve to the same backend key.
+
+## Public-key retrieval for verification
+
+Callers that sign data can fetch verification material without exporting the
+private key:
+
+1. Create a signing key with an alias such as `telemetry-signing`.
+2. Sign telemetry with `Sign(key_id = "telemetry-signing", ...)`.
+3. Call `GetPublicKey(key_id = "telemetry-signing")` or
+   `GetPublicKey(key_id = "kms:telemetry-signing")`.
+4. Share the returned `PublicKey` together with the signing algorithm and key
+   spec so a third party can verify signatures outside KMS.
+
+`GetKeyMetadata` and `GetPublicKey` are authenticated and tenant-scoped. A
+tenant can reuse another tenant's alias string without gaining access to that
+tenant's metadata or public keys.
 
 ## Key-store
 
