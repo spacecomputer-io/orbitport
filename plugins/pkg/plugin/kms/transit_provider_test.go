@@ -2,11 +2,14 @@ package kms
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 )
@@ -29,10 +32,10 @@ func TestTransitProviderCreateKey(t *testing.T) {
 
 		//set up mocked openbao server
 		fakeOpenBao := func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.Method == http.MethodPost:
+			switch r.Method {
+			case http.MethodPost:
 				w.WriteHeader(http.StatusOK)
-			case r.Method == http.MethodGet:
+			case http.MethodGet:
 				_, _ = w.Write([]byte(`{"data":{"latest_version":1,"type":"aes256-gcm96","public_key":"test-public-key"}}`))
 			default:
 				t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -84,8 +87,8 @@ func TestTransitProviderEncrypt(t *testing.T) {
 
 		//set up mocked openbao server again, but we only need to handle post this time
 		fakeOpenBao := func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.Method == http.MethodPost:
+			switch  r.Method{
+			case http.MethodPost:
 				_, _ = w.Write([]byte(`{"data":{"ciphertext": "vault:v1:test-ciphertext"}}`))
 
 			default:
@@ -145,8 +148,8 @@ func TestTransitProviderSign(t *testing.T) {
 		}
 
 		fakeOpenBao := func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case r.Method == http.MethodPost:
+			switch  r.Method{
+			case http.MethodPost:
 				_, _ = w.Write([]byte(`{"data":{"signature":"vault:v1:test-signature"}}`))
 
 			default:
@@ -177,4 +180,84 @@ func TestTransitProviderSign(t *testing.T) {
 		require.Equal(t, "ECDSA_SHA_256", response.SigningAlgorithm)
 	})
 
+}
+
+func TestTransitProviderGenerateDataKey(t *testing.T) {
+	tests := []struct {
+		name                       string
+		dataKeySpec                string
+		expectedPlaintextKeyBase64 string
+		expectedWrappedKey         string
+	}{
+		{
+			name:                       "ValidAES256Spec_ReturnsPlaintextAndCiphertextBlob",
+			dataKeySpec:                dataKeySpecAES256,
+			expectedPlaintextKeyBase64: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+			expectedWrappedKey:         "vault:v1:ZmFrZS1lbmNyeXB0ZWQtZGF0YS1rZXk=",
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			ctx := context.Background()
+			metadata := &keyMetadataRecord{
+				KeyID:       "kms:test-key",
+				Scheme:      schemeTransit,
+				ProviderKey: "tenant-test_test-key",
+				KeySpec:     keySpecAES256GCM96,
+				KeyUsage:    encryptDecryptUsage,
+			}
+
+			dataKeySpec := testCase.dataKeySpec
+			req := &proto.GenerateDataKeyRequest{
+				DataKeySpec: &dataKeySpec,
+			}
+
+			fakeOpenBao := func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+					http.Error(w, "unexpected request", http.StatusInternalServerError)
+					return
+				}
+
+				response := map[string]any{
+					"data": map[string]string{
+						"plaintext":  testCase.expectedPlaintextKeyBase64,
+						"ciphertext": testCase.expectedWrappedKey,
+					},
+				}
+				assert.NoError(t, json.NewEncoder(w).Encode(response))
+			}
+
+			server := httptest.NewServer(http.HandlerFunc(fakeOpenBao))
+			defer server.Close()
+
+			cfg := &kmsConfig{
+				OpenBaoProxyURL: server.URL,
+			}
+			client := newOpenBaoClient(cfg)
+			provider := &transitProvider{
+				client: client,
+			}
+
+			response, err := provider.GenerateDataKey(ctx, metadata, req)
+			if !assert.NoError(t, err) || !assert.NotNil(t, response) {
+				return
+			}
+
+			assert.Equal(t, metadata.KeyID, response.KeyId)
+			assert.Equal(t, testCase.expectedPlaintextKeyBase64, response.Plaintext)
+
+			blob, err := decodeCiphertextBlob(response.CiphertextBlob)
+			if !assert.NoError(t, err) || !assert.NotNil(t, blob) {
+				return
+			}
+
+			assert.Equal(t, metadata.Scheme, blob.Scheme)
+			assert.Equal(t, metadata.KeyID, blob.KeyID)
+			assert.Equal(t, metadata.backendKey(), blob.backendKey())
+			assert.Equal(t, testCase.expectedWrappedKey, blob.Ciphertext)
+			assert.Equal(t, encryptionAlgorithmAES256GCM96, blob.Algorithm)
+		})
+	}
 }
