@@ -38,19 +38,15 @@ EOF
 
 ################################################################################
 
-FROM dhi.io/debian-base:trixie AS final
+# Distroless with glibc and libgcc for the gnu build, no shell or package manager.
+# Pinned by digest because the TEE measures this image
+FROM dhi.io/static:20250419-glibc@sha256:235b1831903e5ed82142b85b8b8b940d548d92af57cba0021afec39f17ffac00 AS final
 
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
-# dhi.io/debian-base ships neither shadow-utils nor a writable /etc, so
-# there's no way to register a named user/group here. USER accepts a raw
-# numeric UID:GID with no /etc/passwd entry required — the kernel only
-# needs one to resolve a UID to a *name* (e.g. `whoami`), not to run a
-# process as that UID. 10001 is picked to avoid colliding with this
-# image's existing system accounts (which occupy the low/system range).
-COPY --from=build --chown=10001:10001 /bin/gateway /bin/gateway
+COPY --from=build /bin/gateway /bin/gateway
 
-USER 10001:10001
+USER 65532:65532
 
 ENTRYPOINT ["/bin/gateway"]

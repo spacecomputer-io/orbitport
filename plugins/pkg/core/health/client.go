@@ -57,30 +57,29 @@ func WaitForDependencies(ctx context.Context, retryDelay time.Duration, maxDelay
 
 func checkDepHealth(ctx context.Context, addr string) bool {
 	logger := utils.GetLogger("orbitport:health")
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		logger.Infof("Failed to connect to %s: %v", addr, err)
-		return false
-	}
-	defer func() {
-		err = conn.Close()
-		if err != nil {
-			logger.Errorf("error closing grpc client connection: %v", err)
-		}
-	}()
-
-	client := healthpb.NewHealthClient(conn)
-	resp, err := client.Check(ctx, &healthpb.HealthCheckRequest{})
-	if err != nil {
-		logger.Infof("Health check RPC failed for %s: %v", addr, err)
-		return false
-	}
-
-	if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
-		logger.Infof("Dependency %s not serving yet (status: %s)", addr, resp.GetStatus().String())
+	if err := Check(ctx, addr); err != nil {
+		logger.Infof("Dependency %s is not healthy: %v", addr, err)
 		return false
 	}
 
 	logger.Infof("Dependency %s is healthy!", addr)
 	return true
+}
+
+// Check returns nil when the gRPC health service at addr reports SERVING.
+func Check(ctx context.Context, addr string) error {
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	resp, err := healthpb.NewHealthClient(conn).Check(ctx, &healthpb.HealthCheckRequest{})
+	if err != nil {
+		return fmt.Errorf("health check RPC: %w", err)
+	}
+	if resp.GetStatus() != healthpb.HealthCheckResponse_SERVING {
+		return fmt.Errorf("status %s", resp.GetStatus())
+	}
+	return nil
 }

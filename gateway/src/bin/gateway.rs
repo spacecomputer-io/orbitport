@@ -1,5 +1,7 @@
 use clap::Parser;
 use std::sync::Arc;
+use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::Notify;
 
 use gateway::{logging, plugins, server, service_manager, types::GatewayError};
@@ -76,8 +78,34 @@ fn validate_pat_revocation_gating(
     )
 }
 
+/// Returns true when `/healthz` on the local HTTP port answers 200
+async fn healthz_ok(port: u16) -> bool {
+    let probe = async {
+        let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
+        stream
+            .write_all(b"GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n")
+            .await?;
+        let mut status_line = String::new();
+        BufReader::new(stream).read_line(&mut status_line).await?;
+        Ok::<_, std::io::Error>(status_line)
+    };
+    match tokio::time::timeout(Duration::from_secs(3), probe).await {
+        Ok(Ok(status_line)) => status_line.split_whitespace().nth(1) == Some("200"),
+        _ => false,
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), GatewayError> {
+    // Distroless images have no shell or curl, so container healthchecks run the binary itself
+    if std::env::args().nth(1).as_deref() == Some("healthcheck") {
+        let port = std::env::var("ORBITPORT_HTTP_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(8080);
+        std::process::exit(if healthz_ok(port).await { 0 } else { 1 });
+    }
+
     let _log_guard = logging::initialize_logging();
 
     let start = std::time::Instant::now();
@@ -197,7 +225,41 @@ async fn main() -> Result<(), GatewayError> {
 
 #[cfg(test)]
 mod test {
-    use super::validate_pat_revocation_gating;
+    use super::{healthz_ok, validate_pat_revocation_gating};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    async fn serve_once(response: &'static [u8]) -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut buf = [0u8; 256];
+            let _ = socket.read(&mut buf).await;
+            let _ = socket.write_all(response).await;
+        });
+        port
+    }
+
+    #[tokio::test]
+    async fn healthz_ok_on_200() {
+        let port = serve_once(b"HTTP/1.0 200 OK\r\n\r\n").await;
+        assert!(healthz_ok(port).await);
+    }
+
+    #[tokio::test]
+    async fn healthz_fails_on_error_status() {
+        let port = serve_once(b"HTTP/1.0 503 Service Unavailable\r\n\r\n").await;
+        assert!(!healthz_ok(port).await);
+    }
+
+    #[tokio::test]
+    async fn healthz_fails_when_nothing_listens() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        assert!(!healthz_ok(port).await);
+    }
 
     #[test]
     fn patissuer_without_account_fails_closed() {
