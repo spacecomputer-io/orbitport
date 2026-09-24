@@ -24,8 +24,8 @@ RUN CGO_ENABLED=0 go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-# Distroless: CA certs and a nonroot user, no shell or package manager.
-# Pinned by digest because the TEE measures this image
+# distroless: CA certs and a nonroot user, no shell or package manager
+# pinned by digest because the TEE measures this image
 FROM dhi.io/static:20250419-debian13@sha256:98ef7a853608577e8d66dad1d25ada75d745d782f28d84e9ecfb85dfeb1f9c98
 
 ARG SOURCE_DATE_EPOCH

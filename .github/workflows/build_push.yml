@@ -35,7 +35,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
 
-    # Runtime bases come from dhi.io, which needs its own login
+    # runtime bases come from dhi.io, which needs its own login
     - name: Log in to the DHI registry
       uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
       with:

@@ -66,7 +66,7 @@ func checkDepHealth(ctx context.Context, addr string) bool {
 	return true
 }
 
-// Check returns nil when the gRPC health service at addr reports SERVING.
+// Check returns nil when the gRPC health service at addr reports SERVING
 func Check(ctx context.Context, addr string) error {
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

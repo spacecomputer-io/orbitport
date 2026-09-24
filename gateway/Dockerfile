@@ -35,7 +35,7 @@ EOF
 
 ################################################################################
 
-# Distroless with glibc and libgcc for the gnu build, no shell or package manager
+# distroless with glibc and libgcc for the gnu build, no shell or package manager
 FROM dhi.io/static:20250419-glibc AS final
 
 COPY --from=build /bin/gateway /bin/gateway

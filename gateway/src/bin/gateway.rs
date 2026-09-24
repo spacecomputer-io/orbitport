@@ -78,7 +78,7 @@ fn validate_pat_revocation_gating(
     )
 }
 
-/// Returns true when `/healthz` on the local HTTP port answers 200
+/// returns true when `/healthz` on the local HTTP port answers 200
 async fn healthz_ok(port: u16) -> bool {
     let probe = async {
         let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await?;
@@ -97,7 +97,7 @@ async fn healthz_ok(port: u16) -> bool {
 
 #[tokio::main]
 async fn main() -> Result<(), GatewayError> {
-    // Distroless images have no shell or curl, so container healthchecks run the binary itself
+    // distroless images have no shell or curl, so container healthchecks run the binary itself
     if std::env::args().nth(1).as_deref() == Some("healthcheck") {
         let port = std::env::var("ORBITPORT_HTTP_PORT")
             .ok()

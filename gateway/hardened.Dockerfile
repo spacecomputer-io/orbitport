@@ -38,8 +38,8 @@ EOF
 
 ################################################################################
 
-# Distroless with glibc and libgcc for the gnu build, no shell or package manager.
-# Pinned by digest because the TEE measures this image
+# distroless with glibc and libgcc for the gnu build, no shell or package manager
+# pinned by digest because the TEE measures this image
 FROM dhi.io/static:20250419-glibc@sha256:235b1831903e5ed82142b85b8b8b940d548d92af57cba0021afec39f17ffac00 AS final
 
 ARG SOURCE_DATE_EPOCH

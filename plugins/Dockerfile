@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-# Distroless: CA certs and a nonroot user, no shell or package manager
+# distroless: CA certs and a nonroot user, no shell or package manager
 FROM dhi.io/static:20250419-debian13
 
 ARG BUILD_TARGET=plugin

@@ -28,7 +28,7 @@ import (
 )
 
 func main() {
-	// Distroless images have no shell or curl, so container healthchecks run the binary itself
+	// distroless images have no shell or curl, so container healthchecks run the binary itself
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
 		os.Exit(runHealthcheck())
 	}
