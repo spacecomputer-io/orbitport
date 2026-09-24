@@ -2,8 +2,8 @@
 
 ################################################################################
 
-ARG GO_VERSION=1.25
-ARG ALPINE_VERSION=3.22
+ARG GO_VERSION=1.26
+ARG ALPINE_VERSION=3.24
 
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
