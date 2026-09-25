@@ -1127,10 +1127,11 @@ func (x *GetPublicKeyRequest) GetClientId() string {
 }
 
 type GetPublicKeyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey     string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey      string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	PrimaryVersion uint32                 `protobuf:"varint,2,opt,name=primary_version,json=primaryVersion,proto3" json:"primary_version,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetPublicKeyResponse) Reset() {
@@ -1168,6 +1169,13 @@ func (x *GetPublicKeyResponse) GetPublicKey() string {
 		return x.PublicKey
 	}
 	return ""
+}
+
+func (x *GetPublicKeyResponse) GetPrimaryVersion() uint32 {
+	if x != nil {
+		return x.PrimaryVersion
+	}
+	return 0
 }
 
 type GenerateDataKeyRequest struct {
@@ -1900,10 +1908,11 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"I\n" +
 	"\x13GetPublicKeyRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
-	"\tclient_id\x18\x02 \x01(\tR\bclientId\"5\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"^\n" +
 	"\x14GetPublicKeyResponse\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x01 \x01(\tR\tpublicKey\"\xc8\x01\n" +
+	"public_key\x18\x01 \x01(\tR\tpublicKey\x12'\n" +
+	"\x0fprimary_version\x18\x02 \x01(\rR\x0eprimaryVersion\"\xc8\x01\n" +
 	"\x16GenerateDataKeyRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12'\n" +
 	"\rdata_key_spec\x18\x02 \x01(\tH\x00R\vdataKeySpec\x88\x01\x01\x12+\n" +

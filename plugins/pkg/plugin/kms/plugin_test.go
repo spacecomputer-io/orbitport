@@ -296,7 +296,7 @@ func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitSignKeyID):
 			requests++
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitSignKeyID + `","client_id":"` + clientID + `","alias":"` + testTransitSignAlias + `","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"ECDSA_P256","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"` + publicKey + `","tags":[]}}}`))
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitSignKeyID + `","client_id":"` + clientID + `","alias":"` + testTransitSignAlias + `","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"ECDSA_P256","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":2,"created_at":"2024-01-01T00:00:00Z","public_key":"` + publicKey + `","tags":[]}}}`))
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -316,6 +316,9 @@ func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 		}
 		if resp.PublicKey != publicKey {
 			t.Fatalf("expected public key for %q, got %+v", keyRef, resp)
+		}
+		if resp.PrimaryVersion != 2 {
+			t.Fatalf("expected primary version 2 for %q, got %+v", keyRef, resp)
 		}
 	}
 

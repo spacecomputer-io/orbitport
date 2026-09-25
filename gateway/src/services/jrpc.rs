@@ -598,12 +598,13 @@ mod test {
     }
 
     #[test]
-    fn test_serialize_kms_get_public_key_only_includes_public_key() {
+    fn test_serialize_kms_get_public_key_includes_primary_version() {
         let response = serialize_success_response(
             8,
             crate::proto::services::kms::GetPublicKeyResponse {
                 public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
                     .to_string(),
+                primary_version: 2,
             },
         )
         .expect("serialize");
@@ -612,7 +613,8 @@ mod test {
         assert_eq!(
             response["result"],
             serde_json::json!({
-                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
+                "PrimaryVersion": 2
             })
         );
     }

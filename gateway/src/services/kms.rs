@@ -1036,6 +1036,7 @@ impl KmsService {
 
         Ok(GetPublicKeyResponse {
             public_key: response.public_key,
+            primary_version: response.primary_version,
         })
     }
 

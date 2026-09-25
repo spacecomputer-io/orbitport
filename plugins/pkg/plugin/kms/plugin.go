@@ -313,7 +313,8 @@ func (p *Plugin) GetPublicKey(ctx context.Context, req *proto.GetPublicKeyReques
 	}
 	logger.Debugf("GetPublicKey completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 	return &proto.GetPublicKeyResponse{
-		PublicKey: metadata.PublicKey,
+		PublicKey:      metadata.PublicKey,
+		PrimaryVersion: metadata.PrimaryVersion,
 	}, nil
 }
 
