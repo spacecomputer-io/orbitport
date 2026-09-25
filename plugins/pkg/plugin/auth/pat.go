@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -179,11 +178,13 @@ func parseJWKS(jwksJSON string) (map[string]*ecdsa.PublicKey, error) {
 		if err != nil {
 			return nil, fmt.Errorf("JWK kid %q: decoding y: %w", k.Kid, err)
 		}
-		keys[k.Kid] = &ecdsa.PublicKey{
-			Curve: elliptic.P256(),
-			X:     new(big.Int).SetBytes(x),
-			Y:     new(big.Int).SetBytes(y),
+		// uncompressed SEC 1 point: 0x04 || X || Y
+		point := append(append([]byte{4}, x...), y...)
+		pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point)
+		if err != nil {
+			return nil, fmt.Errorf("JWK kid %q: invalid P-256 point: %w", k.Kid, err)
 		}
+		keys[k.Kid] = pub
 	}
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("JWKS contains no usable EC P-256 keys")

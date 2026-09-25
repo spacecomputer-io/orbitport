@@ -162,8 +162,12 @@ func (s *transitSigner) JWKS(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("key version %d: %w", v, err)
 		}
-		x := pub.X.FillBytes(make([]byte, 32))
-		y := pub.Y.FillBytes(make([]byte, 32))
+		// uncompressed point: 0x04 || X || Y
+		b, err := pub.Bytes()
+		if err != nil {
+			return "", fmt.Errorf("key version %d: %w", v, err)
+		}
+		x, y := b[1:33], b[33:]
 		keys = append(keys, map[string]string{
 			"kty": "EC",
 			"crv": "P-256",
