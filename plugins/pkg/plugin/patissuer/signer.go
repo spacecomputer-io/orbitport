@@ -72,8 +72,12 @@ func (s *localSigner) JWKS(_ context.Context) (string, error) {
 	}
 
 	// Fixed-width big-endian coordinates per RFC 7518 §6.2.1.
-	x := pub.X.FillBytes(make([]byte, 32))
-	y := pub.Y.FillBytes(make([]byte, 32))
+	// Bytes returns the uncompressed point 0x04 || X || Y
+	b, err := pub.Bytes()
+	if err != nil {
+		return "", err
+	}
+	x, y := b[1:33], b[33:]
 
 	set := map[string]any{
 		"keys": []map[string]string{{

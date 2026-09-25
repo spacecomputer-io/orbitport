@@ -35,13 +35,11 @@ EOF
 
 ################################################################################
 
-FROM debian:trixie-slim AS final
+# distroless with glibc and libgcc for the gnu build, no shell or package manager
+FROM dhi.io/static:20250419-glibc AS final
 
-RUN groupadd --system appgroup \
-    && useradd --system --gid appgroup --no-create-home --home-dir /nonexistent appuser
+COPY --from=build /bin/gateway /bin/gateway
 
-COPY --from=build --chown=appuser:appgroup /bin/gateway /bin/gateway
-
-USER appuser
+USER 65532:65532
 
 ENTRYPOINT ["/bin/gateway"]

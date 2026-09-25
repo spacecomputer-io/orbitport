@@ -72,8 +72,11 @@ func startMockIssuer(t *testing.T, m *mockIssuer) string {
 }
 
 func jwksJSON(kid string, pub *ecdsa.PublicKey) string {
-	x := pub.X.FillBytes(make([]byte, 32))
-	y := pub.Y.FillBytes(make([]byte, 32))
+	b, err := pub.Bytes()
+	if err != nil {
+		panic(err)
+	}
+	x, y := b[1:33], b[33:]
 	return fmt.Sprintf(
 		`{"keys":[{"kty":"EC","crv":"P-256","use":"sig","alg":"ES256","kid":%q,"x":%q,"y":%q}]}`,
 		kid,

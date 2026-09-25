@@ -2,8 +2,8 @@
 
 ################################################################################
 
-ARG GO_VERSION=1.25
-ARG ALPINE_VERSION=3.22
+ARG GO_VERSION=1.26
+ARG ALPINE_VERSION=3.24
 
 FROM golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
@@ -17,21 +17,17 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o bin/ ./cmd/${BUILD_TARGET}/...
+RUN CGO_ENABLED=0 go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-FROM alpine:${ALPINE_VERSION}
+# distroless: CA certs and a nonroot user, no shell or package manager
+FROM dhi.io/static:20250419-debian13
 
 ARG BUILD_TARGET=plugin
 
-RUN apk --no-cache add curl \
-    && addgroup -S appgroup \
-    && adduser -S -G appgroup appuser \
-    && mkdir -p /etc/orbitport/kms
+COPY --from=builder /app/bin/${BUILD_TARGET} /app
 
-COPY --from=builder --chown=appuser:appgroup /app/bin/${BUILD_TARGET} /app
-
-USER appuser
+USER 65532:65532
 
 ENTRYPOINT ["/app"]
