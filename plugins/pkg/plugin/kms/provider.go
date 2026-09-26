@@ -20,6 +20,15 @@ type signProvider interface {
 	Sign(context.Context, *keyMetadataRecord, *proto.SignRequest) (*proto.SignResponse, error)
 }
 
+type publicKeyRecord struct {
+	PublicKey string
+	Version   uint32
+}
+
+type publicKeyProvider interface {
+	GetPublicKey(context.Context, *keyMetadataRecord, uint32) (*publicKeyRecord, error)
+}
+
 type keyAgreementProvider interface {
 	Encapsulate(context.Context, *keyMetadataRecord, *proto.EncapsulateRequest) (*proto.EncapsulateResponse, error)
 	Decapsulate(context.Context, *keyMetadataRecord, *proto.DecapsulateRequest) (*proto.DecapsulateResponse, error)

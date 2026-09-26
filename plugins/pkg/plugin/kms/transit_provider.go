@@ -116,6 +116,36 @@ func (p *transitProvider) Sign(ctx context.Context, metadata *keyMetadataRecord,
 	}, nil
 }
 
+func (p *transitProvider) GetPublicKey(ctx context.Context, metadata *keyMetadataRecord, version uint32) (*publicKeyRecord, error) {
+	if !supportsSigning(metadata.KeySpec) || metadata.KeyUsage != signVerifyUsage {
+		return nil, status.Error(codes.FailedPrecondition, "key does not have a public key")
+	}
+
+	transitInfo, err := p.client.readTransitKey(ctx, metadata.backendKey())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if version == 0 {
+		version = transitInfo.LatestVersion
+	}
+	if version == 0 {
+		version = metadata.PrimaryVersion
+	}
+
+	publicKey := transitInfo.publicKeyForVersion(version)
+	if publicKey == "" && version == metadata.PrimaryVersion {
+		publicKey = metadata.PublicKey
+	}
+	if publicKey == "" {
+		return nil, status.Error(codes.NotFound, "public key version not found")
+	}
+
+	return &publicKeyRecord{
+		PublicKey: publicKey,
+		Version:   version,
+	}, nil
+}
+
 func (p *transitProvider) GenerateDataKey(ctx context.Context, metadata *keyMetadataRecord, req *proto.GenerateDataKeyRequest) (*proto.GenerateDataKeyResponse, error) {
 	if !supportsEncryption(metadata.KeySpec) || metadata.KeyUsage != encryptDecryptUsage {
 		return nil, status.Error(codes.FailedPrecondition, "key does not support data key generation")

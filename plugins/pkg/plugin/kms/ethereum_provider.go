@@ -113,6 +113,10 @@ func (p *ethereumProvider) Sign(ctx context.Context, metadata *keyMetadataRecord
 	}, nil
 }
 
+func (p *ethereumProvider) GetPublicKey(ctx context.Context, metadata *keyMetadataRecord, version uint32) (*publicKeyRecord, error) {
+	return publicKeyFromMetadata(ctx, metadata, version)
+}
+
 func rawEthereumHash(message string) (string, error) {
 	rawBytes, err := base64.StdEncoding.DecodeString(message)
 	if err != nil {

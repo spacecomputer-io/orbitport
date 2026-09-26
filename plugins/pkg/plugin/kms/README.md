@@ -19,9 +19,11 @@ key-store RPCs:
   alias. For asymmetric signing and key-agreement keys, this includes
   `KeyMetadata.public_key`, which callers can share with third parties for
   verification. Private key material is never returned.
-- `GetPublicKey(key_id)` — returns the public key and primary key version for
-  an authenticated client's asymmetric signing or key-agreement key. Symmetric
-  keys do not have a public key and are rejected for this operation.
+- `GetPublicKey(key_id, version)` — returns the public key for an
+  authenticated client's asymmetric signing or key-agreement key. Omit
+  `version` for the current public key, or set it to fetch a historical key
+  version. Symmetric keys do not have a public key and are rejected for this
+  operation.
 - `Encrypt(key_id, plaintext, …)` / `Decrypt(ciphertext_blob, …)` —
   symmetric crypto (Transit only). The ciphertext is wrapped in a
   versioned, base64-JSON envelope (`v`, `scheme`, `key_id`, `provider_key`,
@@ -132,12 +134,12 @@ Callers that sign data can fetch verification material without exporting the
 private key:
 
 1. Create a signing key with an alias such as `telemetry-signing`.
-2. Sign telemetry with `Sign(key_id = "telemetry-signing", ...)`.
-3. Call `GetPublicKey(key_id = "telemetry-signing")` or
-   `GetPublicKey(key_id = "kms:telemetry-signing")`.
-4. Share the returned `PublicKey` and `PrimaryVersion` together with the
-   signing algorithm and key spec so a third party can verify signatures
-   outside KMS.
+2. Sign telemetry with `Sign(key_id = "telemetry-signing", ...)` and store the
+   returned `(Signature, KeyId, KeyVersion)`.
+3. Call `GetPublicKey(key_id = "telemetry-signing", version = KeyVersion)` or
+   `GetPublicKey(key_id = "kms:telemetry-signing", version = KeyVersion)`.
+4. Share the returned `PublicKey` and `Version` together with the signing
+   algorithm and key spec so a third party can verify signatures outside KMS.
 
 `GetKeyMetadata` and `GetPublicKey` are authenticated and tenant-scoped. A
 tenant can reuse another tenant's alias string without gaining access to that

@@ -166,6 +166,19 @@ func (t *transitKeyInfo) exportedPublicKey() string {
 	return latestPublicKey
 }
 
+func (t *transitKeyInfo) publicKeyForVersion(version uint32) string {
+	if version == 0 {
+		return ""
+	}
+	if version == t.LatestVersion && t.PublicKey != "" {
+		return t.PublicKey
+	}
+	if len(t.Keys) == 0 {
+		return ""
+	}
+	return transitVersionPublicKey(t.Keys[strconv.FormatUint(uint64(version), 10)])
+}
+
 func transitVersionPublicKey(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""

@@ -769,7 +769,13 @@ impl KmsService {
     }
 
     pub fn validate_get_public_key(req: &GetPublicKeyRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)
+        validate_key_reference("KeyId", &req.key_id)?;
+        if let Some(version) = req.version
+            && version == 0
+        {
+            return Err("Version must be greater than 0".to_string());
+        }
+        Ok(())
     }
 
     pub fn validate_rotate_key(req: &RotateKeyRequest) -> Result<(), String> {
@@ -923,6 +929,7 @@ impl KmsService {
             key_id: response.key_id,
             signature: response.signature,
             signing_algorithm: response.signing_algorithm,
+            key_version: response.key_version,
         })
     }
 
@@ -1030,13 +1037,14 @@ impl KmsService {
             .get_public_key(tonic::Request::new(PluginGetPublicKeyRequest {
                 key_id: req.key_id,
                 client_id: client_id.to_string(),
+                version: req.version,
             }))
             .await?
             .into_inner();
 
         Ok(GetPublicKeyResponse {
             public_key: response.public_key,
-            primary_version: response.primary_version,
+            version: response.version,
         })
     }
 
@@ -1656,24 +1664,35 @@ mod test {
     fn test_validate_get_public_key_reference() {
         KmsService::validate_get_public_key(&GetPublicKeyRequest {
             key_id: "kms:telemetry-signing".to_string(),
+            version: None,
         })
         .unwrap();
         KmsService::validate_get_public_key(&GetPublicKeyRequest {
             key_id: "telemetry-signing".to_string(),
+            version: Some(2),
         })
         .unwrap();
 
         let err = KmsService::validate_get_public_key(&GetPublicKeyRequest {
             key_id: String::new(),
+            version: None,
         })
         .unwrap_err();
         assert!(err.to_ascii_lowercase().contains("keyid is required"));
 
         let err = KmsService::validate_get_public_key(&GetPublicKeyRequest {
             key_id: "telemetry/signing".to_string(),
+            version: None,
         })
         .unwrap_err();
         assert!(err.contains("unsupported characters"));
+
+        let err = KmsService::validate_get_public_key(&GetPublicKeyRequest {
+            key_id: "telemetry-signing".to_string(),
+            version: Some(0),
+        })
+        .unwrap_err();
+        assert!(err.contains("Version must be greater than 0"));
     }
 
     #[test]

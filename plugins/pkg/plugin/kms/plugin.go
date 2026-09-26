@@ -165,6 +165,7 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 		logger.Warnf("Sign failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
+	resp.KeyVersion = metadata.PrimaryVersion
 	logger.Debugf("Sign completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 	return resp, nil
 }
@@ -301,20 +302,30 @@ func (p *Plugin) GetPublicKey(ctx context.Context, req *proto.GetPublicKeyReques
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
+	version := req.GetVersion()
+	if req.Version != nil && version == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Version must be greater than 0")
+	}
 	logger.Debugf("GetPublicKey request received for key_id=%s", req.KeyId)
-	metadata, _, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
+	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
 	if err != nil {
 		logger.Warnf("GetPublicKey failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
-	if metadata.PublicKey == "" {
-		logger.Warnf("GetPublicKey rejected key without public key key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
-		return nil, status.Error(codes.FailedPrecondition, "key does not have a public key")
+	publicKeyProvider, err := requirePublicKeyProvider(provider, metadata.Scheme)
+	if err != nil {
+		logger.Warnf("GetPublicKey rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+		return nil, err
 	}
-	logger.Debugf("GetPublicKey completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
+	publicKey, err := publicKeyProvider.GetPublicKey(ctx, metadata, version)
+	if err != nil {
+		logger.Warnf("GetPublicKey failed for key_id=%s scheme=%s version=%d", req.KeyId, metadata.Scheme, version)
+		return nil, err
+	}
+	logger.Debugf("GetPublicKey completed for key_id=%s scheme=%s version=%d", req.KeyId, metadata.Scheme, publicKey.Version)
 	return &proto.GetPublicKeyResponse{
-		PublicKey:      metadata.PublicKey,
-		PrimaryVersion: metadata.PrimaryVersion,
+		PublicKey: publicKey.PublicKey,
+		Version:   publicKey.Version,
 	}, nil
 }
 

@@ -547,6 +547,7 @@ type SignResponse struct {
 	KeyId            string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	Signature        string                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
 	SigningAlgorithm string                 `protobuf:"bytes,3,opt,name=signing_algorithm,json=signingAlgorithm,proto3" json:"signing_algorithm,omitempty"`
+	KeyVersion       uint32                 `protobuf:"varint,4,opt,name=key_version,json=keyVersion,proto3" json:"key_version,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -600,6 +601,13 @@ func (x *SignResponse) GetSigningAlgorithm() string {
 		return x.SigningAlgorithm
 	}
 	return ""
+}
+
+func (x *SignResponse) GetKeyVersion() uint32 {
+	if x != nil {
+		return x.KeyVersion
+	}
+	return 0
 }
 
 type EncapsulateRequest struct {
@@ -1078,6 +1086,7 @@ type GetPublicKeyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
 	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	Version       *uint32                `protobuf:"varint,3,opt,name=version,proto3,oneof" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1126,12 +1135,19 @@ func (x *GetPublicKeyRequest) GetClientId() string {
 	return ""
 }
 
+func (x *GetPublicKeyRequest) GetVersion() uint32 {
+	if x != nil && x.Version != nil {
+		return *x.Version
+	}
+	return 0
+}
+
 type GetPublicKeyResponse struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	PublicKey      string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
-	PrimaryVersion uint32                 `protobuf:"varint,2,opt,name=primary_version,json=primaryVersion,proto3" json:"primary_version,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PublicKey     string                 `protobuf:"bytes,1,opt,name=public_key,json=publicKey,proto3" json:"public_key,omitempty"`
+	Version       uint32                 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetPublicKeyResponse) Reset() {
@@ -1171,9 +1187,9 @@ func (x *GetPublicKeyResponse) GetPublicKey() string {
 	return ""
 }
 
-func (x *GetPublicKeyResponse) GetPrimaryVersion() uint32 {
+func (x *GetPublicKeyResponse) GetVersion() uint32 {
 	if x != nil {
-		return x.PrimaryVersion
+		return x.Version
 	}
 	return 0
 }
@@ -1863,11 +1879,13 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\x12&\n" +
 	"\fmessage_type\x18\x04 \x01(\tH\x00R\vmessageType\x88\x01\x01\x12\x1b\n" +
 	"\tclient_id\x18\x05 \x01(\tR\bclientIdB\x0f\n" +
-	"\r_message_type\"p\n" +
+	"\r_message_type\"\x91\x01\n" +
 	"\fSignResponse\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12+\n" +
-	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\"H\n" +
+	"\x11signing_algorithm\x18\x03 \x01(\tR\x10signingAlgorithm\x12\x1f\n" +
+	"\vkey_version\x18\x04 \x01(\rR\n" +
+	"keyVersion\"H\n" +
 	"\x12EncapsulateRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"\xa3\x01\n" +
@@ -1905,14 +1923,17 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"P\n" +
 	"\x16GetKeyMetadataResponse\x126\n" +
-	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"I\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"t\n" +
 	"\x13GetPublicKeyRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
-	"\tclient_id\x18\x02 \x01(\tR\bclientId\"^\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12\x1d\n" +
+	"\aversion\x18\x03 \x01(\rH\x00R\aversion\x88\x01\x01B\n" +
+	"\n" +
+	"\b_version\"O\n" +
 	"\x14GetPublicKeyResponse\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x01 \x01(\tR\tpublicKey\x12'\n" +
-	"\x0fprimary_version\x18\x02 \x01(\rR\x0eprimaryVersion\"\xc8\x01\n" +
+	"public_key\x18\x01 \x01(\tR\tpublicKey\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\rR\aversion\"\xc8\x01\n" +
 	"\x16GenerateDataKeyRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12'\n" +
 	"\rdata_key_spec\x18\x02 \x01(\tH\x00R\vdataKeySpec\x88\x01\x01\x12+\n" +
@@ -2067,6 +2088,7 @@ func file_proto_plugins_kms_proto_init() {
 	file_proto_plugins_kms_proto_msgTypes[4].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[6].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[12].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[16].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[18].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[26].OneofWrappers = []any{}
 	type x struct{}

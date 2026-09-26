@@ -78,6 +78,7 @@ message SignResponse {
   string key_id = 1;
   string signature = 2;
   string signing_algorithm = 3;
+  uint32 key_version = 4;
 }
 
 message EncapsulateRequest {
@@ -127,11 +128,13 @@ message GetKeyMetadataResponse {
 message GetPublicKeyRequest {
   // Accepts either the canonical "kms:<alias>" key id or the raw alias.
   string key_id = 1;
+  // Omit to return the current public key; set to fetch a historical version.
+  optional uint32 version = 2;
 }
 
 message GetPublicKeyResponse {
   string public_key = 1;
-  uint32 primary_version = 2;
+  uint32 version = 2;
 }
 
 message GenerateDataKeyRequest {

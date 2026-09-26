@@ -518,7 +518,8 @@ mod test {
             "id": 8,
             "method": "kms.GetPublicKey",
             "params": {
-                "KeyId": "telemetry-signing"
+                "KeyId": "telemetry-signing",
+                "Version": 1
             }
         });
 
@@ -526,6 +527,7 @@ mod test {
         match req.call {
             RpcCall::GetPublicKey(params) => {
                 assert_eq!(params.key_id, "telemetry-signing");
+                assert_eq!(params.version, Some(1));
             }
             _ => panic!("expected kms.GetPublicKey"),
         }
@@ -598,13 +600,38 @@ mod test {
     }
 
     #[test]
-    fn test_serialize_kms_get_public_key_includes_primary_version() {
+    fn test_serialize_kms_sign_includes_key_version() {
+        let response = serialize_success_response(
+            8,
+            crate::proto::services::kms::SignResponse {
+                key_id: "kms:telemetry-signing".to_string(),
+                signature: "vault:v2:signature".to_string(),
+                signing_algorithm: "ECDSA_SHA_256".to_string(),
+                key_version: 2,
+            },
+        )
+        .expect("serialize");
+
+        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
+        assert_eq!(
+            response["result"],
+            serde_json::json!({
+                "KeyId": "kms:telemetry-signing",
+                "Signature": "vault:v2:signature",
+                "SigningAlgorithm": "ECDSA_SHA_256",
+                "KeyVersion": 2
+            })
+        );
+    }
+
+    #[test]
+    fn test_serialize_kms_get_public_key_includes_version() {
         let response = serialize_success_response(
             8,
             crate::proto::services::kms::GetPublicKeyResponse {
                 public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
                     .to_string(),
-                primary_version: 2,
+                version: 2,
             },
         )
         .expect("serialize");
@@ -614,7 +641,7 @@ mod test {
             response["result"],
             serde_json::json!({
                 "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
-                "PrimaryVersion": 2
+                "Version": 2
             })
         );
     }
