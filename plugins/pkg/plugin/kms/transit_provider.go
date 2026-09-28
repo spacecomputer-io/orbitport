@@ -104,7 +104,7 @@ func (p *transitProvider) Sign(ctx context.Context, metadata *keyMetadataRecord,
 		return nil, status.Error(codes.FailedPrecondition, "key does not support signing")
 	}
 
-	signature, err := p.client.sign(ctx, metadata.backendKey(), req.Message, mapping)
+	signature, err := p.client.sign(ctx, metadata.backendKey(), req.Message, mapping, metadata.PrimaryVersion)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -113,6 +113,30 @@ func (p *transitProvider) Sign(ctx context.Context, metadata *keyMetadataRecord,
 		KeyId:            metadata.KeyID,
 		Signature:        signature,
 		SigningAlgorithm: req.SigningAlgorithm,
+	}, nil
+}
+
+func (p *transitProvider) GetPublicKey(ctx context.Context, metadata *keyMetadataRecord, version uint32) (*publicKeyRecord, error) {
+	if !supportsSigning(metadata.KeySpec) || metadata.KeyUsage != signVerifyUsage {
+		return nil, status.Error(codes.FailedPrecondition, "key does not have a public key")
+	}
+
+	transitInfo, err := p.client.readTransitKey(ctx, metadata.backendKey())
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+	if version == 0 {
+		version = metadata.PrimaryVersion
+	}
+
+	publicKey := transitInfo.publicKeyForVersion(version)
+	if publicKey == "" {
+		return nil, status.Error(codes.NotFound, "public key version not found")
+	}
+
+	return &publicKeyRecord{
+		PublicKey: publicKey,
+		Version:   version,
 	}, nil
 }
 

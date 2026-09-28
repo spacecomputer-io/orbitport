@@ -127,7 +127,7 @@ func TestMLDSASignUsesPQCPlugin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sign returned error: %v", err)
 	}
-	if resp.Signature != signature || resp.KeyId != testPQCKeyID || resp.SigningAlgorithm != signingAlgorithmMLDSA {
+	if resp.Signature != signature || resp.KeyId != testPQCKeyID || resp.SigningAlgorithm != signingAlgorithmMLDSA || resp.KeyVersion != 1 {
 		t.Fatalf("unexpected sign response: %+v", resp)
 	}
 }
