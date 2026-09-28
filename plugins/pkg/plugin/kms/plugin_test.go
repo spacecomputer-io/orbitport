@@ -291,6 +291,7 @@ func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 	}
 	const oldPublicKey = "-----BEGIN PUBLIC KEY-----old-----END PUBLIC KEY-----"
 	const publicKey = "-----BEGIN PUBLIC KEY-----demo-----END PUBLIC KEY-----"
+	const latestPublicKey = "-----BEGIN PUBLIC KEY-----latest-----END PUBLIC KEY-----"
 
 	requests := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -299,7 +300,7 @@ func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 			requests++
 			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitSignKeyID + `","client_id":"` + clientID + `","alias":"` + testTransitSignAlias + `","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"ECDSA_P256","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":2,"created_at":"2024-01-01T00:00:00Z","public_key":"` + publicKey + `","tags":[]}}}`))
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
-			_, _ = w.Write([]byte(`{"data":{"latest_version":2,"type":"ecdsa-p256","keys":{"1":{"name":"P-256","public_key":"` + oldPublicKey + `","creation_time":"2024-01-01T00:00:00Z"},"2":{"name":"P-256","public_key":"` + publicKey + `","creation_time":"2024-01-02T00:00:00Z"}}}}`))
+			_, _ = w.Write([]byte(`{"data":{"latest_version":3,"type":"ecdsa-p256","keys":{"1":{"name":"P-256","public_key":"` + oldPublicKey + `","creation_time":"2024-01-01T00:00:00Z"},"2":{"name":"P-256","public_key":"` + publicKey + `","creation_time":"2024-01-02T00:00:00Z"},"3":{"name":"P-256","public_key":"` + latestPublicKey + `","creation_time":"2024-01-03T00:00:00Z"}}}}`))
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 		}
@@ -441,6 +442,63 @@ func TestGetPublicKeyRejectsKeyWithoutPublicKey(t *testing.T) {
 	}
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("expected FailedPrecondition, got %v", status.Code(err))
+	}
+}
+
+func TestTransitSignPinsMetadataPrimaryVersion(t *testing.T) {
+	clientID := "client-a"
+	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
+	if err != nil {
+		t.Fatalf("scopedBackendKey() error = %v", err)
+	}
+
+	message := base64.StdEncoding.EncodeToString([]byte("hello"))
+	signRequests := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitSignKeyID):
+			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitSignKeyID + `","client_id":"` + clientID + `","alias":"` + testTransitSignAlias + `","scheme":"TRANSIT","provider_key":"` + providerKey + `","key_spec":"ECDSA_P256","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":2,"created_at":"2024-01-01T00:00:00Z","tags":[]}}}`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/sign/"+providerKey+"/sha2-256"):
+			signRequests++
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatalf("Decode sign body error = %v", err)
+			}
+			if body["input"] != message {
+				t.Fatalf("expected input %q, got %+v", message, body)
+			}
+			if body["prehashed"] != false {
+				t.Fatalf("expected prehashed=false, got %+v", body)
+			}
+			if body["key_version"] != float64(2) {
+				t.Fatalf("expected key_version=2, got %+v", body)
+			}
+			_, _ = w.Write([]byte(`{"data":{"signature":"vault:v2:signed"}}`))
+		default:
+			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
+		KeyId:            testTransitSignAlias,
+		Message:          message,
+		SigningAlgorithm: "ECDSA_SHA_256",
+		MessageType:      stringPtr(messageTypeRaw),
+		ClientId:         clientID,
+	})
+	if err != nil {
+		t.Fatalf("Sign returned error: %v", err)
+	}
+	if resp.Signature != "vault:v2:signed" || resp.KeyId != testTransitSignKeyID || resp.KeyVersion != 2 {
+		t.Fatalf("unexpected sign response: %+v", resp)
+	}
+	if signRequests != 1 {
+		t.Fatalf("expected 1 sign request, got %d", signRequests)
 	}
 }
 

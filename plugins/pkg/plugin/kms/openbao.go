@@ -237,13 +237,16 @@ func (c *openBaoClient) decrypt(ctx context.Context, transitKey, ciphertext stri
 	return resp.Data.Plaintext, nil
 }
 
-func (c *openBaoClient) sign(ctx context.Context, transitKey, message string, mapping *signMapping) (string, error) {
+func (c *openBaoClient) sign(ctx context.Context, transitKey, message string, mapping *signMapping, keyVersion uint32) (string, error) {
 	body := map[string]any{
 		"input":     message,
 		"prehashed": mapping.prehashed,
 	}
 	if mapping.signatureAlgorithm != "" {
 		body["signature_algorithm"] = mapping.signatureAlgorithm
+	}
+	if keyVersion != 0 {
+		body["key_version"] = keyVersion
 	}
 
 	var resp struct {

@@ -104,7 +104,7 @@ func (p *transitProvider) Sign(ctx context.Context, metadata *keyMetadataRecord,
 		return nil, status.Error(codes.FailedPrecondition, "key does not support signing")
 	}
 
-	signature, err := p.client.sign(ctx, metadata.backendKey(), req.Message, mapping)
+	signature, err := p.client.sign(ctx, metadata.backendKey(), req.Message, mapping, metadata.PrimaryVersion)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
@@ -126,16 +126,10 @@ func (p *transitProvider) GetPublicKey(ctx context.Context, metadata *keyMetadat
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	if version == 0 {
-		version = transitInfo.LatestVersion
-	}
-	if version == 0 {
 		version = metadata.PrimaryVersion
 	}
 
 	publicKey := transitInfo.publicKeyForVersion(version)
-	if publicKey == "" && version == metadata.PrimaryVersion {
-		publicKey = metadata.PublicKey
-	}
 	if publicKey == "" {
 		return nil, status.Error(codes.NotFound, "public key version not found")
 	}
