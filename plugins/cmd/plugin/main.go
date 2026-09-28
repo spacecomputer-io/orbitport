@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -26,6 +28,11 @@ import (
 )
 
 func main() {
+	// distroless images have no shell or curl, so container healthchecks run the binary itself
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheck())
+	}
+
 	utils.GetLogger("orbitport:plugin").Info("Initializing")
 
 	cfg := core.ReadFromEnv()
@@ -180,4 +187,16 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// runHealthcheck probes this container's own gRPC health service and returns the exit code
+func runHealthcheck() int {
+	cfg := core.ReadFromEnv()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := health.Check(ctx, fmt.Sprintf("127.0.0.1:%d", cfg.GrpcPort)); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	return 0
 }

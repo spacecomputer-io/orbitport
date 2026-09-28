@@ -17,8 +17,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      attestations: write
-      id-token: write
 
     steps:
 
@@ -36,6 +34,14 @@ jobs:
         registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
+
+    # runtime bases come from dhi.io, which needs its own login
+    - name: Log in to the DHI registry
+      uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+      with:
+        registry: dhi.io
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Extract metadata (tags, labels) for GW
       id: meta_gw
@@ -59,14 +65,6 @@ jobs:
         tags: ${{ steps.meta_gw.outputs.tags }}
         labels: ${{ steps.meta_gw.outputs.labels }}
 
-## TODO enable after upgrading the plan, or making this repository public
-    # - name: Generate GW artifact attestation
-    #   uses: actions/attest-build-provenance@v2
-    #   with:
-    #     subject-name: ${{ env.IMAGE_GW }}
-    #     subject-digest: ${{ steps.push_gw.outputs.digest }}
-    #     push-to-registry: true
-
     - name: Build and push Plugin image
       id: push
       uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
@@ -75,11 +73,3 @@ jobs:
         push: true
         tags: ${{ steps.meta_plugin.outputs.tags }}
         labels: ${{ steps.meta_plugin.outputs.labels }}
-
-## TODO enable after upgrading the plan, or making this repository public
-    # - name: Generate Plugin artifact attestation
-    #   uses: actions/attest-build-provenance@v2
-    #   with:
-    #     subject-name: ${{ env.IMAGE_PLUGIN }}
-    #     subject-digest: ${{ steps.push_plugin.outputs.digest }}
-    #     push-to-registry: true
