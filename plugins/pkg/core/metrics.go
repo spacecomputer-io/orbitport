@@ -76,12 +76,20 @@ func metricContext(req any, response any) string {
 
 	switch typedResponse := response.(type) {
 	case *proto.DecryptResponse:
+		if typedResponse == nil {
+			return "unknown"
+		}
+
 		algorithm := typedResponse.EncryptionAlgorithm
 		if algorithm == "" {
 			return "unknown"
 		}
 		return algorithm
 	case *proto.EncryptResponse:
+		if typedResponse == nil {
+			break
+		}
+
 		algorithm := typedResponse.EncryptionAlgorithm
 		if algorithm == "" {
 			return "unknown"
