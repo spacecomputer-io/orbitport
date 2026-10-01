@@ -12,6 +12,7 @@ import (
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
+	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -21,11 +22,11 @@ const (
 	testPQCKeyID = "kms:pqc-main"
 )
 
-func TestCreateMLDSAKeyStoresPQCMetadata(t *testing.T) {
+func TestCreateMLDSAKey_StoresPQCMetadata(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testPQCAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	var createdVariant string
@@ -62,36 +63,42 @@ func TestCreateMLDSAKeyStoresPQCMetadata(t *testing.T) {
 		ClientId:    clientID,
 		Alias:       testPQCAlias,
 	})
-	if err != nil {
-		t.Fatalf("CreateKey returned error: %v", err)
+	if !assert.NoError(t, err) || !assert.NotNil(t, resp) {
+		return
 	}
-	if createdVariant != "ml-dsa-65" {
-		t.Fatalf("created variant = %q, want ml-dsa-65", createdVariant)
+
+	assert.Equal(t, "ml-dsa-65", createdVariant)
+
+	metadata := resp.GetKeyMetadata()
+	if !assert.NotNil(t, metadata) {
+		return
 	}
-	if resp.KeyMetadata.Scheme != schemePQC || resp.KeyMetadata.KeyId != testPQCKeyID {
-		t.Fatalf("unexpected ML-DSA key metadata: %+v", resp.KeyMetadata)
-	}
-	if resp.KeyMetadata.PublicKey == nil || *resp.KeyMetadata.PublicKey != publicKey {
-		t.Fatalf("expected ML-DSA public key in response, got %+v", resp.KeyMetadata)
-	}
+	assert.Equal(t, schemePQC, metadata.GetScheme())
+	assert.Equal(t, testPQCKeyID, metadata.GetKeyId())
+
+	assert.Equal(t, publicKey, metadata.GetPublicKey())
 
 	data, ok := kvBody["data"].(map[string]any)
-	if !ok || data["scheme"] != schemePQC {
-		t.Fatalf("expected ML-DSA metadata scheme, got %+v", kvBody)
+
+	if !assert.True(t, ok) {
+		return
 	}
-	if data["provider_key"] != providerKey || data["key_spec"] != keySpecMLDSA65 || data["key_usage"] != signVerifyUsage {
-		t.Fatalf("unexpected ML-DSA metadata: %+v", data)
-	}
-	if data["public_key"] != publicKey {
-		t.Fatalf("expected ML-DSA public key in metadata, got %+v", data)
-	}
+	assert.Equal(t, schemePQC, data["scheme"])
+
+	assert.Equal(t, providerKey, data["provider_key"])
+	assert.Equal(t, keySpecMLDSA65, data["key_spec"])
+	assert.Equal(t, signVerifyUsage, data["key_usage"])
+
+	assert.Equal(t, publicKey, data["public_key"])
+
 }
 
-func TestMLDSASignUsesPQCPlugin(t *testing.T) {
+func TestMLDSASign_ValidRequest_UsesPQCPlugin(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testPQCAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	message := base64.StdEncoding.EncodeToString([]byte("hello ml-dsa"))
@@ -104,9 +111,10 @@ func TestMLDSASignUsesPQCPlugin(t *testing.T) {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/pqc/mldsa/sign/"+providerKey):
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["message"] != message {
-				t.Fatalf("unexpected sign body: %+v", body)
+			if !assert.Equal(t, message, body["message"]) {
+				return
 			}
+
 			_, _ = w.Write([]byte(`{"data":{"name":"` + providerKey + `","variant":"ml-dsa-65","signature":"` + signature + `"}}`))
 		default:
 			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
@@ -124,19 +132,22 @@ func TestMLDSASignUsesPQCPlugin(t *testing.T) {
 		MessageType:      stringPtr(messageTypeRaw),
 		ClientId:         clientID,
 	})
-	if err != nil {
-		t.Fatalf("Sign returned error: %v", err)
+	if !assert.NoError(t, err) || !assert.NotNil(t, resp) {
+		return
 	}
-	if resp.Signature != signature || resp.KeyId != testPQCKeyID || resp.SigningAlgorithm != signingAlgorithmMLDSA || resp.KeyVersion != 1 {
-		t.Fatalf("unexpected sign response: %+v", resp)
-	}
+
+	assert.Equal(t, signature, resp.GetSignature())
+	assert.Equal(t, testPQCKeyID, resp.GetKeyId())
+	assert.Equal(t, signingAlgorithmMLDSA, resp.GetSigningAlgorithm())
+	assert.Equal(t, uint32(1), resp.GetKeyVersion())
+
 }
 
-func TestMLDSASignRejectsInvalidBase64Message(t *testing.T) {
+func TestMLDSASign_InvalidBase64Message_ReturnsInvalidArgument(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testPQCAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -159,22 +170,19 @@ func TestMLDSASignRejectsInvalidBase64Message(t *testing.T) {
 		MessageType:      stringPtr(messageTypeRaw),
 		ClientId:         clientID,
 	})
-	if err == nil {
-		t.Fatal("expected Sign to reject invalid PQC message")
+	if !assert.Error(t, err) {
+		return
 	}
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "PQC RAW messages must be base64-encoded bytes" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, "PQC RAW messages must be base64-encoded bytes", status.Convert(err).Message())
 }
 
-func TestPQCRejectsUnsupportedEncryption(t *testing.T) {
+func TestEncrypt_PQCKey_ReturnsFailedPrecondition(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testPQCAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -196,22 +204,19 @@ func TestPQCRejectsUnsupportedEncryption(t *testing.T) {
 		EncryptionAlgorithm: stringPtr(encryptionAlgorithmAES256GCM96),
 		ClientId:            clientID,
 	})
-	if err == nil {
-		t.Fatal("expected Encrypt to reject PQC keys")
+	if !assert.Error(t, err) {
+		return
 	}
-	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("expected FailedPrecondition, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "PQC keys do not support encryption" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	assert.Equal(t, "PQC keys do not support encryption", status.Convert(err).Message())
 }
 
-func TestCreateMLKEMKeyStoresPQCMetadata(t *testing.T) {
+func TestCreateMLKEMKey_StoresPQCMetadata(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testPQCAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	var createdVariant string
@@ -248,41 +253,43 @@ func TestCreateMLKEMKeyStoresPQCMetadata(t *testing.T) {
 		ClientId:    clientID,
 		Alias:       testPQCAlias,
 	})
-	if err != nil {
-		t.Fatalf("CreateKey returned error: %v", err)
+	if !assert.NoError(t, err) || !assert.NotNil(t, resp) {
+		return
 	}
-	if createdVariant != "ml-kem-768" {
-		t.Fatalf("created variant = %q, want ml-kem-768", createdVariant)
+
+	assert.Equal(t, "ml-kem-768", createdVariant)
+
+	metadata := resp.GetKeyMetadata()
+	if !assert.NotNil(t, metadata) {
+		return
 	}
-	if resp.KeyMetadata.Scheme != schemePQC || resp.KeyMetadata.KeyId != testPQCKeyID {
-		t.Fatalf("unexpected ML-KEM key metadata: %+v", resp.KeyMetadata)
-	}
-	if resp.KeyMetadata.PublicKey == nil || *resp.KeyMetadata.PublicKey != publicKey {
-		t.Fatalf("expected ML-KEM public key in response, got %+v", resp.KeyMetadata)
-	}
+
+	assert.Equal(t, schemePQC, metadata.GetScheme())
+	assert.Equal(t, testPQCKeyID, metadata.GetKeyId())
+	assert.Equal(t, publicKey, metadata.GetPublicKey())
 
 	data, ok := kvBody["data"].(map[string]any)
-	if !ok || data["scheme"] != schemePQC {
-		t.Fatalf("expected ML-KEM metadata scheme, got %+v", kvBody)
+	if !assert.True(t, ok) {
+		return
 	}
-	if data["provider_key"] != providerKey || data["key_spec"] != keySpecMLKEM768 || data["key_usage"] != keyAgreementUsage {
-		t.Fatalf("unexpected ML-KEM metadata: %+v", data)
-	}
-	if data["public_key"] != publicKey {
-		t.Fatalf("expected ML-KEM public key in metadata, got %+v", data)
-	}
+
+	assert.Equal(t, schemePQC, data["scheme"])
+	assert.Equal(t, providerKey, data["provider_key"])
+	assert.Equal(t, keySpecMLKEM768, data["key_spec"])
+	assert.Equal(t, keyAgreementUsage, data["key_usage"])
+	assert.Equal(t, publicKey, data["public_key"])
 }
 
-func TestMLKEMEncapsulateDecapsulateRoundTrip(t *testing.T) {
+func TestMLKEMEncapsulateAndDecapsulate_ValidRequests_ReturnMatchingSharedKey(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testPQCAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	decapsulationKey, err := stdmlkem.GenerateKey768()
-	if err != nil {
-		t.Fatalf("GenerateKey768() error = %v", err)
+	if !assert.NoError(t, err) {
+		return
 	}
 	publicKey := base64.StdEncoding.EncodeToString(decapsulationKey.EncapsulationKey().Bytes())
 
@@ -316,48 +323,45 @@ func TestMLKEMEncapsulateDecapsulateRoundTrip(t *testing.T) {
 		KeyId:    testPQCAlias,
 		ClientId: clientID,
 	})
-	if err != nil {
-		t.Fatalf("Encapsulate returned error: %v", err)
+	if !assert.NoError(t, err) || !assert.NotNil(t, encapResp) {
+		return
 	}
-	if encapResp.Ciphertext == "" || encapResp.SharedKey == "" || encapResp.KeyAgreementAlgorithm != keyAgreementAlgorithmMLKEM {
-		t.Fatalf("unexpected encapsulate response: %+v", encapResp)
+
+	if !assert.NotEmpty(t, encapResp.GetCiphertext()) || !assert.NotEmpty(t, encapResp.GetSharedKey()) {
+		return
 	}
-	ciphertext, err := base64.StdEncoding.DecodeString(encapResp.Ciphertext)
-	if err != nil {
-		t.Fatalf("encapsulate ciphertext is not base64: %v", err)
+	assert.Equal(t, keyAgreementAlgorithmMLKEM, encapResp.GetKeyAgreementAlgorithm())
+
+	ciphertext, err := base64.StdEncoding.DecodeString(encapResp.GetCiphertext())
+	if !assert.NoError(t, err) {
+		return
 	}
-	if len(ciphertext) != stdmlkem.CiphertextSize768 {
-		t.Fatalf("encapsulate ciphertext has %d bytes, want %d", len(ciphertext), stdmlkem.CiphertextSize768)
+	assert.Len(t, ciphertext, stdmlkem.CiphertextSize768)
+
+	sharedKey, err := base64.StdEncoding.DecodeString(encapResp.GetSharedKey())
+	if !assert.NoError(t, err) {
+		return
 	}
-	sharedKey, err := base64.StdEncoding.DecodeString(encapResp.SharedKey)
-	if err != nil {
-		t.Fatalf("encapsulate shared key is not base64: %v", err)
-	}
-	if len(sharedKey) != stdmlkem.SharedKeySize {
-		t.Fatalf("encapsulate shared key has %d bytes, want %d", len(sharedKey), stdmlkem.SharedKeySize)
-	}
+	assert.Len(t, sharedKey, stdmlkem.SharedKeySize)
 
 	decapResp, err := plugin.Decapsulate(context.Background(), &proto.DecapsulateRequest{
 		KeyId:      testPQCAlias,
-		Ciphertext: encapResp.Ciphertext,
+		Ciphertext: encapResp.GetCiphertext(),
 		ClientId:   clientID,
 	})
-	if err != nil {
-		t.Fatalf("Decapsulate returned error: %v", err)
+	if !assert.NoError(t, err) || !assert.NotNil(t, decapResp) {
+		return
 	}
-	if decapResp.KeyAgreementAlgorithm != keyAgreementAlgorithmMLKEM {
-		t.Fatalf("unexpected decapsulate response: %+v", decapResp)
-	}
-	if decapResp.SharedKey != encapResp.SharedKey {
-		t.Fatal("encapsulate and decapsulate shared keys differ")
-	}
+
+	assert.Equal(t, keyAgreementAlgorithmMLKEM, decapResp.GetKeyAgreementAlgorithm())
+	assert.Equal(t, encapResp.GetSharedKey(), decapResp.GetSharedKey())
 }
 
-func TestMLKEMDecapsulateRejectsInvalidBase64Ciphertext(t *testing.T) {
+func TestMLKEMDecapsulate_InvalidBase64Ciphertext_ReturnsInvalidArgument(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testPQCAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+	if !assert.NoError(t, err) {
+		return
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -378,15 +382,12 @@ func TestMLKEMDecapsulateRejectsInvalidBase64Ciphertext(t *testing.T) {
 		Ciphertext: "not-base64",
 		ClientId:   clientID,
 	})
-	if err == nil {
-		t.Fatal("expected Decapsulate to reject invalid PQC ciphertext")
+	if !assert.Error(t, err) {
+		return
 	}
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "PQC ciphertext must be base64-encoded bytes" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, "PQC ciphertext must be base64-encoded bytes", status.Convert(err).Message())
 }
 
 func testPQCConfig(openBaoURL string) *kmsConfig {
