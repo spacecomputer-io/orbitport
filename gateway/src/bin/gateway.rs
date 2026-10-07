@@ -51,6 +51,18 @@ struct Args {
     bulk_max: usize,
     #[clap(long, env = "ORBITPORT_RPC_BODY_MAX_BYTES", default_value = "65536")]
     rpc_body_max_bytes: u64,
+    /// Enables the gateway-native MCP endpoint at POST /mcp.
+    #[clap(long, env = "ORBITPORT_MCP_ENABLED", default_value = "false")]
+    mcp_enabled: bool,
+    /// Canonical MCP resource URL used in protected-resource metadata.
+    #[clap(long, env = "ORBITPORT_MCP_RESOURCE_URL", default_value = "")]
+    mcp_resource_url: String,
+    /// Comma-separated authorization server URLs advertised to MCP clients.
+    #[clap(long, env = "ORBITPORT_MCP_AUTHORIZATION_SERVERS", default_value = "")]
+    mcp_authorization_servers: String,
+    /// Comma-separated Origin values allowed to call /mcp from browsers.
+    #[clap(long, env = "ORBITPORT_MCP_ALLOWED_ORIGINS", default_value = "")]
+    mcp_allowed_origins: String,
 }
 
 impl Args {
@@ -212,6 +224,16 @@ async fn main() -> Result<(), GatewayError> {
         args.bulk_max,
         args.rpc_body_max_bytes,
         args.ctrng_enabled,
+        if args.mcp_enabled {
+            Some(gateway::mcp::McpConfig::new(
+                args.mcp_resource_url,
+                args.mcp_authorization_servers,
+                args.mcp_allowed_origins,
+                args.http_port,
+            ))
+        } else {
+            None
+        },
     )
     .await;
 

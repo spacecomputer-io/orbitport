@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::time::{Duration, Instant, timeout};
 use warp::{Filter, Rejection, Reply, http::StatusCode, reject::Reject};
 
+use crate::mcp;
 use crate::metrics;
 use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
@@ -65,6 +66,7 @@ pub async fn start(
     bulk_max: usize,
     rpc_body_max_bytes: u64,
     ctrng_enabled: bool,
+    mcp_config: Option<mcp::McpConfig>,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -76,8 +78,10 @@ pub async fn start(
     let patissuer_client: Option<PatIssuerPluginClient<Channel>> =
         plugin_catalog.get_patissuer_client().await.ok();
     let account_client_rpc = account_client.clone();
+    let account_client_mcp = account_client.clone();
     let account_client_get = account_client.clone();
     let account_client_post = account_client.clone();
+    let plugin_catalog_mcp = plugin_catalog.clone();
 
     // The hold is placed inside handle_rpc: its operation tag comes from the
     // validated body, which a filter ahead of body parsing cannot see.
@@ -142,6 +146,20 @@ pub async fn start(
         }))
     });
 
+    let mut mcp_routes: Option<BoxedFilter<(Response,)>> = None;
+    if let Some(config) = mcp_config {
+        let config = Arc::new(config);
+        tracing::info!("MCP endpoint enabled at /mcp");
+        mcp_routes = Some(mcp::routes(
+            service_manager.get_auth_client(),
+            rate_limiter.clone(),
+            plugin_catalog_mcp,
+            account_client_mcp,
+            rpc_body_max_bytes,
+            config,
+        ));
+    }
+
     // REST service routes are cTRNG-only: unregistered means 404 before auth or hold
     let metered_routes: BoxedFilter<(Response,)> = if ctrng_enabled {
         get_route
@@ -151,6 +169,12 @@ pub async fn start(
             .boxed()
     } else {
         rpc_route.map(warp::reply::Reply::into_response).boxed()
+    };
+
+    let metered_routes = if let Some(mcp_routes) = mcp_routes {
+        metered_routes.or(mcp_routes).unify().boxed()
+    } else {
+        metered_routes
     };
 
     let routes: BoxedFilter<(Response,)> = metered_routes
