@@ -286,7 +286,11 @@ async fn handle_mcp_request(
     };
 
     match request.method.as_str() {
-        "initialize" => Ok(json_result(id, initialize_result())),
+        "initialize" => Ok(json_result(
+            id,
+            initialize_result(request.params.as_deref()),
+        )),
+        "server/discover" => Ok(json_result(id, discover_result())),
         "ping" => Ok(json_result(id, json!({}))),
         "tools/list" => Ok(json_result(
             id,
@@ -509,6 +513,10 @@ fn validate_mcp_headers(
     headers: &HeaderMap,
     request: &McpRequest,
 ) -> Result<(), McpProtocolRejected> {
+    if request.method == "initialize" {
+        return Ok(());
+    }
+
     let Some(version) = header_str(headers, "mcp-protocol-version") else {
         return Ok(());
     };
@@ -646,9 +654,9 @@ fn reject_identity_fields(args: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn initialize_result() -> Value {
+fn initialize_result(params: Option<&RawValue>) -> Value {
     json!({
-        "protocolVersion": MCP_PROTOCOL_VERSION,
+        "protocolVersion": initialize_protocol_version(params),
         "capabilities": {
             "tools": {}
         },
@@ -656,6 +664,41 @@ fn initialize_result() -> Value {
             "name": "orbitport-kms",
             "version": env!("CARGO_PKG_VERSION")
         }
+    })
+}
+
+fn initialize_protocol_version(params: Option<&RawValue>) -> &'static str {
+    match requested_initialize_protocol(params).as_deref() {
+        Some(MCP_LEGACY_2025_06_18) => MCP_LEGACY_2025_06_18,
+        Some(MCP_LEGACY_2025_03_26) => MCP_LEGACY_2025_03_26,
+        _ => MCP_LEGACY_2025_11_25,
+    }
+}
+
+fn requested_initialize_protocol(params: Option<&RawValue>) -> Option<String> {
+    let params = params?;
+    let value: Value = serde_json::from_str(params.get()).ok()?;
+    value
+        .get("protocolVersion")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+}
+
+fn discover_result() -> Value {
+    json!({
+        "resultType": "complete",
+        "supportedVersions": [MCP_PROTOCOL_VERSION],
+        "capabilities": {
+            "tools": {}
+        },
+        "_meta": {
+            "io.modelcontextprotocol/serverInfo": {
+                "name": "orbitport-kms",
+                "version": env!("CARGO_PKG_VERSION")
+            }
+        },
+        "cacheScope": "public",
+        "ttlMs": 3600000
     })
 }
 
@@ -1261,6 +1304,28 @@ mod tests {
         let request = McpRequest {
             jsonrpc: "2.0".to_string(),
             id: Some(json!(1)),
+            method: "tools/list".to_string(),
+            params: Some(params),
+        };
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "mcp-protocol-version",
+            HeaderValue::from_static(MCP_PROTOCOL_VERSION),
+        );
+        headers.insert("mcp-method", HeaderValue::from_static("tools/list"));
+
+        let err = validate_mcp_headers(&headers, &request).unwrap_err();
+        assert!(err.message.contains("mismatch"));
+    }
+
+    #[test]
+    fn initialize_is_legacy_compatible_even_with_modern_headers() {
+        let params = raw(
+            r#"{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"codex","version":"test"}}"#,
+        );
+        let request = McpRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(json!(1)),
             method: "initialize".to_string(),
             params: Some(params),
         };
@@ -1271,8 +1336,29 @@ mod tests {
         );
         headers.insert("mcp-method", HeaderValue::from_static("initialize"));
 
-        let err = validate_mcp_headers(&headers, &request).unwrap_err();
-        assert!(err.message.contains("mismatch"));
+        validate_mcp_headers(&headers, &request).unwrap();
+    }
+
+    #[test]
+    fn initialize_result_returns_legacy_protocol_version() {
+        let params = raw(r#"{"protocolVersion":"2025-06-18"}"#);
+        let result = initialize_result(Some(&params));
+        assert_eq!(result["protocolVersion"], MCP_LEGACY_2025_06_18);
+
+        let result = initialize_result(None);
+        assert_eq!(result["protocolVersion"], MCP_LEGACY_2025_11_25);
+    }
+
+    #[test]
+    fn server_discover_advertises_modern_capabilities() {
+        let result = discover_result();
+        assert_eq!(result["resultType"], "complete");
+        assert_eq!(result["supportedVersions"][0], MCP_PROTOCOL_VERSION);
+        assert!(result["capabilities"]["tools"].is_object());
+        assert_eq!(
+            result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+            "orbitport-kms"
+        );
     }
 
     #[test]
