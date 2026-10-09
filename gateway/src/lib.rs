@@ -48,6 +48,7 @@ pub mod metrics;
 
 pub mod auth;
 pub mod filters;
+pub mod mcp;
 pub mod plugins;
 pub mod server;
 pub mod service_manager;

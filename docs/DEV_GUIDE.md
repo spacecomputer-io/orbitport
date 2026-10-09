@@ -169,3 +169,25 @@ curl -X POST http://localhost:8080/api/v1/rpc \
     }
   }'
 ```
+
+The same KMS surface can be exposed to agentic clients through the
+gateway-native MCP endpoint when `ORBITPORT_MCP_ENABLED=true`. MCP requests use
+the same bearer token and tenant resolution as `/api/v1/rpc`:
+
+```bash
+curl -X POST http://localhost:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json' \
+  -H 'Authorization: Bearer test_access_token' \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 61,
+    "method": "tools/call",
+    "params": {
+      "name": "kms_keystore_get",
+      "arguments": {
+        "Name": "github/prod"
+      }
+    }
+  }'
+```

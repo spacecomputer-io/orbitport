@@ -439,6 +439,25 @@ pub enum KmsRpcCall {
 }
 
 impl KmsRpcCall {
+    pub fn operation(&self) -> String {
+        match self {
+            Self::Encrypt(_) => "kms.Encrypt".to_string(),
+            Self::Decrypt(_) => "kms.Decrypt".to_string(),
+            Self::Sign(req) => format!("kms.Sign:{}", req.signing_algorithm),
+            Self::Encapsulate(_) => "kms.Encapsulate".to_string(),
+            Self::Decapsulate(_) => "kms.Decapsulate".to_string(),
+            Self::CreateKey(req) => format!("kms.CreateKey:{}", req.key_spec),
+            Self::GetKeyMetadata(_) => "kms.GetKeyMetadata".to_string(),
+            Self::GetPublicKey(_) => "kms.GetPublicKey".to_string(),
+            Self::GenerateDataKey(_) => "kms.GenerateDataKey".to_string(),
+            Self::RotateKey(_) => "kms.RotateKey".to_string(),
+            Self::KeyStorePut(_) => "kms_keystore.Put".to_string(),
+            Self::KeyStoreGet(_) => "kms_keystore.Get".to_string(),
+            Self::KeyStoreList(_) => "kms_keystore.List".to_string(),
+            Self::KeyStoreDelete(_) => "kms_keystore.Delete".to_string(),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         match self {
             Self::Encrypt(req) => KmsService::validate_encrypt(req),

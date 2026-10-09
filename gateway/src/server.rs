@@ -4,6 +4,7 @@ use std::sync::Arc;
 use tokio::time::{Duration, Instant, timeout};
 use warp::{Filter, Rejection, Reply, http::StatusCode, reject::Reject};
 
+use crate::mcp;
 use crate::metrics;
 use crate::service_manager::ServiceManager;
 use crate::types::{EncryptionKey, GatewayError, ServiceRequest};
@@ -65,6 +66,7 @@ pub async fn start(
     bulk_max: usize,
     rpc_body_max_bytes: u64,
     ctrng_enabled: bool,
+    mcp_config: Option<mcp::McpConfig>,
 ) {
     let service_manager_clone = service_manager.clone();
     let service_manager_post_clone = service_manager.clone();
@@ -76,8 +78,10 @@ pub async fn start(
     let patissuer_client: Option<PatIssuerPluginClient<Channel>> =
         plugin_catalog.get_patissuer_client().await.ok();
     let account_client_rpc = account_client.clone();
+    let account_client_mcp = account_client.clone();
     let account_client_get = account_client.clone();
     let account_client_post = account_client.clone();
+    let plugin_catalog_mcp = plugin_catalog.clone();
 
     // The hold is placed inside handle_rpc: its operation tag comes from the
     // validated body, which a filter ahead of body parsing cannot see.
@@ -136,11 +140,21 @@ pub async fn start(
     // Allowlist: `/healthz` is the only route that skips the account hold.
     // It runs without auth or rate-limiting so probes from k8s / load balancers
     // never spend credits. There is no `/version` route today.
-    let health_route = warp::path("healthz").map(|| {
-        warp::reply::json(&serde_json::json!({
-            "status": "ok"
-        }))
-    });
+    let health_route = health_route();
+
+    let mut mcp_routes: Option<BoxedFilter<(Response,)>> = None;
+    if let Some(config) = mcp_config {
+        let config = Arc::new(config);
+        tracing::info!("MCP endpoint enabled at /mcp");
+        mcp_routes = Some(mcp::routes(
+            service_manager.get_auth_client(),
+            rate_limiter.clone(),
+            plugin_catalog_mcp,
+            account_client_mcp,
+            rpc_body_max_bytes,
+            config,
+        ));
+    }
 
     // REST service routes are cTRNG-only: unregistered means 404 before auth or hold
     let metered_routes: BoxedFilter<(Response,)> = if ctrng_enabled {
@@ -153,9 +167,18 @@ pub async fn start(
         rpc_route.map(warp::reply::Reply::into_response).boxed()
     };
 
-    let routes: BoxedFilter<(Response,)> = metered_routes
-        .or(health_route.with(warp::log("health_check")))
-        .map(warp::reply::Reply::into_response)
+    let metered_routes = if let Some(mcp_routes) = mcp_routes {
+        metered_routes.or(mcp_routes).unify().boxed()
+    } else {
+        metered_routes
+    };
+
+    // Keep health first: MCP has its own recovery for MCP-shaped JSON errors,
+    // and that recovery turns non-MCP paths into concrete 404 responses.
+    // If health comes after MCP, Kubernetes probes never reach this route.
+    let routes: BoxedFilter<(Response,)> = health_route
+        .or(metered_routes)
+        .unify()
         .boxed();
 
     // The public key set is published by the jwks plugin, not here. The
@@ -186,6 +209,19 @@ pub async fn start(
     if let Some(task) = internal_task {
         let _ = task.await;
     }
+}
+
+fn health_route() -> BoxedFilter<(Response,)> {
+    warp::path("healthz")
+        .and(warp::path::end())
+        .map(|| {
+            warp::reply::json(&serde_json::json!({
+                "status": "ok"
+            }))
+        })
+        .with(warp::log("health_check"))
+        .map(warp::reply::Reply::into_response)
+        .boxed()
 }
 
 async fn shutdown_signal() {
@@ -581,5 +617,45 @@ mod test {
         let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
         assert_eq!(body["error"], "token_expired");
         assert!(body["message"].as_str().unwrap().contains("expired"));
+    }
+
+    #[tokio::test]
+    async fn health_route_stays_reachable_before_recovered_routes() {
+        let recovered_not_found = warp::path("mcp")
+            .and(warp::path::end())
+            .map(|| {
+                warp::reply::json(&serde_json::json!({
+                    "ok": true
+                }))
+            })
+            .map(warp::reply::Reply::into_response)
+            .recover(|err: Rejection| async move {
+                if err.is_not_found() {
+                    Ok::<_, Infallible>(
+                        warp::reply::with_status(
+                            warp::reply::json(&serde_json::json!({"error": "not_found"})),
+                            StatusCode::NOT_FOUND,
+                        )
+                        .into_response(),
+                    )
+                } else {
+                    Ok::<_, Infallible>(
+                        warp::reply::with_status(
+                            warp::reply::json(&serde_json::json!({"error": "unexpected"})),
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                        )
+                        .into_response(),
+                    )
+                }
+            })
+            .unify()
+            .boxed();
+
+        let route = health_route().or(recovered_not_found).unify();
+
+        let resp = warp::test::request().path("/healthz").reply(&route).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body: serde_json::Value = serde_json::from_slice(resp.body()).unwrap();
+        assert_eq!(body["status"], "ok");
     }
 }
