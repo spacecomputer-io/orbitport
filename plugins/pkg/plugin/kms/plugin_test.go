@@ -179,9 +179,7 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 func TestGetKeyMetadataReturnsMetadataByKeyIDAndAlias(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 	const publicKey = "-----BEGIN PUBLIC KEY-----demo-----END PUBLIC KEY-----"
 
 	requests := 0
@@ -204,20 +202,16 @@ func TestGetKeyMetadataReturnsMetadataByKeyIDAndAlias(t *testing.T) {
 			KeyId:    keyRef,
 			ClientId: clientID,
 		})
-		if err != nil {
-			t.Fatalf("GetKeyMetadata(%q) returned error: %v", keyRef, err)
-		}
-		if resp.KeyMetadata.KeyId != testTransitSignKeyID || resp.KeyMetadata.Alias != testTransitSignAlias {
-			t.Fatalf("unexpected metadata for %q: %+v", keyRef, resp.KeyMetadata)
-		}
-		if resp.KeyMetadata.PublicKey == nil || *resp.KeyMetadata.PublicKey != publicKey {
-			t.Fatalf("expected public key for %q, got %+v", keyRef, resp.KeyMetadata)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.NotNil(t, resp.KeyMetadata)
+		assert.Equal(t, testTransitSignKeyID, resp.KeyMetadata.KeyId)
+		assert.Equal(t, testTransitSignAlias, resp.KeyMetadata.Alias)
+		require.NotNil(t, resp.KeyMetadata.PublicKey)
+		assert.Equal(t, publicKey, *resp.KeyMetadata.PublicKey)
 	}
 
-	if requests != 2 {
-		t.Fatalf("expected 2 metadata lookups, got %d", requests)
-	}
+	assert.Equal(t, 2, requests)
 }
 
 func TestGetKeyMetadataRejectsMissingClientID(t *testing.T) {
@@ -232,12 +226,8 @@ func TestGetKeyMetadataRejectsMissingClientID(t *testing.T) {
 	_, err := plugin.GetKeyMetadata(context.Background(), &proto.GetKeyMetadataRequest{
 		KeyId: testTransitSignKeyID,
 	})
-	if err == nil {
-		t.Fatal("expected GetKeyMetadata to reject missing client_id")
-	}
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetKeyMetadataDeniesWrongTenant(t *testing.T) {
@@ -260,20 +250,14 @@ func TestGetKeyMetadataDeniesWrongTenant(t *testing.T) {
 		KeyId:    testTransitSignKeyID,
 		ClientId: requestClientID,
 	})
-	if err == nil {
-		t.Fatal("expected GetKeyMetadata to deny wrong tenant")
-	}
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("expected PermissionDenied, got %v", status.Code(err))
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 	const oldPublicKey = "-----BEGIN PUBLIC KEY-----old-----END PUBLIC KEY-----"
 	const publicKey = "-----BEGIN PUBLIC KEY-----demo-----END PUBLIC KEY-----"
 	const latestPublicKey = "-----BEGIN PUBLIC KEY-----latest-----END PUBLIC KEY-----"
@@ -300,15 +284,10 @@ func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 			KeyId:    keyRef,
 			ClientId: clientID,
 		})
-		if err != nil {
-			t.Fatalf("GetPublicKey(%q) returned error: %v", keyRef, err)
-		}
-		if resp.PublicKey != publicKey {
-			t.Fatalf("expected public key for %q, got %+v", keyRef, resp)
-		}
-		if resp.Version != 2 {
-			t.Fatalf("expected version 2 for %q, got %+v", keyRef, resp)
-		}
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		assert.Equal(t, publicKey, resp.PublicKey)
+		assert.Equal(t, uint32(2), resp.Version)
 	}
 
 	resp, err := plugin.GetPublicKey(context.Background(), &proto.GetPublicKeyRequest{
@@ -316,16 +295,11 @@ func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 		ClientId: clientID,
 		Version:  uint32Ptr(1),
 	})
-	if err != nil {
-		t.Fatalf("GetPublicKey historical version returned error: %v", err)
-	}
-	if resp.PublicKey != oldPublicKey || resp.Version != 1 {
-		t.Fatalf("expected version 1 public key, got %+v", resp)
-	}
-
-	if requests != 3 {
-		t.Fatalf("expected 3 metadata lookups, got %d", requests)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, oldPublicKey, resp.PublicKey)
+	assert.Equal(t, uint32(1), resp.Version)
+	assert.Equal(t, 3, requests)
 }
 
 func TestGetPublicKeyRejectsMissingClientID(t *testing.T) {
@@ -340,12 +314,8 @@ func TestGetPublicKeyRejectsMissingClientID(t *testing.T) {
 	_, err := plugin.GetPublicKey(context.Background(), &proto.GetPublicKeyRequest{
 		KeyId: testTransitSignKeyID,
 	})
-	if err == nil {
-		t.Fatal("expected GetPublicKey to reject missing client_id")
-	}
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetPublicKeyRejectsZeroVersion(t *testing.T) {
@@ -362,12 +332,8 @@ func TestGetPublicKeyRejectsZeroVersion(t *testing.T) {
 		ClientId: "client-a",
 		Version:  uint32Ptr(0),
 	})
-	if err == nil {
-		t.Fatal("expected GetPublicKey to reject zero version")
-	}
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestGetPublicKeyDeniesWrongTenant(t *testing.T) {
@@ -390,20 +356,14 @@ func TestGetPublicKeyDeniesWrongTenant(t *testing.T) {
 		KeyId:    testTransitSignKeyID,
 		ClientId: requestClientID,
 	})
-	if err == nil {
-		t.Fatal("expected GetPublicKey to deny wrong tenant")
-	}
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("expected PermissionDenied, got %v", status.Code(err))
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestGetPublicKeyRejectsKeyWithoutPublicKey(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -422,20 +382,14 @@ func TestGetPublicKeyRejectsKeyWithoutPublicKey(t *testing.T) {
 		KeyId:    testTransitKeyID,
 		ClientId: clientID,
 	})
-	if err == nil {
-		t.Fatal("expected GetPublicKey to reject key without public key")
-	}
-	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("expected FailedPrecondition, got %v", status.Code(err))
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
 func TestTransitSignPinsMetadataPrimaryVersion(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	message := base64.StdEncoding.EncodeToString([]byte("hello"))
 	signRequests := 0
@@ -476,15 +430,12 @@ func TestTransitSignPinsMetadataPrimaryVersion(t *testing.T) {
 		MessageType:      stringPtr(messageTypeRaw),
 		ClientId:         clientID,
 	})
-	if err != nil {
-		t.Fatalf("Sign returned error: %v", err)
-	}
-	if resp.Signature != "vault:v2:signed" || resp.KeyId != testTransitSignKeyID || resp.KeyVersion != 2 {
-		t.Fatalf("unexpected sign response: %+v", resp)
-	}
-	if signRequests != 1 {
-		t.Fatalf("expected 1 sign request, got %d", signRequests)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "vault:v2:signed", resp.Signature)
+	assert.Equal(t, testTransitSignKeyID, resp.KeyId)
+	assert.Equal(t, uint32(2), resp.KeyVersion)
+	assert.Equal(t, 1, signRequests)
 }
 
 func TestEncryptWrapsTransitCiphertext(t *testing.T) {
