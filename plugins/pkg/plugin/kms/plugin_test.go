@@ -12,6 +12,8 @@ import (
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/sha3"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,12 +28,11 @@ const (
 	testEthereumKeyID    = "kms:eth-main"
 )
 
-func TestCreateKeyStoresMetadata(t *testing.T) {
+func TestCreateKey_StoresMetadata(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+
+	require.NoError(t, err)
 
 	var createdType string
 	var kvBody map[string]any
@@ -51,7 +52,8 @@ func TestCreateKeyStoresMetadata(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&kvBody)
 			_, _ = w.Write([]byte(`{}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -73,31 +75,22 @@ func TestCreateKeyStoresMetadata(t *testing.T) {
 		ClientId:    clientID,
 		Alias:       testTransitAlias,
 	})
-	if err != nil {
-		t.Fatalf("CreateKey returned error: %v", err)
-	}
-	if createdType != "aes256-gcm96" {
-		t.Fatalf("expected aes256-gcm96 type, got %q", createdType)
-	}
-	if resp.KeyMetadata.KeyId != testTransitKeyID || resp.KeyMetadata.PrimaryVersion != 3 {
-		t.Fatalf("unexpected metadata: %+v", resp.KeyMetadata)
-	}
-	if resp.KeyMetadata.Alias != testTransitAlias {
-		t.Fatalf("unexpected alias in response: %+v", resp.KeyMetadata)
-	}
-	if resp.KeyMetadata.KeySpec != keySpecAES256GCM96 {
-		t.Fatalf("expected canonical key spec in response, got %+v", resp.KeyMetadata)
-	}
+	require.NoError(t, err)
+
+	assert.Equal(t, "aes256-gcm96", createdType)
+
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.KeyMetadata)
+	assert.Equal(t, testTransitKeyID, resp.KeyMetadata.KeyId)
+	assert.Equal(t, uint32(3), resp.KeyMetadata.PrimaryVersion)
+	assert.Equal(t, testTransitAlias, resp.KeyMetadata.Alias)
+	assert.Equal(t, keySpecAES256GCM96, resp.KeyMetadata.KeySpec)
 	data, ok := kvBody["data"].(map[string]any)
-	if !ok || data["scheme"] != schemeTransit {
-		t.Fatalf("expected transit metadata scheme, got %+v", kvBody)
-	}
-	if data["client_id"] != clientID || data["alias"] != testTransitAlias {
-		t.Fatalf("expected client_id and alias in metadata, got %+v", data)
-	}
-	if data["key_spec"] != keySpecAES256GCM96 {
-		t.Fatalf("expected canonical key_spec in metadata, got %+v", data)
-	}
+	require.True(t, ok, "expected metadata data object, got %+v", kvBody)
+	assert.Equal(t, schemeTransit, data["scheme"])
+	assert.Equal(t, clientID, data["client_id"])
+	assert.Equal(t, testTransitAlias, data["alias"])
+	assert.Equal(t, keySpecAES256GCM96, data["key_spec"])
 }
 
 func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
@@ -108,7 +101,8 @@ func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
 			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testTransitKeyID + `","client_id":"` + clientID + `","alias":"` + testTransitAlias + `","scheme":"TRANSIT","provider_key":"tenant_x_` + testTransitAlias + `","key_spec":"AES_256_GCM96","key_usage":"ENCRYPT_DECRYPT","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","tags":[]}}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -123,20 +117,14 @@ func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
 		ClientId:    clientID,
 		Alias:       testTransitAlias,
 	})
-	if err == nil {
-		t.Fatal("expected CreateKey to reject duplicate alias")
-	}
-	if status.Code(err) != codes.AlreadyExists {
-		t.Fatalf("expected AlreadyExists, got %v", status.Code(err))
-	}
+	require.Error(t, err, "expected CreateKey to reject duplicate alias")
+	assert.Equal(t, codes.AlreadyExists, status.Code(err))
 }
 
 func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	var kvBody map[string]any
 	const oldPublicKey = "-----BEGIN PUBLIC KEY-----old-----END PUBLIC KEY-----"
@@ -154,7 +142,8 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&kvBody)
 			_, _ = w.Write([]byte(`{}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -176,19 +165,15 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 		ClientId:    clientID,
 		Alias:       testTransitSignAlias,
 	})
-	if err != nil {
-		t.Fatalf("CreateKey returned error: %v", err)
-	}
-	if resp.KeyMetadata.PrimaryVersion != 2 {
-		t.Fatalf("expected primary version 2, got %+v", resp.KeyMetadata)
-	}
-	if resp.KeyMetadata.PublicKey == nil || *resp.KeyMetadata.PublicKey != publicKey {
-		t.Fatalf("expected transit public key in response, got %+v", resp.KeyMetadata)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.KeyMetadata)
+	assert.Equal(t, uint32(2), resp.KeyMetadata.PrimaryVersion)
+	require.NotNil(t, resp.KeyMetadata.PublicKey)
+	assert.Equal(t, publicKey, *resp.KeyMetadata.PublicKey)
 	data, ok := kvBody["data"].(map[string]any)
-	if !ok || data["public_key"] != publicKey {
-		t.Fatalf("expected transit public key in metadata, got %+v", kvBody)
-	}
+	require.True(t, ok, "expected metadata data object, got %+v", kvBody)
+	assert.Equal(t, publicKey, data["public_key"])
 }
 
 func TestGetKeyMetadataReturnsMetadataByKeyIDAndAlias(t *testing.T) {
@@ -505,9 +490,7 @@ func TestTransitSignPinsMetadataPrimaryVersion(t *testing.T) {
 func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -516,7 +499,8 @@ func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/encrypt/"+providerKey):
 			_, _ = w.Write([]byte(`{"data":{"ciphertext":"vault:v3:abc"}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -530,22 +514,14 @@ func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 		EncryptionAlgorithm: stringPtr(encryptionAlgorithmAES256GCM96),
 		ClientId:            clientID,
 	})
-	if err != nil {
-		t.Fatalf("Encrypt returned error: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 	blob, err := decodeCiphertextBlob(resp.CiphertextBlob)
-	if err != nil {
-		t.Fatalf("decode ciphertext blob: %v", err)
-	}
-	if blob.Ciphertext != "vault:v3:abc" || blob.KeyID != testTransitKeyID {
-		t.Fatalf("unexpected blob: %+v", blob)
-	}
-	if resp.KeyId != testTransitKeyID {
-		t.Fatalf("expected canonical key id in response, got %+v", resp)
-	}
-	if resp.EncryptionAlgorithm != encryptionAlgorithmAES256GCM96 {
-		t.Fatalf("expected canonical encryption algorithm in response, got %+v", resp)
-	}
+	require.NoError(t, err)
+	assert.Equal(t, "vault:v3:abc", blob.Ciphertext)
+	assert.Equal(t, testTransitKeyID, blob.KeyID)
+	assert.Equal(t, testTransitKeyID, resp.KeyId)
+	assert.Equal(t, encryptionAlgorithmAES256GCM96, resp.EncryptionAlgorithm)
 }
 
 func TestEncryptRejectsWrongTenant(t *testing.T) {
@@ -556,7 +532,8 @@ func TestEncryptRejectsWrongTenant(t *testing.T) {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(requestClientID)+"/"+testTransitKeyID):
 			http.NotFound(w, r)
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -570,20 +547,14 @@ func TestEncryptRejectsWrongTenant(t *testing.T) {
 		EncryptionAlgorithm: stringPtr(encryptionAlgorithmAES256GCM96),
 		ClientId:            requestClientID,
 	})
-	if err == nil {
-		t.Fatal("expected Encrypt to reject wrong tenant")
-	}
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("expected PermissionDenied, got %v", status.Code(err))
-	}
+	require.Error(t, err, "expected Encrypt to reject wrong tenant")
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	var kvBody map[string]any
 
@@ -597,7 +568,8 @@ func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
 			_ = json.NewDecoder(r.Body).Decode(&kvBody)
 			_, _ = w.Write([]byte(`{}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -614,30 +586,23 @@ func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
 		ClientId:    clientID,
 		Alias:       testEthereumAlias,
 	})
-	if err != nil {
-		t.Fatalf("CreateKey returned error: %v", err)
-	}
-	if resp.KeyMetadata.Scheme != schemeEthereum || resp.KeyMetadata.KeyId != testEthereumKeyID {
-		t.Fatalf("unexpected metadata: %+v", resp.KeyMetadata)
-	}
-	if resp.KeyMetadata.Alias != testEthereumAlias {
-		t.Fatalf("unexpected alias: %+v", resp.KeyMetadata)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.NotNil(t, resp.KeyMetadata)
+	assert.Equal(t, schemeEthereum, resp.KeyMetadata.Scheme)
+	assert.Equal(t, testEthereumKeyID, resp.KeyMetadata.KeyId)
+	assert.Equal(t, testEthereumAlias, resp.KeyMetadata.Alias)
 	data, ok := kvBody["data"].(map[string]any)
-	if !ok || data["scheme"] != schemeEthereum {
-		t.Fatalf("expected ethereum metadata scheme, got %+v", kvBody)
-	}
-	if data["client_id"] != clientID || data["alias"] != testEthereumAlias {
-		t.Fatalf("expected client_id and alias in metadata, got %+v", data)
-	}
+	require.True(t, ok)
+	assert.Equal(t, schemeEthereum, data["scheme"])
+	assert.Equal(t, clientID, data["client_id"])
+	assert.Equal(t, testEthereumAlias, data["alias"])
 }
 
 func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -646,12 +611,14 @@ func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["message"] != "hello" {
-				t.Fatalf("unexpected sign body: %+v", body)
+			if !assert.Equal(t, "hello", body["message"]) {
+				http.Error(w, "unexpected sign body", http.StatusBadRequest)
+				return
 			}
 			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"0xhash","method":"eip191","address":"0xabc"}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -666,132 +633,94 @@ func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 		MessageType:      stringPtr(messageTypeEIP191),
 		ClientId:         clientID,
 	})
-	if err != nil {
-		t.Fatalf("Sign returned error: %v", err)
-	}
-	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID || resp.KeyVersion != 1 {
-		t.Fatalf("unexpected sign response: %+v", resp)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "0xsigned", resp.Signature)
+	assert.Equal(t, testEthereumKeyID, resp.KeyId)
+	assert.Equal(t, uint32(1), resp.KeyVersion)
 }
 
-func TestEthereumSignRawHashesDecodedBytes(t *testing.T) {
-	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+func TestEthereumSign_RawMessageTypes_HashesDecodedBytes(t *testing.T) {
+	tests := []struct {
+		name        string
+		messageType *string
+	}{
+		{
+			name:        "explicit_raw",
+			messageType: stringPtr(messageTypeRaw),
+		},
+		{
+			name:        "omitted_defaults_to_raw",
+			messageType: nil,
+		},
 	}
 
-	rawMessage := []byte("deploy-bytes")
-	encodedMessage := base64.StdEncoding.EncodeToString(rawMessage)
-	hasher := sha3.NewLegacyKeccak256()
-	if _, err := hasher.Write(rawMessage); err != nil {
-		t.Fatalf("hasher.Write() error = %v", err)
-	}
-	expectedHash := "0x" + hex.EncodeToString(hasher.Sum(nil))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clientID := "client-a"
+			providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+			require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
-			var body map[string]string
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["hash"] != expectedHash {
-				t.Fatalf("unexpected sign body: %+v", body)
-			}
-			if _, ok := body["message"]; ok {
-				t.Fatalf("expected RAW signing to use hash body, got %+v", body)
-			}
-			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"` + ethereumSignMethodRawHash + `","address":"0xabc"}}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
+			rawMessage := []byte("deploy-bytes")
+			encodedMessage := base64.StdEncoding.EncodeToString(rawMessage)
+			hasher := sha3.NewLegacyKeccak256()
+			_, err = hasher.Write(rawMessage)
+			require.NoError(t, err)
+			expectedHash := "0x" + hex.EncodeToString(hasher.Sum(nil))
 
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+					_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
+					var body map[string]string
+					_ = json.NewDecoder(r.Body).Decode(&body)
+					if !assert.Equal(t, expectedHash, body["hash"]) {
+						http.Error(w, "unexpected sign body", http.StatusBadRequest)
+						return
+					}
+					if !assert.NotContains(t, body, "message") {
+						http.Error(w, "unexpected sign body", http.StatusBadRequest)
+						return
+					}
+					_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"` + ethereumSignMethodRawHash + `","address":"0xabc"}}`))
+				default:
+					assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+					http.Error(w, "unexpected request", http.StatusInternalServerError)
+				}
+			}))
+			defer server.Close()
 
-	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
-		KeyId:            testEthereumAlias,
-		Message:          encodedMessage,
-		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
-		MessageType:      stringPtr(messageTypeRaw),
-		ClientId:         clientID,
-	})
-	if err != nil {
-		t.Fatalf("Sign returned error: %v", err)
-	}
-	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID {
-		t.Fatalf("unexpected sign response: %+v", resp)
-	}
-}
+			cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+			plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 
-func TestEthereumSignDefaultsMissingMessageTypeToRaw(t *testing.T) {
-	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
-
-	rawMessage := []byte("deploy-bytes")
-	encodedMessage := base64.StdEncoding.EncodeToString(rawMessage)
-	hasher := sha3.NewLegacyKeccak256()
-	if _, err := hasher.Write(rawMessage); err != nil {
-		t.Fatalf("hasher.Write() error = %v", err)
-	}
-	expectedHash := "0x" + hex.EncodeToString(hasher.Sum(nil))
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
-			var body map[string]string
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["hash"] != expectedHash {
-				t.Fatalf("unexpected sign body: %+v", body)
-			}
-			if _, ok := body["message"]; ok {
-				t.Fatalf("expected missing MessageType to route through hash body, got %+v", body)
-			}
-			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"` + ethereumSignMethodRawHash + `","address":"0xabc"}}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
-
-	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
-		KeyId:            testEthereumAlias,
-		Message:          encodedMessage,
-		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
-		ClientId:         clientID,
-	})
-	if err != nil {
-		t.Fatalf("Sign returned error: %v", err)
-	}
-	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID {
-		t.Fatalf("unexpected sign response: %+v", resp)
+			resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
+				KeyId:            testEthereumAlias,
+				Message:          encodedMessage,
+				SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
+				MessageType:      tc.messageType,
+				ClientId:         clientID,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Equal(t, "0xsigned", resp.Signature)
+			assert.Equal(t, testEthereumKeyID, resp.KeyId)
+		})
 	}
 }
 
 func TestEthereumSignRawRejectsInvalidBase64(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
 			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -806,126 +735,84 @@ func TestEthereumSignRawRejectsInvalidBase64(t *testing.T) {
 		MessageType:      stringPtr(messageTypeRaw),
 		ClientId:         clientID,
 	})
-	if err == nil {
-		t.Fatal("expected Sign to reject invalid RAW message")
-	}
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "ETHEREUM RAW messages must be base64-encoded bytes" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected Sign to reject invalid RAW message")
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, "ETHEREUM RAW messages must be base64-encoded bytes", status.Convert(err).Message())
 }
 
-func TestEthereumSignDigestNormalizesBase64Digest(t *testing.T) {
-	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
-
+func TestEthereumSign_DigestEncodings_NormalizesHash(t *testing.T) {
 	digestBytes, err := hex.DecodeString("25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45")
-	if err != nil {
-		t.Fatalf("hex.DecodeString() error = %v", err)
-	}
+	require.NoError(t, err)
 	encodedDigest := base64.StdEncoding.EncodeToString(digestBytes)
 	expectedHash := "0x" + hex.EncodeToString(digestBytes)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
-			var body map[string]string
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["hash"] != expectedHash {
-				t.Fatalf("unexpected sign body: %+v", body)
-			}
-			if _, ok := body["message"]; ok {
-				t.Fatalf("expected DIGEST signing to use hash body, got %+v", body)
-			}
-			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"` + ethereumSignMethodRawHash + `","address":"0xabc"}}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
-
-	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
-		KeyId:            testEthereumAlias,
-		Message:          encodedDigest,
-		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
-		MessageType:      stringPtr(messageTypeDigest),
-		ClientId:         clientID,
-	})
-	if err != nil {
-		t.Fatalf("Sign returned error: %v", err)
-	}
-	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID {
-		t.Fatalf("unexpected sign response: %+v", resp)
-	}
-}
-
-func TestEthereumSignDigestAcceptsHexDigest(t *testing.T) {
-	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
+	tests := []struct {
+		name    string
+		message string
+	}{
+		{name: "base64", message: encodedDigest},
+		{name: "hex", message: expectedHash},
 	}
 
-	expectedHash := "0x25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45"
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clientID := "client-a"
+			providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+			require.NoError(t, err)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
-			var body map[string]string
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["hash"] != expectedHash {
-				t.Fatalf("unexpected sign body: %+v", body)
-			}
-			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"` + ethereumSignMethodRawHash + `","address":"0xabc"}}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+					_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
+					var body map[string]string
+					_ = json.NewDecoder(r.Body).Decode(&body)
+					if !assert.Equal(t, expectedHash, body["hash"]) {
+						http.Error(w, "unexpected sign body", http.StatusBadRequest)
+						return
+					}
+					if !assert.NotContains(t, body, "message") {
+						http.Error(w, "unexpected sign body", http.StatusBadRequest)
+						return
+					}
+					_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"` + ethereumSignMethodRawHash + `","address":"0xabc"}}`))
+				default:
+					assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+					http.Error(w, "unexpected request", http.StatusInternalServerError)
+				}
+			}))
+			defer server.Close()
 
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+			cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+			plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 
-	resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
-		KeyId:            testEthereumAlias,
-		Message:          expectedHash,
-		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
-		MessageType:      stringPtr(messageTypeDigest),
-		ClientId:         clientID,
-	})
-	if err != nil {
-		t.Fatalf("Sign returned error: %v", err)
-	}
-	if resp.Signature != "0xsigned" || resp.KeyId != testEthereumKeyID {
-		t.Fatalf("unexpected sign response: %+v", resp)
+			resp, err := plugin.Sign(context.Background(), &proto.SignRequest{
+				KeyId:            testEthereumAlias,
+				Message:          tc.message,
+				SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
+				MessageType:      stringPtr(messageTypeDigest),
+				ClientId:         clientID,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			assert.Equal(t, "0xsigned", resp.Signature)
+			assert.Equal(t, testEthereumKeyID, resp.KeyId)
+		})
 	}
 }
 
 func TestEthereumSignDigestRejectsWrongLength(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
 			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -940,123 +827,85 @@ func TestEthereumSignDigestRejectsWrongLength(t *testing.T) {
 		MessageType:      stringPtr(messageTypeDigest),
 		ClientId:         clientID,
 	})
-	if err == nil {
-		t.Fatal("expected Sign to reject short DIGEST message")
-	}
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "ETHEREUM DIGEST messages must be exactly 32 bytes" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
+	assert.Equal(t, "ETHEREUM DIGEST messages must be exactly 32 bytes", status.Convert(err).Message())
 }
 
-func TestEthereumSignDigestRejectsUnexpectedBackendHash(t *testing.T) {
-	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
-
+func TestEthereumSign_InvalidDigestResponse_ReturnsInternal(t *testing.T) {
 	digestBytes, err := hex.DecodeString("25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45")
-	if err != nil {
-		t.Fatalf("hex.DecodeString() error = %v", err)
-	}
-	encodedDigest := base64.StdEncoding.EncodeToString(digestBytes)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
-			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"0xdeadbeef","method":"` + ethereumSignMethodRawHash + `","address":"0xabc"}}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
-
-	_, err = plugin.Sign(context.Background(), &proto.SignRequest{
-		KeyId:            testEthereumAlias,
-		Message:          encodedDigest,
-		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
-		MessageType:      stringPtr(messageTypeDigest),
-		ClientId:         clientID,
-	})
-	if err == nil {
-		t.Fatal("expected Sign to reject mismatched backend hash")
-	}
-	if status.Code(err) != codes.Internal {
-		t.Fatalf("expected Internal, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "ethereum signing response hash mismatch" {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestEthereumSignDigestRejectsUnexpectedBackendMethod(t *testing.T) {
-	clientID := "client-a"
-	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
-
-	digestBytes, err := hex.DecodeString("25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45")
-	if err != nil {
-		t.Fatalf("hex.DecodeString() error = %v", err)
-	}
+	require.NoError(t, err)
 	encodedDigest := base64.StdEncoding.EncodeToString(digestBytes)
 	expectedHash := "0x" + hex.EncodeToString(digestBytes)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
-			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
-			_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + expectedHash + `","method":"eip191","address":"0xabc"}}`))
-		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
-	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
-
-	_, err = plugin.Sign(context.Background(), &proto.SignRequest{
-		KeyId:            testEthereumAlias,
-		Message:          encodedDigest,
-		SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
-		MessageType:      stringPtr(messageTypeDigest),
-		ClientId:         clientID,
-	})
-	if err == nil {
-		t.Fatal("expected Sign to reject mismatched backend method")
+	tests := []struct {
+		name           string
+		responseHash   string
+		responseMethod string
+		expectedError  string
+	}{
+		{
+			name:           "unexpected_hash",
+			responseHash:   "0xdeadbeef",
+			responseMethod: ethereumSignMethodRawHash,
+			expectedError:  "ethereum signing response hash mismatch",
+		},
+		{
+			name:           "unexpected_method",
+			responseHash:   expectedHash,
+			responseMethod: "eip191",
+			expectedError:  "ethereum signing response method mismatch",
+		},
 	}
-	if status.Code(err) != codes.Internal {
-		t.Fatalf("expected Internal, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "ethereum signing response method mismatch" {
-		t.Fatalf("unexpected error: %v", err)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clientID := "client-a"
+			providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
+			require.NoError(t, err)
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
+					_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
+				case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/sign/"+providerKey):
+					_, _ = w.Write([]byte(`{"data":{"signature":"0xsigned","hash":"` + tc.responseHash + `","method":"` + tc.responseMethod + `","address":"0xabc"}}`))
+				default:
+					assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+					http.Error(w, "unexpected request", http.StatusInternalServerError)
+				}
+			}))
+			defer server.Close()
+
+			cfg := &kmsConfig{OpenBaoProxyURL: server.URL, EthereumMount: "ethereum", TransitMount: "transit", KVMount: "secret", TimeoutSecs: 10}
+			plugin := newPlugin(cfg, newOpenBaoClient(cfg))
+
+			_, err = plugin.Sign(context.Background(), &proto.SignRequest{
+				KeyId:            testEthereumAlias,
+				Message:          encodedDigest,
+				SigningAlgorithm: signingAlgorithmEthereumSecp256k1,
+				MessageType:      stringPtr(messageTypeDigest),
+				ClientId:         clientID,
+			})
+			require.Error(t, err)
+			assert.Equal(t, codes.Internal, status.Code(err))
+			assert.Equal(t, tc.expectedError, status.Convert(err).Message())
+		})
 	}
 }
 
 func TestEncryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
 			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -1070,30 +919,23 @@ func TestEncryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 		EncryptionAlgorithm: stringPtr(encryptionAlgorithmAES256GCM96),
 		ClientId:            clientID,
 	})
-	if err == nil {
-		t.Fatal("expected Encrypt to reject ethereum keys")
-	}
-	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("expected FailedPrecondition, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "ETHEREUM keys do not support encryption" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected Encrypt to reject ethereum keys")
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	assert.Equal(t, "ETHEREUM keys do not support encryption", status.Convert(err).Message())
 }
 
 func TestDecryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
 			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -1102,38 +944,29 @@ func TestDecryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	plugin := newPlugin(cfg, newOpenBaoClient(cfg))
 
 	ciphertextBlob, err := encodeCiphertextBlob(schemeEthereum, testEthereumKeyID, providerKey, "0xdeadbeef", encryptionAlgorithmAES256GCM96)
-	if err != nil {
-		t.Fatalf("encodeCiphertextBlob() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	_, err = plugin.Decrypt(context.Background(), &proto.DecryptRequest{
 		CiphertextBlob: ciphertextBlob,
 		ClientId:       clientID,
 	})
-	if err == nil {
-		t.Fatal("expected Decrypt to reject ethereum keys")
-	}
-	if status.Code(err) != codes.FailedPrecondition {
-		t.Fatalf("expected FailedPrecondition, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "ETHEREUM keys do not support decryption" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected Decrypt to reject ethereum keys")
+	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
+	assert.Equal(t, "ETHEREUM keys do not support decryption", status.Convert(err).Message())
 }
 
 func TestRotateKeyRejectsUnsupportedEthereumOperation(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
-	if err != nil {
-		t.Fatalf("scopedBackendKey() error = %v", err)
-	}
+	require.NoError(t, err)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
 			_, _ = w.Write([]byte(`{"data":{"data":{"key_id":"` + testEthereumKeyID + `","client_id":"client-a","alias":"` + testEthereumAlias + `","scheme":"ETHEREUM","provider_key":"` + providerKey + `","key_spec":"ECC_SECG_P256K1","key_usage":"SIGN_VERIFY","enabled":true,"primary_version":1,"created_at":"2024-01-01T00:00:00Z","public_key":"0xdef","address":"0xabc","tags":[]}}}`))
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -1145,15 +978,9 @@ func TestRotateKeyRejectsUnsupportedEthereumOperation(t *testing.T) {
 		KeyId:    testEthereumAlias,
 		ClientId: clientID,
 	})
-	if err == nil {
-		t.Fatal("expected RotateKey to reject ethereum keys")
-	}
-	if status.Code(err) != codes.Unimplemented {
-		t.Fatalf("expected Unimplemented, got %v", status.Code(err))
-	}
-	if status.Convert(err).Message() != "ETHEREUM key rotation is not implemented" {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.Error(t, err, "expected RotateKey to reject ethereum keys")
+	assert.Equal(t, codes.Unimplemented, status.Code(err))
+	assert.Equal(t, "ETHEREUM key rotation is not implemented", status.Convert(err).Message())
 }
 
 func stringPtr(value string) *string {
