@@ -1046,8 +1046,8 @@ fn output_key_metadata() -> Value {
                         }
                     },
                     "Scheme": {"type": "string"},
-                    "PublicKey": {"type": "string"},
-                    "Address": {"type": "string"},
+                    "PublicKey": {"type": ["string", "null"]},
+                    "Address": {"type": ["string", "null"]},
                     "Alias": {"type": "string"}
                 }
             }
@@ -1253,6 +1253,19 @@ mod tests {
                 .iter()
                 .all(|tool| tool.output_schema["type"] == "object")
         );
+    }
+
+    #[test]
+    fn key_metadata_output_schema_allows_nullable_public_fields() {
+        let tools = tool_definitions();
+        let tool = tools
+            .iter()
+            .find(|tool| tool.name == "kms_get_key_metadata")
+            .unwrap();
+        let properties = &tool.output_schema["properties"]["KeyMetadata"]["properties"];
+
+        assert_eq!(properties["PublicKey"]["type"], json!(["string", "null"]));
+        assert_eq!(properties["Address"]["type"], json!(["string", "null"]));
     }
 
     #[test]
