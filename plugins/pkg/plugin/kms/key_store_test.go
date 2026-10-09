@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -29,12 +30,14 @@ func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/key-store/data/owners/"+owner+"/"+testKeyStoreName:
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Fatalf("decode body: %v", err)
+			if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&body)) {
+				http.Error(w, "invalid request body", http.StatusBadRequest)
+				return
 			}
 			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"version": 2}})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -45,35 +48,28 @@ func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 		Name:       testKeyStoreName,
 		SecretJson: `{"api_key":"secret-value","metadata":{"env":"prod"}}`,
 	})
-	if err != nil {
-		t.Fatalf("Put returned error: %v", err)
-	}
-	if resp.Name != testKeyStoreName || resp.Version != 2 {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, testKeyStoreName, resp.Name)
+	assert.Equal(t, uint32(2), resp.Version)
 
 	data, ok := body["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected KV v2 data wrapper, got %+v", body)
-	}
+	require.True(t, ok)
 	secretJSON, ok := data["secret_json"].(string)
-	if !ok || secretJSON != `{"api_key":"secret-value","metadata":{"env":"prod"}}` {
-		t.Fatalf("expected secret_json string in body, got %+v", data)
-	}
-	if _, ok := data["secret"]; ok {
-		t.Fatalf("secret must not be stored as a nested object, got %+v", data)
-	}
-	if data["owner"] != owner || data["name"] != testKeyStoreName {
-		t.Fatalf("expected tenant owner and name in body, got %+v", data)
-	}
+	require.True(t, ok)
+	assert.Equal(t, `{"api_key":"secret-value","metadata":{"env":"prod"}}`, secretJSON)
+	assert.NotContains(t, data, "secret")
+	assert.Equal(t, owner, data["owner"])
+	assert.Equal(t, testKeyStoreName, data["name"])
 }
 
 func TestKeyStorePutStoresSecretAsJSONText(t *testing.T) {
 	var body map[string]any
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			t.Fatalf("decode body: %v", err)
+		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&body)) {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
 		}
 		writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"version": 1}})
 	}))
@@ -85,19 +81,11 @@ func TestKeyStorePutStoresSecretAsJSONText(t *testing.T) {
 		Name:       testKeyStoreName,
 		SecretJson: secret,
 	})
-	if err != nil {
-		t.Fatalf("Put returned error: %v", err)
-	}
+	require.NoError(t, err)
 	data, ok := body["data"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected KV v2 data wrapper, got %+v", body)
-	}
-	if data["secret_json"] != secret {
-		t.Fatalf("expected exact JSON text in secret_json, got %+v", data["secret_json"])
-	}
-	if _, ok := data["secret"]; ok {
-		t.Fatalf("secret must not be stored as a nested object, got %+v", data)
-	}
+	require.True(t, ok)
+	assert.Equal(t, secret, data["secret_json"])
+	assert.NotContains(t, data, "secret")
 }
 
 func TestKeyStorePutBackendErrorIsGenericInternal(t *testing.T) {
@@ -111,12 +99,9 @@ func TestKeyStorePutBackendErrorIsGenericInternal(t *testing.T) {
 		Name:       testKeyStoreName,
 		SecretJson: `{}`,
 	})
-	if status.Code(err) != codes.Internal {
-		t.Fatalf("expected Internal, got %v (%v)", status.Code(err), err)
-	}
-	if got := status.Convert(err).Message(); got != "key-store backend error" {
-		t.Fatalf("expected generic backend error, got %q", got)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+	assert.Equal(t, "key-store backend error", status.Convert(err).Message())
 }
 
 func TestKeyStoreGetReturnsSecret(t *testing.T) {
@@ -137,7 +122,8 @@ func TestKeyStoreGetReturnsSecret(t *testing.T) {
 				},
 			})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -146,12 +132,10 @@ func TestKeyStoreGetReturnsSecret(t *testing.T) {
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
-	if err != nil {
-		t.Fatalf("Get returned error: %v", err)
-	}
-	if resp.Name != testKeyStoreName || resp.SecretJson != `{"api_key":"secret-value"}` {
-		t.Fatalf("unexpected secret json: %s", resp.SecretJson)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, testKeyStoreName, resp.Name)
+	assert.Equal(t, `{"api_key":"secret-value"}`, resp.SecretJson)
 }
 
 func TestKeyStoreGetReturnsSecretJSONTextUnchanged(t *testing.T) {
@@ -172,7 +156,8 @@ func TestKeyStoreGetReturnsSecretJSONTextUnchanged(t *testing.T) {
 				},
 			})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -181,12 +166,9 @@ func TestKeyStoreGetReturnsSecretJSONTextUnchanged(t *testing.T) {
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
-	if err != nil {
-		t.Fatalf("Get returned error: %v", err)
-	}
-	if resp.SecretJson != secret {
-		t.Fatalf("expected exact secret JSON text, got %s", resp.SecretJson)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, secret, resp.SecretJson)
 }
 
 func TestKeyStoreGetForbiddenBackendErrorIsGenericInternal(t *testing.T) {
@@ -199,12 +181,9 @@ func TestKeyStoreGetForbiddenBackendErrorIsGenericInternal(t *testing.T) {
 		ClientId: "client-a",
 		Name:     testKeyStoreName,
 	})
-	if status.Code(err) != codes.Internal {
-		t.Fatalf("expected Internal, got %v (%v)", status.Code(err), err)
-	}
-	if got := status.Convert(err).Message(); got != "key-store backend error" {
-		t.Fatalf("expected generic backend error, got %q", got)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+	assert.Equal(t, "key-store backend error", status.Convert(err).Message())
 }
 
 func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
@@ -223,7 +202,8 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 				},
 			})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -232,9 +212,8 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("expected PermissionDenied, got %v (%v)", status.Code(err), err)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestKeyStoreGetRejectsNullStoredSecretJSON(t *testing.T) {
@@ -246,7 +225,8 @@ func TestKeyStoreGetRejectsNullStoredSecretJSON(t *testing.T) {
 		case http.MethodGet:
 			writeKeyStoreRawJSON(t, w, `{"data":{"data":{"name":"`+testKeyStoreName+`","owner":"`+owner+`","secret_json":"null"}}}`)
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -255,9 +235,8 @@ func TestKeyStoreGetRejectsNullStoredSecretJSON(t *testing.T) {
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("expected PermissionDenied, got %v (%v)", status.Code(err), err)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func TestKeyStoreListReturnsSingleLevelTenantNamespace(t *testing.T) {
@@ -269,7 +248,8 @@ func TestKeyStoreListReturnsSingleLevelTenantNamespace(t *testing.T) {
 		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner:
 			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"github/", "slack"}}})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -277,13 +257,10 @@ func TestKeyStoreListReturnsSingleLevelTenantNamespace(t *testing.T) {
 	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
 		ClientId: clientID,
 	})
-	if err != nil {
-		t.Fatalf("List returned error: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 	want := []string{"github/", "slack"}
-	if !reflect.DeepEqual(resp.Names, want) {
-		t.Fatalf("got names %+v, want %+v", resp.Names, want)
-	}
+	assert.Equal(t, want, resp.Names)
 }
 
 func TestKeyStoreListSkipsUnsafeOpenBaoKeys(t *testing.T) {
@@ -299,7 +276,8 @@ func TestKeyStoreListSkipsUnsafeOpenBaoKeys(t *testing.T) {
 				},
 			})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -307,13 +285,10 @@ func TestKeyStoreListSkipsUnsafeOpenBaoKeys(t *testing.T) {
 	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
 		ClientId: clientID,
 	})
-	if err != nil {
-		t.Fatalf("List returned error: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 	want := []string{"also-valid", "github/", "valid"}
-	if !reflect.DeepEqual(resp.Names, want) {
-		t.Fatalf("got names %+v, want %+v", resp.Names, want)
-	}
+	assert.Equal(t, want, resp.Names)
 }
 
 func TestKeyStoreListReturnsEmptyWhenNamespaceMissing(t *testing.T) {
@@ -325,12 +300,9 @@ func TestKeyStoreListReturnsEmptyWhenNamespaceMissing(t *testing.T) {
 	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
 		ClientId: "client-a",
 	})
-	if err != nil {
-		t.Fatalf("List returned error: %v", err)
-	}
-	if len(resp.Names) != 0 {
-		t.Fatalf("expected empty list, got %+v", resp.Names)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Empty(t, resp.Names)
 }
 
 func TestKeyStoreListAcceptsDeepPrefixWithSingleOpenBaoCall(t *testing.T) {
@@ -343,7 +315,8 @@ func TestKeyStoreListAcceptsDeepPrefixWithSingleOpenBaoCall(t *testing.T) {
 		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+deepPrefix:
 			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"token", "ci/"}}})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -352,13 +325,10 @@ func TestKeyStoreListAcceptsDeepPrefixWithSingleOpenBaoCall(t *testing.T) {
 		ClientId: clientID,
 		Prefix:   stringPtr(deepPrefix),
 	})
-	if err != nil {
-		t.Fatalf("List returned error: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 	want := []string{"a/b/c/d/ci/", "a/b/c/d/token"}
-	if !reflect.DeepEqual(resp.Names, want) {
-		t.Fatalf("got names %+v, want %+v", resp.Names, want)
-	}
+	assert.Equal(t, want, resp.Names)
 }
 
 func TestKeyStoreListDoesNotRecurseIntoFolders(t *testing.T) {
@@ -370,9 +340,11 @@ func TestKeyStoreListDoesNotRecurseIntoFolders(t *testing.T) {
 		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner:
 			writeKeyStoreJSON(t, w, map[string]any{"data": map[string]any{"keys": []string{"a/", "root"}}})
 		case r.Method == "LIST" && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/a":
-			t.Fatalf("list should not recurse into returned folders")
+			assert.Fail(t, "list should not recurse into returned folders")
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -380,13 +352,10 @@ func TestKeyStoreListDoesNotRecurseIntoFolders(t *testing.T) {
 	resp, err := plugin.KeyStoreList(context.Background(), &proto.KeyStoreListRequest{
 		ClientId: clientID,
 	})
-	if err != nil {
-		t.Fatalf("List returned error: %v", err)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
 	want := []string{"a/", "root"}
-	if !reflect.DeepEqual(resp.Names, want) {
-		t.Fatalf("got names %+v, want %+v", resp.Names, want)
-	}
+	assert.Equal(t, want, resp.Names)
 }
 
 func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
@@ -402,7 +371,8 @@ func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
 			deleteCalled = true
 			writeKeyStoreJSON(t, w, map[string]any{})
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -411,12 +381,10 @@ func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
-	if err != nil {
-		t.Fatalf("Delete returned error: %v", err)
-	}
-	if resp.Name != testKeyStoreName || !deleteCalled {
-		t.Fatalf("expected delete success, resp=%+v deleteCalled=%v", resp, deleteCalled)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, testKeyStoreName, resp.Name)
+	assert.True(t, deleteCalled, "expected backend delete request")
 }
 
 func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
@@ -428,9 +396,11 @@ func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+testKeyStoreName:
 			http.NotFound(w, r)
 		case r.Method == http.MethodDelete:
-			t.Fatalf("delete should not be called when metadata is missing")
+			assert.Fail(t, "delete should not be called when metadata is missing")
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -439,9 +409,8 @@ func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
-	if status.Code(err) != codes.NotFound {
-		t.Fatalf("expected NotFound, got %v (%v)", status.Code(err), err)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
 func TestKeyStoreDeleteReturnsInternalWhenDeleteFailsAfterExistenceCheck(t *testing.T) {
@@ -455,7 +424,8 @@ func TestKeyStoreDeleteReturnsInternalWhenDeleteFailsAfterExistenceCheck(t *test
 		case r.Method == http.MethodDelete && r.URL.Path == "/v1/key-store/metadata/owners/"+owner+"/"+testKeyStoreName:
 			http.NotFound(w, r)
 		default:
-			t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
 		}
 	}))
 	defer server.Close()
@@ -464,12 +434,9 @@ func TestKeyStoreDeleteReturnsInternalWhenDeleteFailsAfterExistenceCheck(t *test
 		ClientId: clientID,
 		Name:     testKeyStoreName,
 	})
-	if status.Code(err) != codes.Internal {
-		t.Fatalf("expected Internal, got %v (%v)", status.Code(err), err)
-	}
-	if got := status.Convert(err).Message(); got != "key-store backend error" {
-		t.Fatalf("expected generic backend error, got %q", got)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.Internal, status.Code(err))
+	assert.Equal(t, "key-store backend error", status.Convert(err).Message())
 }
 
 func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) {
@@ -480,7 +447,8 @@ func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) 
 	);`)
 
 	plugin, server := newKeyStoreTestPluginWithPolicy(t, policyFile, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("OpenBao should not be called for an unsafe key-store name: %s %s", r.Method, r.URL.Path)
+		assert.Failf(t, "OpenBao should not be called for an unsafe key-store name", "%s %s", r.Method, r.URL.Path)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
@@ -488,9 +456,8 @@ func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) 
 		ClientId: "client-a",
 		Name:     "../tenant_b/github/prod",
 	})
-	if status.Code(err) != codes.InvalidArgument {
-		t.Fatalf("expected InvalidArgument, got %v (%v)", status.Code(err), err)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
@@ -501,12 +468,10 @@ func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
 	}
 	client := newOpenBaoClient(cfg)
 
-	if _, err := client.keyStoreDataPath("client-a", "../tenant_b/github/prod"); err == nil {
-		t.Fatal("expected key-store data path builder to reject traversal")
-	}
-	if _, err := client.keyStoreMetadataPath("client-a", "github/../prod"); err == nil {
-		t.Fatal("expected key-store metadata path builder to reject traversal")
-	}
+	_, err := client.keyStoreDataPath("client-a", "../tenant_b/github/prod")
+	assert.Error(t, err)
+	_, err = client.keyStoreMetadataPath("client-a", "github/../prod")
+	assert.Error(t, err)
 }
 
 func TestKeyStorePathBuilderAllowsDeepNames(t *testing.T) {
@@ -518,20 +483,14 @@ func TestKeyStorePathBuilderAllowsDeepNames(t *testing.T) {
 	client := newOpenBaoClient(cfg)
 
 	got, err := client.keyStoreDataPath("client-a", "github/prod/ci/token")
-	if err != nil {
-		t.Fatalf("expected deep key-store path to be allowed: %v", err)
-	}
+	require.NoError(t, err)
 	want := "http://openbao/v1/key-store/data/owners/" + tenantNamespace("client-a") + "/github/prod/ci/token"
-	if got != want {
-		t.Fatalf("got path %q, want %q", got, want)
-	}
+	assert.Equal(t, want, got)
 }
 
 func TestKeyStoreCedarForbidOverridesDefaultOwnerPermit(t *testing.T) {
 	defaultPolicy, err := os.ReadFile(testKeyStoreDefaultPolicyPath)
-	if err != nil {
-		t.Fatalf("read default key-store policy: %v", err)
-	}
+	require.NoError(t, err)
 	policyFile := writeTempKeyStorePolicy(t, string(defaultPolicy)+`
 
 forbid (
@@ -541,7 +500,8 @@ forbid (
 	);`)
 
 	plugin, server := newKeyStoreTestPluginWithPolicy(t, policyFile, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
+		assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+		http.Error(w, "unexpected request", http.StatusInternalServerError)
 	}))
 	defer server.Close()
 
@@ -549,9 +509,8 @@ forbid (
 		ClientId: "client-a",
 		Name:     testKeyStoreName,
 	})
-	if status.Code(err) != codes.PermissionDenied {
-		t.Fatalf("expected PermissionDenied, got %v (%v)", status.Code(err), err)
-	}
+	require.Error(t, err)
+	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func newKeyStoreTestPlugin(t *testing.T, handler http.Handler) (*Plugin, *httptest.Server) {
@@ -580,30 +539,24 @@ func newKeyStoreTestPluginWithPolicy(t *testing.T, policyPath string, handler ht
 func writeKeyStoreJSON(t *testing.T, w http.ResponseWriter, value any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(value); err != nil {
-		t.Fatalf("write json: %v", err)
-	}
+	assert.NoError(t, json.NewEncoder(w).Encode(value))
 }
 
 func writeKeyStoreRawJSON(t *testing.T, w http.ResponseWriter, value string) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")
-	if _, err := w.Write([]byte(value)); err != nil {
-		t.Fatalf("write raw json: %v", err)
-	}
+	_, err := w.Write([]byte(value))
+	assert.NoError(t, err)
 }
 
 func writeTempKeyStorePolicy(t *testing.T, policy string) string {
 	t.Helper()
 	file, err := os.CreateTemp(t.TempDir(), "key-store-*.cedar")
-	if err != nil {
-		t.Fatalf("create temp policy: %v", err)
-	}
+	require.NoError(t, err)
 	defer func() {
 		_ = file.Close()
 	}()
-	if _, err := file.WriteString(policy); err != nil {
-		t.Fatalf("write temp policy: %v", err)
-	}
+	_, err = file.WriteString(policy)
+	require.NoError(t, err)
 	return file.Name()
 }
