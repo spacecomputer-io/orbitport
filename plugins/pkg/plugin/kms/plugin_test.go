@@ -28,7 +28,7 @@ const (
 	testEthereumKeyID    = "kms:eth-main"
 )
 
-func TestCreateKey_StoresMetadata(t *testing.T) {
+func TestCreateKey_ValidRequest_StoresMetadata(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
 
@@ -93,7 +93,7 @@ func TestCreateKey_StoresMetadata(t *testing.T) {
 	assert.Equal(t, keySpecAES256GCM96, data["key_spec"])
 }
 
-func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
+func TestCreateKey_DuplicateAlias_ReturnsAlreadyExists(t *testing.T) {
 	clientID := "client-a"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +121,7 @@ func TestCreateKeyRejectsDuplicateAlias(t *testing.T) {
 	assert.Equal(t, codes.AlreadyExists, status.Code(err))
 }
 
-func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
+func TestCreateKey_TransitAsymmetricKey_ReturnsPublicKey(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
 	require.NoError(t, err)
@@ -176,7 +176,7 @@ func TestCreateTransitAsymmetricKeyReturnsPublicKey(t *testing.T) {
 	assert.Equal(t, publicKey, data["public_key"])
 }
 
-func TestGetKeyMetadataReturnsMetadataByKeyIDAndAlias(t *testing.T) {
+func TestGetKeyMetadata_KeyIDOrAlias_ReturnsMetadata(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
 	require.NoError(t, err)
@@ -214,7 +214,7 @@ func TestGetKeyMetadataReturnsMetadataByKeyIDAndAlias(t *testing.T) {
 	assert.Equal(t, 2, requests)
 }
 
-func TestGetKeyMetadataRejectsMissingClientID(t *testing.T) {
+func TestGetKeyMetadata_MissingClientID_ReturnsInvalidArgument(t *testing.T) {
 	plugin := newPlugin(&kmsConfig{
 		OpenBaoProxyURL: "http://127.0.0.1:1",
 		EthereumMount:   "ethereum",
@@ -230,7 +230,7 @@ func TestGetKeyMetadataRejectsMissingClientID(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestGetKeyMetadataDeniesWrongTenant(t *testing.T) {
+func TestGetKeyMetadata_WrongTenant_ReturnsPermissionDenied(t *testing.T) {
 	requestClientID := "client-b"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -254,7 +254,7 @@ func TestGetKeyMetadataDeniesWrongTenant(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
+func TestGetPublicKey_KeyIDOrAlias_ReturnsRequestedVersion(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
 	require.NoError(t, err)
@@ -302,7 +302,7 @@ func TestGetPublicKeyReturnsPublicKeyByKeyIDAndAlias(t *testing.T) {
 	assert.Equal(t, 3, requests)
 }
 
-func TestGetPublicKeyRejectsMissingClientID(t *testing.T) {
+func TestGetPublicKey_MissingClientID_ReturnsInvalidArgument(t *testing.T) {
 	plugin := newPlugin(&kmsConfig{
 		OpenBaoProxyURL: "http://127.0.0.1:1",
 		EthereumMount:   "ethereum",
@@ -318,7 +318,7 @@ func TestGetPublicKeyRejectsMissingClientID(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestGetPublicKeyRejectsZeroVersion(t *testing.T) {
+func TestGetPublicKey_ZeroVersion_ReturnsInvalidArgument(t *testing.T) {
 	plugin := newPlugin(&kmsConfig{
 		OpenBaoProxyURL: "http://127.0.0.1:1",
 		EthereumMount:   "ethereum",
@@ -336,7 +336,7 @@ func TestGetPublicKeyRejectsZeroVersion(t *testing.T) {
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestGetPublicKeyDeniesWrongTenant(t *testing.T) {
+func TestGetPublicKey_WrongTenant_ReturnsPermissionDenied(t *testing.T) {
 	requestClientID := "client-b"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -360,7 +360,7 @@ func TestGetPublicKeyDeniesWrongTenant(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func TestGetPublicKeyRejectsKeyWithoutPublicKey(t *testing.T) {
+func TestGetPublicKey_KeyWithoutPublicKey_ReturnsFailedPrecondition(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
 	require.NoError(t, err)
@@ -386,7 +386,7 @@ func TestGetPublicKeyRejectsKeyWithoutPublicKey(t *testing.T) {
 	assert.Equal(t, codes.FailedPrecondition, status.Code(err))
 }
 
-func TestTransitSignPinsMetadataPrimaryVersion(t *testing.T) {
+func TestSign_TransitKey_UsesMetadataPrimaryVersion(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitSignAlias)
 	require.NoError(t, err)
@@ -438,7 +438,7 @@ func TestTransitSignPinsMetadataPrimaryVersion(t *testing.T) {
 	assert.Equal(t, 1, signRequests)
 }
 
-func TestEncryptWrapsTransitCiphertext(t *testing.T) {
+func TestEncrypt_TransitKey_WrapsCiphertext(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testTransitAlias)
 	require.NoError(t, err)
@@ -475,7 +475,7 @@ func TestEncryptWrapsTransitCiphertext(t *testing.T) {
 	assert.Equal(t, encryptionAlgorithmAES256GCM96, resp.EncryptionAlgorithm)
 }
 
-func TestEncryptRejectsWrongTenant(t *testing.T) {
+func TestEncrypt_WrongTenant_ReturnsPermissionDenied(t *testing.T) {
 	requestClientID := "client-b"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -502,7 +502,7 @@ func TestEncryptRejectsWrongTenant(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
+func TestCreateKey_EthereumKey_StoresSchemeMetadata(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	require.NoError(t, err)
@@ -550,7 +550,7 @@ func TestCreateEthereumKeyStoresSchemeMetadata(t *testing.T) {
 	assert.Equal(t, testEthereumAlias, data["alias"])
 }
 
-func TestEthereumSignUsesEthereumEngine(t *testing.T) {
+func TestSign_EthereumKey_UsesEthereumEngine(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	require.NoError(t, err)
@@ -591,7 +591,7 @@ func TestEthereumSignUsesEthereumEngine(t *testing.T) {
 	assert.Equal(t, uint32(1), resp.KeyVersion)
 }
 
-func TestEthereumSign_RawMessageTypes_HashesDecodedBytes(t *testing.T) {
+func TestSign_EthereumRawMessageTypes_HashesDecodedBytes(t *testing.T) {
 	tests := []struct {
 		name        string
 		messageType *string
@@ -660,7 +660,7 @@ func TestEthereumSign_RawMessageTypes_HashesDecodedBytes(t *testing.T) {
 	}
 }
 
-func TestEthereumSignRawRejectsInvalidBase64(t *testing.T) {
+func TestSign_EthereumRawInvalidBase64_ReturnsInvalidArgument(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	require.NoError(t, err)
@@ -691,7 +691,7 @@ func TestEthereumSignRawRejectsInvalidBase64(t *testing.T) {
 	assert.Equal(t, "ETHEREUM RAW messages must be base64-encoded bytes", status.Convert(err).Message())
 }
 
-func TestEthereumSign_DigestEncodings_NormalizesHash(t *testing.T) {
+func TestSign_EthereumDigestEncodings_NormalizesHash(t *testing.T) {
 	digestBytes, err := hex.DecodeString("25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45")
 	require.NoError(t, err)
 	encodedDigest := base64.StdEncoding.EncodeToString(digestBytes)
@@ -752,7 +752,7 @@ func TestEthereumSign_DigestEncodings_NormalizesHash(t *testing.T) {
 	}
 }
 
-func TestEthereumSignDigestRejectsWrongLength(t *testing.T) {
+func TestSign_EthereumDigestWrongLength_ReturnsInvalidArgument(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	require.NoError(t, err)
@@ -783,7 +783,7 @@ func TestEthereumSignDigestRejectsWrongLength(t *testing.T) {
 	assert.Equal(t, "ETHEREUM DIGEST messages must be exactly 32 bytes", status.Convert(err).Message())
 }
 
-func TestEthereumSign_InvalidDigestResponse_ReturnsInternal(t *testing.T) {
+func TestSign_EthereumInvalidDigestResponse_ReturnsInternal(t *testing.T) {
 	digestBytes, err := hex.DecodeString("25f6c888f741660abd3e48fe2316b0c6095ea1aa9240d5324575d9fca9f2de45")
 	require.NoError(t, err)
 	encodedDigest := base64.StdEncoding.EncodeToString(digestBytes)
@@ -845,7 +845,7 @@ func TestEthereumSign_InvalidDigestResponse_ReturnsInternal(t *testing.T) {
 	}
 }
 
-func TestEncryptRejectsUnsupportedEthereumOperation(t *testing.T) {
+func TestEncrypt_EthereumKey_ReturnsFailedPrecondition(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	require.NoError(t, err)
@@ -875,7 +875,7 @@ func TestEncryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	assert.Equal(t, "ETHEREUM keys do not support encryption", status.Convert(err).Message())
 }
 
-func TestDecryptRejectsUnsupportedEthereumOperation(t *testing.T) {
+func TestDecrypt_EthereumKey_ReturnsFailedPrecondition(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	require.NoError(t, err)
@@ -906,7 +906,7 @@ func TestDecryptRejectsUnsupportedEthereumOperation(t *testing.T) {
 	assert.Equal(t, "ETHEREUM keys do not support decryption", status.Convert(err).Message())
 }
 
-func TestRotateKeyRejectsUnsupportedEthereumOperation(t *testing.T) {
+func TestRotateKey_EthereumKey_ReturnsUnimplemented(t *testing.T) {
 	clientID := "client-a"
 	providerKey, err := scopedBackendKey(clientID, testEthereumAlias)
 	require.NoError(t, err)

@@ -22,7 +22,7 @@ const (
 	testKeyStoreDefaultPolicyPath = "cedar/key_store_default.cedar"
 )
 
-func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
+func TestKeyStorePut_ValidRequest_StoresSecretInTenantPath(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 	var body map[string]any
@@ -63,7 +63,7 @@ func TestKeyStorePutStoresSecretInTenantPath(t *testing.T) {
 	assert.Equal(t, testKeyStoreName, data["name"])
 }
 
-func TestKeyStorePutStoresSecretAsJSONText(t *testing.T) {
+func TestKeyStorePut_HighPrecisionNumbers_PreservesJSONText(t *testing.T) {
 	var body map[string]any
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +88,7 @@ func TestKeyStorePutStoresSecretAsJSONText(t *testing.T) {
 	assert.NotContains(t, data, "secret")
 }
 
-func TestKeyStorePutBackendErrorIsGenericInternal(t *testing.T) {
+func TestKeyStorePut_BackendError_ReturnsGenericInternal(t *testing.T) {
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing mount at http://openbao.internal/v1/key-store", http.StatusNotFound)
 	}))
@@ -104,7 +104,7 @@ func TestKeyStorePutBackendErrorIsGenericInternal(t *testing.T) {
 	assert.Equal(t, "key-store backend error", status.Convert(err).Message())
 }
 
-func TestKeyStoreGetReturnsSecret(t *testing.T) {
+func TestKeyStoreGet_ExistingSecret_ReturnsSecret(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -138,7 +138,7 @@ func TestKeyStoreGetReturnsSecret(t *testing.T) {
 	assert.Equal(t, `{"api_key":"secret-value"}`, resp.SecretJson)
 }
 
-func TestKeyStoreGetReturnsSecretJSONTextUnchanged(t *testing.T) {
+func TestKeyStoreGet_HighPrecisionNumbers_PreservesJSONText(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 	secret := `{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}`
@@ -171,7 +171,7 @@ func TestKeyStoreGetReturnsSecretJSONTextUnchanged(t *testing.T) {
 	assert.Equal(t, secret, resp.SecretJson)
 }
 
-func TestKeyStoreGetForbiddenBackendErrorIsGenericInternal(t *testing.T) {
+func TestKeyStoreGet_ForbiddenBackendError_ReturnsGenericInternal(t *testing.T) {
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "permission denied for /v1/key-store/data/owners/client-a", http.StatusForbidden)
 	}))
@@ -186,7 +186,7 @@ func TestKeyStoreGetForbiddenBackendErrorIsGenericInternal(t *testing.T) {
 	assert.Equal(t, "key-store backend error", status.Convert(err).Message())
 }
 
-func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
+func TestKeyStoreGet_WrongTenantPayload_ReturnsPermissionDenied(t *testing.T) {
 	clientID := "client-a"
 
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -216,7 +216,7 @@ func TestKeyStoreGetRejectsWrongTenantPayload(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func TestKeyStoreGetRejectsNullStoredSecretJSON(t *testing.T) {
+func TestKeyStoreGet_NullStoredSecretJSON_ReturnsPermissionDenied(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -239,7 +239,7 @@ func TestKeyStoreGetRejectsNullStoredSecretJSON(t *testing.T) {
 	assert.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func TestKeyStoreListReturnsSingleLevelTenantNamespace(t *testing.T) {
+func TestKeyStoreList_NoPrefix_ReturnsSingleLevelTenantNamespace(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -263,7 +263,7 @@ func TestKeyStoreListReturnsSingleLevelTenantNamespace(t *testing.T) {
 	assert.Equal(t, want, resp.Names)
 }
 
-func TestKeyStoreListSkipsUnsafeOpenBaoKeys(t *testing.T) {
+func TestKeyStoreList_UnsafeOpenBaoKeys_SkipsUnsafeNames(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -291,7 +291,7 @@ func TestKeyStoreListSkipsUnsafeOpenBaoKeys(t *testing.T) {
 	assert.Equal(t, want, resp.Names)
 }
 
-func TestKeyStoreListReturnsEmptyWhenNamespaceMissing(t *testing.T) {
+func TestKeyStoreList_MissingNamespace_ReturnsEmpty(t *testing.T) {
 	plugin, server := newKeyStoreTestPlugin(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no value found at /v1/key-store/metadata/owners/client-a", http.StatusNotFound)
 	}))
@@ -305,7 +305,7 @@ func TestKeyStoreListReturnsEmptyWhenNamespaceMissing(t *testing.T) {
 	assert.Empty(t, resp.Names)
 }
 
-func TestKeyStoreListAcceptsDeepPrefixWithSingleOpenBaoCall(t *testing.T) {
+func TestKeyStoreList_DeepPrefix_ReturnsPrefixedNames(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 	deepPrefix := "a/b/c/d"
@@ -331,7 +331,7 @@ func TestKeyStoreListAcceptsDeepPrefixWithSingleOpenBaoCall(t *testing.T) {
 	assert.Equal(t, want, resp.Names)
 }
 
-func TestKeyStoreListDoesNotRecurseIntoFolders(t *testing.T) {
+func TestKeyStoreList_ReturnedFolders_DoesNotRecurse(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -358,7 +358,7 @@ func TestKeyStoreListDoesNotRecurseIntoFolders(t *testing.T) {
 	assert.Equal(t, want, resp.Names)
 }
 
-func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
+func TestKeyStoreDelete_ExistingEntry_DeletesSecret(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 	deleteCalled := false
@@ -387,7 +387,7 @@ func TestKeyStoreDeleteRequiresExistingEntry(t *testing.T) {
 	assert.True(t, deleteCalled, "expected backend delete request")
 }
 
-func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
+func TestKeyStoreDelete_MissingEntry_ReturnsNotFound(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -413,7 +413,7 @@ func TestKeyStoreDeleteReturnsNotFoundWhenEntryMissing(t *testing.T) {
 	assert.Equal(t, codes.NotFound, status.Code(err))
 }
 
-func TestKeyStoreDeleteReturnsInternalWhenDeleteFailsAfterExistenceCheck(t *testing.T) {
+func TestKeyStoreDelete_BackendDeleteFailsAfterExistenceCheck_ReturnsGenericInternal(t *testing.T) {
 	clientID := "client-a"
 	owner := tenantNamespace(clientID)
 
@@ -439,7 +439,7 @@ func TestKeyStoreDeleteReturnsInternalWhenDeleteFailsAfterExistenceCheck(t *test
 	assert.Equal(t, "key-store backend error", status.Convert(err).Message())
 }
 
-func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) {
+func TestKeyStoreGet_TraversalWithPermissiveCedar_RejectsBeforeOpenBao(t *testing.T) {
 	policyFile := writeTempKeyStorePolicy(t, `permit (
 		principal,
 		action,
@@ -460,7 +460,7 @@ func TestKeyStoreRejectsTraversalBeforeOpenBaoWithPermissiveCedar(t *testing.T) 
 	assert.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
-func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
+func TestKeyStorePathBuilder_Traversal_ReturnsError(t *testing.T) {
 	cfg := &kmsConfig{
 		OpenBaoProxyURL: "http://openbao",
 		KeyStoreMount:   "key-store",
@@ -474,7 +474,7 @@ func TestKeyStorePathBuilderRejectsTraversal(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestKeyStorePathBuilderAllowsDeepNames(t *testing.T) {
+func TestKeyStoreDataPath_DeepName_ReturnsTenantScopedPath(t *testing.T) {
 	cfg := &kmsConfig{
 		OpenBaoProxyURL: "http://openbao",
 		KeyStoreMount:   "key-store",
@@ -488,7 +488,7 @@ func TestKeyStorePathBuilderAllowsDeepNames(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-func TestKeyStoreCedarForbidOverridesDefaultOwnerPermit(t *testing.T) {
+func TestKeyStoreDelete_CedarForbidOverridesOwnerPermit_ReturnsPermissionDenied(t *testing.T) {
 	defaultPolicy, err := os.ReadFile(testKeyStoreDefaultPolicyPath)
 	require.NoError(t, err)
 	policyFile := writeTempKeyStorePolicy(t, string(defaultPolicy)+`
