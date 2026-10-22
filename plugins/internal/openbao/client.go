@@ -95,7 +95,7 @@ func (c *Client) do(req *http.Request, into any) error {
 		committee_size := "not applicable"
 
 		labels, ok := raw.(MetricLabels)
-		if ok == true {
+		if ok {
 			op = labels.Operation
 			alg = labels.Algorithm
 			committee_size = labels.CommitteeSize
