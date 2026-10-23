@@ -85,21 +85,20 @@ func (c *Client) do(req *http.Request, into any) error {
 	start := time.Now()
 	//delcare status label as default value of transport error, then update it if i get a response
 	statusLabel := "transport_error"
+	raw := req.Context().Value(metricLabelsKey{})
+	//define default values
+	op := ""
+	alg := ""
+	committee_size := ""
+	labels, ok := raw.(MetricLabels)
+	if ok {
+		op = labels.Operation
+		alg = labels.Algorithm
+		committee_size = labels.CommitteeSize
+	}
 	defer func() {
 		end := time.Now()
 		total := end.Sub(start)
-		raw := req.Context().Value(metricLabelsKey{})
-		//define default values
-		op := "not_applicable"
-		alg := "not_applicable"
-		committee_size := "not applicable"
-
-		labels, ok := raw.(MetricLabels)
-		if ok {
-			op = labels.Operation
-			alg = labels.Algorithm
-			committee_size = labels.CommitteeSize
-		}
 
 		openbaoDurationSeconds.WithLabelValues(op, alg, committee_size, statusLabel).Observe(total.Seconds())
 	}()
