@@ -124,7 +124,7 @@ keys. Tenant isolation is enforced in two places:
   `key_id` against the requesting tenant's metadata, so a leaked ciphertext
   cannot be decrypted by a different client.
 
-Aliases are user-chosen, validated to `[A-Za-z0-9._-]{1,128}`, and may not
+Aliases are user-chosen, validated to `[A-Za-z0-9.-]{1,128}`, and may not
 start with the reserved `kms:` prefix. The canonical external identifier is
 always `kms:<alias>`; both forms resolve to the same backend key.
 

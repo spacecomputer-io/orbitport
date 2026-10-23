@@ -3,8 +3,10 @@ name: Test & Build Gateway
 on:
   push:
     branches: [ "main" ]
+    paths-ignore: [ "examples/**" ]
   pull_request:
     branches: [ "*" ]
+    paths-ignore: [ "examples/**" ]
 
 env:
   CARGO_TERM_COLOR: always

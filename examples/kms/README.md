@@ -1,0 +1,101 @@
+# Orbitport KMS examples
+
+Short, runnable use cases for the Orbitport KMS API, grouped by role. Each one is a bash script that calls the public JSON-RPC API with your token and checks the results with standard tools such as `openssl`.
+
+## Before you start
+
+You need `bash`, `curl`, `jq` and `openssl`. Some demos need OpenSSL 3 (for Ed25519 and prehashed verification); macOS ships LibreSSL, so install it with `brew install openssl@3` and put it first in your `PATH`. The Web3 demo uses [Foundry](https://getfoundry.sh) `cast` when it is installed.
+
+1. Sign up on the [dashboard](https://accounts.spacecomputer.io) and create an API token.
+2. Copy `examples/.env.example` to `examples/.env` and set `ORBITPORT_PAT` to your token. `.env` is gitignored.
+3. From `examples/kms/`, create the demo keys once:
+
+   ```bash
+   ./setup.sh
+   ```
+
+4. List the demos and run one:
+
+   ```bash
+   ./booth.sh
+   ./booth.sh signed-webhooks
+   ```
+
+Each demo writes its files to `.work/<demo>/` so you can inspect them after the run. Set `BOOTH_PAUSE=1` to wait for Enter between steps.
+
+For a one-off call, use `rpc.sh`:
+
+```bash
+./rpc.sh kms.GetKeyMetadata '{"KeyId":"examples-sign-p256"}'
+./rpc.sh kms.GetCapabilities
+```
+
+## Demos
+
+### Dev
+
+| Demo | What it shows |
+| --- | --- |
+| [pii-encryption](dev/pii-encryption/) | Encrypt sensitive columns before they reach the database |
+| [signed-webhooks](dev/signed-webhooks/) | Sign each webhook; a changed byte or replayed timestamp is rejected |
+| [kms-jwt](dev/kms-jwt/) | Mint ES256 JWTs with no key file on disk |
+| [license-keys](dev/license-keys/) | Sign licenses once, verify them offline in the app |
+| [signed-download-links](dev/signed-download-links/) | Expiring download links checked with only the public key |
+| [large-file-encryption](dev/large-file-encryption/) | Envelope encryption: a 100 MB file never travels to the KMS |
+| [web3-signing](dev/web3-signing/) | EIP-191 signing with an Ethereum key that stays in the KMS |
+
+### DevOps
+
+| Demo | What it shows |
+| --- | --- |
+| [release-signing](devops/release-signing/) | CI signs artifacts without ever holding the key |
+| [image-sbom-signing](devops/image-sbom-signing/) | Sign the image digest and SBOM, check both before deploy |
+| [ci-secrets](devops/ci-secrets/) | CI fetches credentials at runtime instead of `.env` files |
+| [secrets-per-environment](devops/secrets-per-environment/) | Same secret names under `dev/` and `prod/` prefixes |
+| [encrypted-config](devops/encrypted-config/) | Commit encrypted values files, decrypt at deploy time |
+| [encrypted-backups](devops/encrypted-backups/) | Encrypt database dumps before upload, then restore |
+
+### SRE
+
+| Demo | What it shows |
+| --- | --- |
+| [rotation-drill](sre/rotation-drill/) | Rotate live keys; old ciphertext and signatures keep working |
+| [incident-response](sre/incident-response/) | Revoke a leaked token and rotate; the key never left the KMS |
+| [tamper-evident-logs](sre/tamper-evident-logs/) | Sign daily log digests; an edited line fails the audit |
+| [signed-config](sre/signed-config/) | Services load only config and flags that verify |
+| [usage-metering](sre/usage-metering/) | Per-operation request counts and credits in the dashboard |
+| [preflight-checks](sre/preflight-checks/) | Check KMS capabilities before rolling out |
+
+### Cloud security
+
+| Demo | What it shows |
+| --- | --- |
+| [non-exportable-keys](cloud-security/non-exportable-keys/) | A KMS key signs but is never readable; a stored secret comes back in full |
+| [crypto-shredding](cloud-security/crypto-shredding/) | Erase a user's data by deleting their data key |
+| [verify-without-trust](cloud-security/verify-without-trust/) | Verify signatures with plain `openssl`, no SDK |
+
+## Keys and credits
+
+`setup.sh` creates six keys in your account, all prefixed `examples-`:
+
+| Alias | Type | Used by |
+| --- | --- | --- |
+| `examples-encrypt` | AES-256-GCM | encryption and data key demos |
+| `examples-sign-p256` | ECDSA P-256 | most signing demos |
+| `examples-sign-ed25519` | Ed25519 | license keys, download links, non-exportable keys |
+| `examples-eth` | Ethereum secp256k1 | Web3 signing |
+| `examples-rotation-sign` | ECDSA P-256 | rotation drill, incident response |
+| `examples-rotation-encrypt` | AES-256-GCM | rotation drill |
+
+Every call uses credits from your account. Creating and rotating keys cost more than other operations; the dashboard lists the price per operation. The rotation drill and incident response demos rotate a key on every run.
+
+## Configuration
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `ORBITPORT_PAT` | (required) | API token from the dashboard |
+| `ORBITPORT_URL` | `https://op.spacecomputer.io` | Gateway base URL |
+| `ORBITPORT_DASHBOARD_URL` | `https://accounts.spacecomputer.io` | Dashboard link shown by some demos |
+| `BOOTH_PAUSE` | `0` | `1` waits for Enter between steps |
+
+The token is sent through a curl header file, so it never appears in the process list.
