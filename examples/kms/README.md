@@ -22,6 +22,8 @@ You need `bash`, `curl`, `jq` and `openssl`. Some demos need OpenSSL 3 (for Ed25
    ./demo.sh --all
    ```
 
+   `--all` runs every demo in order and keeps going if one fails. It ends with `All 22 demos passed`, or with how many passed and which failed, and then exits with status 1.
+
 Each demo writes its files to `.work/<demo>/` so you can inspect them after the run. Set `DEMO_PAUSE=1` in `.env` to wait for Enter between steps.
 
 For a one-off call, use `rpc.sh`:
@@ -77,7 +79,7 @@ For a one-off call, use `rpc.sh`:
 
 ## Keys and credits
 
-`setup.sh` creates six keys in your account, all prefixed `examples-`:
+`setup.sh` creates six keys in your account, all prefixed `examples-`. Running it again keeps the keys that already exist:
 
 | Alias | Type | Used by |
 | --- | --- | --- |
@@ -88,7 +90,17 @@ For a one-off call, use `rpc.sh`:
 | `examples-rotation-sign` | ECDSA P-256 | rotation drill, incident response |
 | `examples-rotation-encrypt` | AES-256-GCM | rotation drill |
 
-Every call uses credits from your account. Creating and rotating keys cost more than other operations; the dashboard lists the price per operation. The rotation drill and incident response demos rotate a key on every run.
+Most calls use credits from your account. Creating and rotating keys cost more than other operations; the dashboard lists the price per operation. The rotation drill and incident response demos rotate a key on every run. At current prices, the first `./setup.sh` costs about 66 credits and each `./demo.sh --all` about 105.
+
+## Troubleshooting
+
+| Message | What to do |
+| --- | --- |
+| `401 Unauthorized: check ORBITPORT_PAT` | The token is wrong, expired or revoked. Create a new one in the dashboard and update `.env` |
+| `402 out of credits` | Add credits in the dashboard, then run the demo again |
+| `429 rate limited` | Wait a few seconds and run again |
+| `did you run ./setup.sh?` | The demo keys are missing. Run `./setup.sh` |
+| `OpenSSL 3 is required` | Install OpenSSL 3 and put it first in your `PATH` (see Before you start) |
 
 ## Configuration
 
