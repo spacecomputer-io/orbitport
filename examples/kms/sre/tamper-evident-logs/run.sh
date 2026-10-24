@@ -7,7 +7,7 @@ init_demo tamper-evident-logs
 title "Tamper-evident logs"
 
 audit() {
-  local meta pub
+  local meta
   meta=$(cat audit-2026-10-22.log.sig.json)
   public_key_pem "$(echo "$meta" | jq -r '.key_id')" "$(echo "$meta" | jq -r '.key_version')" >audit-pub.pem
   echo "$meta" | jq -r '.signature' | b64d >audit.sig

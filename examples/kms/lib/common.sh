@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
 # Shared helpers for the KMS examples. Every run.sh sources this file.
 #
-# Configuration comes from the environment or from examples/.env (shared by all examples):
+# Configuration comes only from examples/.env (shared by all examples), never from the shell:
 #   ORBITPORT_PAT            personal access token from the dashboard (required)
 #   ORBITPORT_URL            gateway base URL (default https://op.spacecomputer.io)
 #   ORBITPORT_DASHBOARD_URL  dashboard URL shown by some demos
-#   BOOTH_PAUSE=1            wait for Enter between steps
+#   DEMO_PAUSE=1             wait for Enter between steps
 
 set -euo pipefail
 
 KMS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EXAMPLES_DIR="$(dirname "$KMS_DIR")"
 
+# ignore copies in the shell, so a stale token there cannot shadow .env
+unset ORBITPORT_PAT ORBITPORT_URL ORBITPORT_DASHBOARD_URL DEMO_PAUSE
 if [[ -f "$EXAMPLES_DIR/.env" ]]; then
   set -a
   # shellcheck disable=SC1091
@@ -24,12 +26,15 @@ ORBITPORT_DASHBOARD_URL="${ORBITPORT_DASHBOARD_URL:-https://accounts.spacecomput
 RPC_URL="${ORBITPORT_URL%/}/api/v1/rpc"
 
 # demo keys, created once by setup.sh (aliases are scoped to your account)
-KEY_ENCRYPT="examples-encrypt"
-KEY_SIGN="examples-sign-p256"
-KEY_SIGN_ED25519="examples-sign-ed25519"
-KEY_ETH="examples-eth"
-KEY_ROTATION_SIGN="examples-rotation-sign"
-KEY_ROTATION_ENCRYPT="examples-rotation-encrypt"
+# shellcheck disable=SC2034
+{
+  KEY_ENCRYPT="examples-encrypt"
+  KEY_SIGN="examples-sign-p256"
+  KEY_SIGN_ED25519="examples-sign-ed25519"
+  KEY_ETH="examples-eth"
+  KEY_ROTATION_SIGN="examples-rotation-sign"
+  KEY_ROTATION_ENCRYPT="examples-rotation-encrypt"
+}
 
 ############################################
 # Output
@@ -68,7 +73,7 @@ show() {
 }
 
 pause() {
-  if [[ "${BOOTH_PAUSE:-0}" == "1" && -t 0 ]]; then
+  if [[ "${DEMO_PAUSE:-0}" == "1" && -t 0 ]]; then
     read -r -p "   ${C_DIM}(Enter to continue)${C_RESET}" _
   fi
 }
@@ -127,10 +132,11 @@ rpc_try() {
     --data-binary @- -w $'\n%{http_code}' <<<"$body") || { echo "cannot reach $RPC_URL"; return 1; }
   code="${resp##*$'\n'}"
   resp="${resp%$'\n'*}"
-  if [[ "$code" == "401" ]]; then
-    echo "401 Unauthorized: check ORBITPORT_PAT (expired or revoked?)"
-    return 1
-  fi
+  case "$code" in
+    401) echo "401 Unauthorized: check ORBITPORT_PAT (expired or revoked?)"; return 1 ;;
+    402) echo "402 out of credits: add credits in the dashboard ($ORBITPORT_DASHBOARD_URL)"; return 1 ;;
+    429) echo "429 rate limited: wait a few seconds and run again"; return 1 ;;
+  esac
   if echo "$resp" | jq -e '.result' >/dev/null 2>&1; then
     echo "$resp" | jq -c '.result'
     return 0

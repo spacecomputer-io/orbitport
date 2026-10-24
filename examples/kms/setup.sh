@@ -22,14 +22,16 @@ KEYS=(
 for entry in "${KEYS[@]}"; do
   read -r alias scheme spec usage desc <<<"$entry"
   step "$alias ($scheme $spec)"
-  if rpc_try kms.GetKeyMetadata "$(jq -nc --arg k "$alias" '{KeyId:$k}')" >/dev/null; then
+  if out=$(rpc_try kms.GetKeyMetadata "$(jq -nc --arg k "$alias" '{KeyId:$k}')"); then
     ok "already exists"
     continue
   fi
+  # a missing key reads as "does not belong"; anything else (401, network) stops here
+  [[ "$out" == *"does not belong"* ]] || die "kms.GetKeyMetadata failed: $out"
   rpc kms.CreateKey "$(jq -nc --arg a "$alias" --arg s "$scheme" --arg ks "$spec" --arg u "$usage" --arg d "$desc" \
     '{Alias:$a, Scheme:$s, KeySpec:$ks, KeyUsage:$u, Description:$d, Tags:[{TagKey:"purpose", TagValue:"examples"}]}')" >/dev/null
   ok "created"
 done
 
 echo
-ok "Keys are ready. Run ./booth.sh to see the demos."
+ok "Keys are ready. Run ./demo.sh to see the demos."

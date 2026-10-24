@@ -10,6 +10,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 [[ $# -ge 1 ]] || { sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
 require_tools curl jq
 require_pat
-echo "${2:-{\}}" | jq -e . >/dev/null 2>&1 || die "params must be valid JSON: ${2:-}"
+params="${2:-}"
+[[ -n "$params" ]] || params='{}'
+echo "$params" | jq -e . >/dev/null 2>&1 || die "params must be valid JSON: $params"
 
-rpc "$1" "${2:-{\}}" | jq .
+rpc "$1" "$params" | jq .

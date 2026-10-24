@@ -14,14 +14,15 @@ You need `bash`, `curl`, `jq` and `openssl`. Some demos need OpenSSL 3 (for Ed25
    ./setup.sh
    ```
 
-4. List the demos and run one:
+4. List the demos and run one, or run them all:
 
    ```bash
-   ./booth.sh
-   ./booth.sh signed-webhooks
+   ./demo.sh
+   ./demo.sh signed-webhooks
+   ./demo.sh --all
    ```
 
-Each demo writes its files to `.work/<demo>/` so you can inspect them after the run. Set `BOOTH_PAUSE=1` to wait for Enter between steps.
+Each demo writes its files to `.work/<demo>/` so you can inspect them after the run. Set `DEMO_PAUSE=1` in `.env` to wait for Enter between steps.
 
 For a one-off call, use `rpc.sh`:
 
@@ -96,6 +97,8 @@ Every call uses credits from your account. Creating and rotating keys cost more 
 | `ORBITPORT_PAT` | (required) | API token from the dashboard |
 | `ORBITPORT_URL` | `https://op.spacecomputer.io` | Gateway base URL |
 | `ORBITPORT_DASHBOARD_URL` | `https://accounts.spacecomputer.io` | Dashboard link shown by some demos |
-| `BOOTH_PAUSE` | `0` | `1` waits for Enter between steps |
+| `DEMO_PAUSE` | `0` | `1` waits for Enter between steps |
+
+All settings are read from `examples/.env` only. Variables with the same names in your shell are ignored.
 
 The token is sent through a curl header file, so it never appears in the process list.
