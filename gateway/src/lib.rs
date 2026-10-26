@@ -1,5 +1,7 @@
 // Include the `items` module, which is generated from items.proto.
 // It is important to maintain the same structure as in the proto.
+// generated code: clippy 1.99 flags tonic's async_trait servers with double_must_use
+#[allow(clippy::double_must_use)]
 pub mod proto {
     pub mod plugins {
         pub mod account {
