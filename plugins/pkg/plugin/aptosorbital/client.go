@@ -17,6 +17,7 @@ import (
 
 var (
 	ErrDailyRateLimitExceeded = fmt.Errorf("aptos orbital daily rate limit exceeded")
+	ErrNoDataAvailable        = fmt.Errorf("aptos orbital has no fresh randomness available")
 	ErrRateLimitExceeded      = fmt.Errorf("rate limit exceeded")
 )
 
@@ -26,6 +27,11 @@ type AptosClient struct {
 	opts       *ClientOptions
 	limiter    *rate.Limiter
 	authClient *oauth.OAuthClient
+}
+
+type apiErrorResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 // NewClient creates a new AptosClient with the given options.
@@ -112,13 +118,21 @@ func makeRequest[R any](ctx context.Context, c *AptosClient, method, urlStr stri
 
 	// TODO: handle response status codes properly.
 	if resp.StatusCode < http.StatusOK || resp.StatusCode > http.StatusAccepted {
+		body, _ := io.ReadAll(resp.Body)
+		var apiErr apiErrorResponse
+		if err := json.Unmarshal(body, &apiErr); err == nil {
+			switch apiErr.Code {
+			case "NO_DATA_AVAILABLE":
+				requestTotal.WithLabelValues("no_data_available").Inc()
+				return nil, ErrNoDataAvailable
+			}
+		}
 		if resp.StatusCode == http.StatusBadRequest {
 			requestTotal.WithLabelValues("daily_limit_exceeded").Inc()
 			// assuming we sent the right parameters, the error indicates the daily rate limit exceeded
 			return nil, ErrDailyRateLimitExceeded
 		}
 		requestTotal.WithLabelValues(fmt.Sprintf("failed_%d", resp.StatusCode)).Inc()
-		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed request (%d): %s", resp.StatusCode, body)
 	}
 

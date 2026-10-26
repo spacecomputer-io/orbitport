@@ -238,7 +238,7 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 				logger.Info("Context canceled while fetching CTRNGs")
 				return
 			}
-			logger.Errorf("Failed to get cTRNGs from aptos orbital for beacon %s: %v", metadata.Name, err)
+			logger.Errorf("Failed to get cTRNGs from provider for beacon %s: %v", metadata.Name, err)
 			ctrngTotal.WithLabelValues(metadata.Name, "error").Inc()
 		}
 
@@ -269,7 +269,11 @@ func loadCtrngs(ctx context.Context, threads utils.ThreadControl, ctrngPluginCli
 			ctrngTotal.WithLabelValues(metadata.Name, "ok").Add(float64(len(ctrngs)))
 		} else {
 			// Fallback to using only pre-stored master seeds
-			logger.Warnf("Beacon %s: no CTRNG available, falling back to MasterSeed plugin only", metadata.Name)
+			if err != nil {
+				logger.Infof("Beacon %s: falling back to MasterSeed plugin after CTRNG provider error", metadata.Name)
+			} else {
+				logger.Infof("Beacon %s: no fresh CTRNG available from provider, falling back to MasterSeed plugin only", metadata.Name)
+			}
 
 			msResp, msErr := masterSeedClient.GetSeeds(ctx, &proto.GetSeedsRequest{
 				Count: uint32(batchSize),
