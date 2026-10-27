@@ -6,6 +6,6 @@ The same private key handled two ways. Stored as a key-store secret, it comes ba
 ./run.sh
 ```
 
-API calls: `kms_keystore.Put`, `kms_keystore.Get`, `kms_keystore.Delete`, `kms.GetKeyMetadata`, `kms.Sign` (`ED25519`) on `examples-sign-ed25519`.
+API calls: `kms_keystore.Put`, `kms_keystore.Get`, `kms_keystore.Delete`, `kms.GetKeyMetadata`, `kms.Sign` (`ED25519`) on `examples-sign-ed25519`. Needs OpenSSL 3 to generate the Ed25519 key locally.
 
 Use the key-store for secrets that other systems need in plaintext (API keys, passwords). Use KMS keys for anything that only needs to sign or encrypt.

@@ -7,9 +7,15 @@ init_demo usage-metering
 title "Usage and metering"
 
 step "Run a small burst of operations"
-for i in 1 2 3; do encrypt_value "$KEY_ENCRYPT" "record $i" >/dev/null; done
+for i in 1 2 3; do
+  rpc kms.Encrypt "$(jq -nc --arg k "$KEY_ENCRYPT" --arg p "$(printf 'record %s' "$i" | b64)" \
+    '{KeyId:$k, Plaintext:$p, EncryptionAlgorithm:"AES_256_GCM96"}')" >/dev/null
+done
 printf 'usage demo' >msg.txt
-for i in 1 2; do sign_raw "$KEY_SIGN" ECDSA_SHA_256 msg.txt >/dev/null; done
+for i in 1 2; do
+  rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(b64 <msg.txt)" \
+    '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"RAW"}')" >/dev/null
+done
 rpc kms.GetCapabilities '{}' >/dev/null
 ok "3 x kms.Encrypt, 2 x kms.Sign, 1 x kms.GetCapabilities"
 

@@ -9,9 +9,9 @@ title "Tamper-evident logs"
 audit() {
   local meta
   meta=$(cat audit-2026-10-22.log.sig.json)
-  public_key_pem "$(echo "$meta" | jq -r '.key_id')" "$(echo "$meta" | jq -r '.key_version')" >audit-pub.pem
+  rpc kms.GetPublicKey "$(echo "$meta" | jq -c '{KeyId:.key_id, Version:.key_version}')" | jq -j '.PublicKey' >audit-pub.pem
   echo "$meta" | jq -r '.signature' | b64d >audit.sig
-  if verify_ecdsa audit-pub.pem audit.sig "$1"; then
+  if openssl dgst -sha256 -verify audit-pub.pem -signature audit.sig "$1" >/dev/null 2>&1; then
     ok "auditor: $1 matches the signed digest"
   else
     bad "auditor: $1 was modified after signing"
@@ -30,7 +30,8 @@ LOG
 show <audit-2026-10-22.log
 
 step "At midnight, sign the SHA-256 of the file"
-res=$(sign_digest "$KEY_SIGN" audit-2026-10-22.log)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(sha256_b64 <audit-2026-10-22.log)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"DIGEST"}')")
 jq -n --arg k "$KEY_SIGN" --argjson v "$(echo "$res" | jq '.KeyVersion')" \
   --arg s "$(sig_bytes "$(echo "$res" | jq -r '.Signature')" | b64)" \
   '{key_id:$k, key_version:$v, signature:$s}' >audit-2026-10-22.log.sig.json

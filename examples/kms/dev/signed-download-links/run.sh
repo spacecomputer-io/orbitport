@@ -13,7 +13,8 @@ BASE="https://downloads.example.com"
 sign_link() {
   local path="$1" expires="$2" res
   printf '%s\n%s' "$path" "$expires" >link-input
-  res=$(sign_raw "$KEY_SIGN_ED25519" ED25519 link-input)
+  res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN_ED25519" --arg m "$(b64 <link-input)" \
+    '{KeyId:$k, Message:$m, SigningAlgorithm:"ED25519", MessageType:"RAW"}')")
   echo "$BASE$path?expires=$expires&sig=$(sig_bytes "$(echo "$res" | jq -r '.Signature')" | b64url)"
 }
 
@@ -31,7 +32,7 @@ edge_check() {
   fi
   printf '%s\n%s' "$path" "$expires" >edge-input
   printf '%s' "$sig" | b64url_d >edge-sig
-  if verify_ed25519 edge-public-key.pem edge-sig edge-input; then
+  if openssl pkeyutl -verify -pubin -inkey edge-public-key.pem -rawin -in edge-input -sigfile edge-sig >/dev/null 2>&1; then
     ok "edge: 200, serving the file"
   else
     bad "edge: 403, signature does not match"
@@ -39,7 +40,7 @@ edge_check() {
 }
 
 step "The edge loads the backend's public key once"
-public_key_pem "$KEY_SIGN_ED25519" >edge-public-key.pem
+rpc kms.GetPublicKey "$(jq -nc --arg k "$KEY_SIGN_ED25519" '{KeyId:$k}')" | jq -j '.PublicKey' | ed25519_pem >edge-public-key.pem
 ok "edge-public-key.pem cached, no secret on the edge"
 
 step "The backend creates a link valid for 5 minutes"

@@ -10,7 +10,7 @@ title "Signed webhooks"
 receive() {
   local body_file="$1" ts="$2" sig_file="$3"
   { printf '%s.' "$ts"; cat "$body_file"; } >signed-input
-  if verify_ecdsa receiver-pub.pem "$sig_file" signed-input; then
+  if openssl dgst -sha256 -verify receiver-pub.pem -signature "$sig_file" signed-input >/dev/null 2>&1; then
     ok "receiver: signature valid, event accepted"
   else
     bad "receiver: signature invalid, event rejected"
@@ -18,7 +18,7 @@ receive() {
 }
 
 step "The receiver fetches the sender's public key once and caches it"
-public_key_pem "$KEY_SIGN" >receiver-pub.pem
+rpc kms.GetPublicKey "$(jq -nc --arg k "$KEY_SIGN" '{KeyId:$k}')" | jq -j '.PublicKey' >receiver-pub.pem
 show <receiver-pub.pem
 
 step "The sender signs '<timestamp>.<body>' and sends the signature as a header"
@@ -27,7 +27,9 @@ cat >event.json <<'JSON'
 JSON
 ts=$(date +%s)
 { printf '%s.' "$ts"; cat event.json; } >to-sign
-res=$(sign_raw "$KEY_SIGN" ECDSA_SHA_256 to-sign)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(b64 <to-sign)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"RAW"}')")
+# Signature is "vault:v<version>:<base64 DER>"
 sig_bytes "$(echo "$res" | jq -r '.Signature')" >signature.der
 info "POST /webhooks"
 info "X-Timestamp: $ts"

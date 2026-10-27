@@ -9,7 +9,8 @@ title "Incident response: compromised CI runner"
 sign_release() {
   printf '%s' "$1" >"$1.txt"
   local res
-  res=$(sign_raw "$KEY_ROTATION_SIGN" ECDSA_SHA_256 "$1.txt")
+  res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_ROTATION_SIGN" --arg m "$(b64 <"$1.txt")" \
+    '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"RAW"}')")
   echo "$(date -u +%H:%M:%S)  $1  key v$(echo "$res" | jq -r '.KeyVersion')" >>signing.log
 }
 

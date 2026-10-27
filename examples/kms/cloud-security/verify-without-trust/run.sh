@@ -9,11 +9,13 @@ title "Verify without trusting us"
 step "Sign a statement with the KMS"
 printf 'Invoice 2026-118: 4,800.00 EUR, due 2026-11-30\n' >invoice.txt
 show <invoice.txt
-res=$(sign_raw "$KEY_SIGN" ECDSA_SHA_256 invoice.txt)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(b64 <invoice.txt)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"RAW"}')")
 sig_bytes "$(echo "$res" | jq -r '.Signature')" >invoice.sig
 
 step "Publish the public key and its fingerprint"
-public_key_pem "$KEY_SIGN" "$(echo "$res" | jq -r '.KeyVersion')" >public-key.pem
+version=$(echo "$res" | jq -r '.KeyVersion')
+rpc kms.GetPublicKey "$(jq -nc --arg k "$KEY_SIGN" --argjson v "$version" '{KeyId:$k, Version:$v}')" | jq -j '.PublicKey' >public-key.pem
 show <public-key.pem
 info "fingerprint sha256:$(openssl pkey -pubin -in public-key.pem -outform DER | sha256_hex)"
 

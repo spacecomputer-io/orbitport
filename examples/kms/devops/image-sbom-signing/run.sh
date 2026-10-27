@@ -11,12 +11,13 @@ title "Container image and SBOM signing"
 deploy_gate() {
   local digest_hex="$1" sbom="$2" good=1
   printf '%s' "$digest_hex" | unhex >gate-digest.bin
-  if verify_ecdsa_prehashed pipeline-public-key.pem image.sig gate-digest.bin; then
+  # the signed message is already a digest, so verify without hashing it again
+  if openssl pkeyutl -verify -pubin -inkey pipeline-public-key.pem -in gate-digest.bin -sigfile image.sig -pkeyopt digest:sha256 >/dev/null 2>&1; then
     ok "image sha256:${digest_hex:0:12}... signed by the pipeline"
   else
     bad "image sha256:${digest_hex:0:12}... not signed by the pipeline"; good=0
   fi
-  if verify_ecdsa pipeline-public-key.pem sbom.sig "$sbom"; then
+  if openssl dgst -sha256 -verify pipeline-public-key.pem -signature sbom.sig "$sbom" >/dev/null 2>&1; then
     ok "SBOM signed by the pipeline"
   else
     bad "SBOM does not match its signature"; good=0
@@ -42,12 +43,13 @@ step "The pipeline signs the image digest and the SBOM digest with the KMS"
 res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(printf '%s' "$digest" | unhex | b64)" \
   '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"DIGEST"}')")
 sig_bytes "$(echo "$res" | jq -r '.Signature')" >image.sig
-res=$(sign_digest "$KEY_SIGN" sbom.cdx.json)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(sha256_b64 <sbom.cdx.json)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"DIGEST"}')")
 sig_bytes "$(echo "$res" | jq -r '.Signature')" >sbom.sig
 ok "image.sig and sbom.sig pushed next to the image"
 
 step "The cluster's deploy gate checks both with the public key"
-public_key_pem "$KEY_SIGN" >pipeline-public-key.pem
+rpc kms.GetPublicKey "$(jq -nc --arg k "$KEY_SIGN" '{KeyId:$k}')" | jq -j '.PublicKey' >pipeline-public-key.pem
 deploy_gate "$digest" sbom.cdx.json
 
 step "Someone pushes a different image under the same tag"

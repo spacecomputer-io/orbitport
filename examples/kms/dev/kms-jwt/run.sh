@@ -28,7 +28,7 @@ verify_jwt() {
   printf '%s.%s' "$h" "$p" >jwt-input
   printf '%s' "$s" | b64url_d >jwt-sig.raw
   jose_to_der jwt-sig.raw jwt-sig.der
-  verify_ecdsa jwt-pub.pem jwt-sig.der jwt-input
+  openssl dgst -sha256 -verify jwt-pub.pem -signature jwt-sig.der jwt-input >/dev/null 2>&1
 }
 
 step "Build the header and claims"
@@ -42,7 +42,8 @@ echo "$claims" | jq . | show
 step "Sign '<header>.<claims>' with the KMS"
 signing_input="$(printf '%s' "$header" | b64url).$(printf '%s' "$claims" | b64url)"
 printf '%s' "$signing_input" >signing-input
-res=$(sign_raw "$KEY_SIGN" ECDSA_SHA_256 signing-input)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(b64 <signing-input)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"RAW"}')")
 sig_bytes "$(echo "$res" | jq -r '.Signature')" >sig.der
 jwt="$signing_input.$(der_to_jose sig.der | b64url)"
 echo "$jwt" >token.jwt
@@ -50,7 +51,7 @@ ok "token minted, no private key on this machine"
 echo "$jwt" | fold -w 100 | show
 
 step "Any service verifies it with the public key"
-public_key_pem "$KEY_SIGN" "$version" >jwt-pub.pem
+rpc kms.GetPublicKey "$(jq -nc --arg k "$KEY_SIGN" --argjson v "$version" '{KeyId:$k, Version:$v}')" | jq -j '.PublicKey' >jwt-pub.pem
 if verify_jwt "$jwt"; then ok "verifier: signature valid"; else bad "verifier: signature invalid"; fi
 info "Paste token.jwt and jwt-pub.pem into any JWT library or debugger to check it there too."
 
