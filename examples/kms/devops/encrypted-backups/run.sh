@@ -16,7 +16,10 @@ info "shop.sql  $(du -h shop.sql | cut -f1)"
 
 step "Compress, encrypt locally with a data key, upload"
 gzip -kf shop.sql
-envelope_encrypt "$KEY_ENCRYPT" shop.sql.gz shop.sql.gz.enc
+dk=$(rpc kms.GenerateDataKey "$(jq -nc --arg k "$KEY_ENCRYPT" '{KeyId:$k, NumberOfBytes:64}')")
+envelope_encrypt "$dk" shop.sql.gz shop.sql.gz.enc
+# drop the plaintext data key, only the wrapped copy is kept
+unset dk
 mkdir -p bucket
 mv shop.sql.gz.enc shop.sql.gz.enc.json bucket/
 rm shop.sql shop.sql.gz
@@ -25,7 +28,8 @@ ls -1 bucket | show
 note "Whoever reads the bucket gets ciphertext. Decrypting needs a call to the KMS with your token."
 
 step "Restore drill"
-envelope_decrypt bucket/shop.sql.gz.enc restored.sql.gz || die "integrity check failed"
+dk=$(rpc kms.Decrypt "$(jq -c '{KeyId:.key_id, CiphertextBlob:.wrapped_key, EncryptionAlgorithm:"AES_256_GCM96"}' bucket/shop.sql.gz.enc.json)" | jq -r '.Plaintext')
+envelope_decrypt "$dk" bucket/shop.sql.gz.enc restored.sql.gz || die "integrity check failed"
 gunzip -f restored.sql.gz
 ok "restored.sql: $(grep -c '^INSERT' restored.sql) rows"
 

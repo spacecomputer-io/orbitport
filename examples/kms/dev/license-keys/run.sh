@@ -14,7 +14,7 @@ app_check_license() {
   payload="${lic%%.*}" sig="${lic##*.}"
   printf '%s' "$payload" | b64url_d >lic-payload
   printf '%s' "$sig" | b64url_d >lic-sig
-  if verify_ed25519 app-public-key.pem lic-sig lic-payload; then
+  if openssl pkeyutl -verify -pubin -inkey app-public-key.pem -rawin -in lic-payload -sigfile lic-sig >/dev/null 2>&1; then
     ok "app: license valid for $(jq -r '"\(.customer), \(.seats) seats, plan \(.plan)"' lic-payload)"
   else
     bad "app: license invalid, running in trial mode"
@@ -22,7 +22,7 @@ app_check_license() {
 }
 
 step "The vendor embeds the public key in the app at build time"
-public_key_pem "$KEY_SIGN_ED25519" >app-public-key.pem
+rpc kms.GetPublicKey "$(jq -nc --arg k "$KEY_SIGN_ED25519" '{KeyId:$k}')" | jq -j '.PublicKey' | ed25519_pem >app-public-key.pem
 show <app-public-key.pem
 
 step "The vendor issues a license and signs it with the KMS"
@@ -30,7 +30,8 @@ cat >license.json <<'JSON'
 {"customer":"Acme Corp","plan":"team","seats":10,"expires":"2027-12-31"}
 JSON
 show <license.json
-res=$(sign_raw "$KEY_SIGN_ED25519" ED25519 license.json)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN_ED25519" --arg m "$(b64 <license.json)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ED25519", MessageType:"RAW"}')")
 echo "$(b64url <license.json).$(sig_bytes "$(echo "$res" | jq -r '.Signature')" | b64url)" >license.key
 ok "license.key sent to the customer"
 show <license.key

@@ -94,7 +94,7 @@ require_tools() {
   done
 }
 
-# Ed25519 verification and prehashed verification need OpenSSL 3 (LibreSSL lacks them)
+# Ed25519 keys and prehashed verification need OpenSSL 3 (LibreSSL lacks them)
 require_openssl3() {
   openssl version | grep -q '^OpenSSL 3' ||
     die "OpenSSL 3 is required (found: $(openssl version)). On macOS: brew install openssl@3"
@@ -189,102 +189,46 @@ sha256_b64() { openssl dgst -sha256 -binary | b64; }
 fmt_epoch() { date -u -r "$1" '+%Y-%m-%d %H:%M:%S UTC' 2>/dev/null || date -u -d "@$1" '+%Y-%m-%d %H:%M:%S UTC'; }
 
 ############################################
-# Signing
+# Signatures and public keys
 ############################################
-
-# sign_raw <key> <algorithm> <file>: prints the Sign result JSON (Signature, KeyVersion)
-sign_raw() {
-  local key="$1" alg="$2" file="$3"
-  rpc kms.Sign "$(jq -nc --arg k "$key" --arg a "$alg" --arg m "$(b64 <"$file")" \
-    '{KeyId:$k, Message:$m, SigningAlgorithm:$a, MessageType:"RAW"}')"
-}
-
-# sign_digest <key> <file>: ECDSA P-256 over the file's SHA-256, the file never leaves the machine
-sign_digest() {
-  local key="$1" file="$2"
-  rpc kms.Sign "$(jq -nc --arg k "$key" --arg m "$(sha256_b64 <"$file")" \
-    '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"DIGEST"}')"
-}
 
 # sig_bytes <Signature>: strips the vault:vN: prefix and decodes, writes DER or raw bytes to stdout
 sig_bytes() { printf '%s' "${1#vault:v*:}" | b64d; }
 
-# public_key_pem <key> [version]: writes a PEM public key to stdout.
-# Ed25519 keys come back as 32 raw bytes, wrapped here in the standard SPKI header.
-public_key_pem() {
-  local key="$1" version="${2:-}" params pub
-  if [[ -n "$version" ]]; then
-    params=$(jq -nc --arg k "$key" --argjson v "$version" '{KeyId:$k, Version:$v}')
-  else
-    params=$(jq -nc --arg k "$key" '{KeyId:$k}')
-  fi
-  pub=$(rpc kms.GetPublicKey "$params" | jq -r '.PublicKey')
-  if [[ "$pub" == -----BEGIN* ]]; then
-    printf '%s\n' "$pub"
-  else
-    { printf '302a300506032b6570032100' | unhex; printf '%s' "$pub" | b64d; } |
-      openssl pkey -pubin -inform DER -outform PEM
-  fi
-}
-
-# verify_ecdsa <pub.pem> <sig.der> <file>
-verify_ecdsa() { openssl dgst -sha256 -verify "$1" -signature "$2" "$3" >/dev/null 2>&1; }
-
-# verify_ed25519 <pub.pem> <sig.bin> <file>
-verify_ed25519() { openssl pkeyutl -verify -pubin -inkey "$1" -rawin -in "$3" -sigfile "$2" >/dev/null 2>&1; }
-
-# verify_ecdsa_prehashed <pub.pem> <sig.der> <digest.bin>
-verify_ecdsa_prehashed() {
-  openssl pkeyutl -verify -pubin -inkey "$1" -in "$3" -sigfile "$2" -pkeyopt digest:sha256 >/dev/null 2>&1
+# ed25519_pem: GetPublicKey returns Ed25519 keys as 32 raw bytes (base64 on stdin),
+# this wraps them in the standard SPKI header and writes a PEM to stdout
+ed25519_pem() {
+  { printf '302a300506032b6570032100' | unhex; b64d; } | openssl pkey -pubin -inform DER -outform PEM
 }
 
 ############################################
 # Envelope encryption: AES-256-CTR + HMAC-SHA256 under a 64-byte data key
 ############################################
 
-# envelope_encrypt <key> <in> <out>: writes <out> (ciphertext) and <out>.json (wrapped key, iv, mac).
-# Only the request for a data key goes to the KMS; the file is encrypted locally.
+# envelope_encrypt <GenerateDataKey result> <in> <out>: encrypts locally with the plaintext data key,
+# writes <out> (ciphertext) and <out>.json (key id, wrapped key, iv, mac)
 envelope_encrypt() {
-  local key="$1" in="$2" out="$3" dk keyhex enc_key mac_key iv mac
-  dk=$(rpc kms.GenerateDataKey "$(jq -nc --arg k "$key" '{KeyId:$k, NumberOfBytes:64}')")
+  local dk="$1" in="$2" out="$3" keyhex enc_key mac_key iv mac
   keyhex=$(echo "$dk" | jq -r '.Plaintext' | b64d | hex)
   enc_key="${keyhex:0:64}" mac_key="${keyhex:64:64}"
   iv=$(openssl rand -hex 16)
   openssl enc -aes-256-ctr -K "$enc_key" -iv "$iv" -in "$in" -out "$out"
   mac=$({ printf '%s' "$iv" | unhex; cat "$out"; } | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -r | cut -d' ' -f1)
-  jq -n --arg k "$key" --arg w "$(echo "$dk" | jq -r '.CiphertextBlob')" --arg iv "$iv" --arg mac "$mac" \
-    '{key_id:$k, wrapped_key:$w, iv:$iv, mac:$mac, cipher:"aes-256-ctr+hmac-sha256"}' >"$out.json"
-  unset keyhex enc_key mac_key
+  echo "$dk" | jq --arg iv "$iv" --arg mac "$mac" \
+    '{key_id:.KeyId, wrapped_key:.CiphertextBlob, iv:$iv, mac:$mac, cipher:"aes-256-ctr+hmac-sha256"}' >"$out.json"
 }
 
-# envelope_decrypt <in> <out> [header]: unwraps the data key with the KMS, checks the MAC, decrypts locally.
+# envelope_decrypt <plaintext data key, base64> <in> <out> [header]: checks the MAC, decrypts locally.
 # The header defaults to <in>.json.
 envelope_decrypt() {
-  local in="$1" out="$2" hdr keyhex enc_key mac_key iv mac
-  hdr=$(cat "${3:-$in.json}")
-  keyhex=$(rpc kms.Decrypt "$(jq -nc --arg k "$(echo "$hdr" | jq -r '.key_id')" --arg c "$(echo "$hdr" | jq -r '.wrapped_key')" \
-    '{KeyId:$k, CiphertextBlob:$c, EncryptionAlgorithm:"AES_256_GCM96"}')" | jq -r '.Plaintext' | b64d | hex)
+  local in="$2" out="$3" hdr keyhex enc_key mac_key iv mac
+  hdr=$(cat "${4:-$in.json}")
+  keyhex=$(printf '%s' "$1" | b64d | hex)
   enc_key="${keyhex:0:64}" mac_key="${keyhex:64:64}"
   iv=$(echo "$hdr" | jq -r '.iv')
   mac=$({ printf '%s' "$iv" | unhex; cat "$in"; } | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$mac_key" -r | cut -d' ' -f1)
   if [[ "$mac" != "$(echo "$hdr" | jq -r '.mac')" ]]; then
-    unset keyhex enc_key mac_key
     return 1
   fi
   openssl enc -d -aes-256-ctr -K "$enc_key" -iv "$iv" -in "$in" -out "$out"
-  unset keyhex enc_key mac_key
-}
-
-############################################
-# Field encryption (small values through Encrypt / Decrypt)
-############################################
-
-encrypt_value() {
-  rpc kms.Encrypt "$(jq -nc --arg k "$1" --arg p "$(printf '%s' "$2" | b64)" \
-    '{KeyId:$k, Plaintext:$p, EncryptionAlgorithm:"AES_256_GCM96"}')" | jq -r '.CiphertextBlob'
-}
-
-decrypt_value() {
-  rpc kms.Decrypt "$(jq -nc --arg k "$1" --arg c "$2" \
-    '{KeyId:$k, CiphertextBlob:$c, EncryptionAlgorithm:"AES_256_GCM96"}')" | jq -r '.Plaintext' | b64d
 }

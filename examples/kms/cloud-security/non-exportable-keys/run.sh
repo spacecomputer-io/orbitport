@@ -2,6 +2,7 @@
 # Non-exportable keys vs. stored secrets.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
+require_openssl3
 init_demo non-exportable-keys
 
 title "Non-exportable keys vs. stored secrets"
@@ -18,7 +19,8 @@ step "Option B: a KMS key"
 rpc kms.GetKeyMetadata "$(jq -nc --arg k "$KEY_SIGN_ED25519" '{KeyId:$k}')" | jq '.KeyMetadata | {KeyId, KeySpec, KeyUsage, PrimaryVersion, PublicKey}' | show
 info "Metadata and the public key, nothing else. No API call returns the private key."
 printf 'release 2.3.2' >msg.txt
-res=$(sign_raw "$KEY_SIGN_ED25519" ED25519 msg.txt)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN_ED25519" --arg m "$(b64 <msg.txt)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ED25519", MessageType:"RAW"}')")
 ok "but it signs: $(echo "$res" | jq -r '.Signature' | cut -c1-40)..."
 note "A leaked token lets an attacker sign only until the token is revoked. The key itself never leaves."
 

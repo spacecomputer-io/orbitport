@@ -8,7 +8,7 @@ title "Signed config and feature flags"
 
 # the service: verifies before loading, keeps the last good config otherwise
 service_reload() {
-  if verify_ecdsa service-public-key.pem "$1.sig" "$1"; then
+  if openssl dgst -sha256 -verify service-public-key.pem -signature "$1.sig" "$1" >/dev/null 2>&1; then
     cp "$1" active-flags.json
     ok "service: loaded $(jq -c . "$1")"
   else
@@ -17,13 +17,14 @@ service_reload() {
 }
 
 step "The service ships with the release pipeline's public key"
-public_key_pem "$KEY_SIGN" >service-public-key.pem
+rpc kms.GetPublicKey "$(jq -nc --arg k "$KEY_SIGN" '{KeyId:$k}')" | jq -j '.PublicKey' >service-public-key.pem
 echo '{}' >active-flags.json
 ok "service-public-key.pem baked into the image"
 
 step "The pipeline publishes flags and signs them"
 echo '{"new_checkout":false,"rate_limit_rps":200,"maintenance":false}' >flags.json
-res=$(sign_raw "$KEY_SIGN" ECDSA_SHA_256 flags.json)
+res=$(rpc kms.Sign "$(jq -nc --arg k "$KEY_SIGN" --arg m "$(b64 <flags.json)" \
+  '{KeyId:$k, Message:$m, SigningAlgorithm:"ECDSA_SHA_256", MessageType:"RAW"}')")
 sig_bytes "$(echo "$res" | jq -r '.Signature')" >flags.json.sig
 ok "flags.json and flags.json.sig written to the ConfigMap"
 

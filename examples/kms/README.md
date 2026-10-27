@@ -4,7 +4,7 @@ Short, runnable use cases for the Orbitport KMS API, grouped by role. Each one i
 
 ## Before you start
 
-You need `bash`, `curl`, `jq` and `openssl`. Some demos need OpenSSL 3 (for Ed25519 and prehashed verification); macOS ships LibreSSL, so install it with `brew install openssl@3` and put it first in your `PATH`. The Web3 demo uses [Foundry](https://getfoundry.sh) `cast` when it is installed.
+You need `bash`, `curl`, `jq` and `openssl`. Some demos need OpenSSL 3 (for Ed25519 keys and prehashed verification); macOS ships LibreSSL, so install it with `brew install openssl@3` and put it first in your `PATH`. The Web3 demo uses [Foundry](https://getfoundry.sh) `cast` when it is installed.
 
 1. Sign up on the [dashboard](https://accounts.spacecomputer.io) and create an API token.
 2. Copy `examples/.env.example` to `examples/.env` and set `ORBITPORT_PAT` to your token. `.env` is gitignored.
@@ -33,7 +33,19 @@ For a one-off call, use `rpc.sh`:
 ./rpc.sh kms.GetCapabilities
 ```
 
+## Run on Linux
+
+The scripts also run on Linux. To try them in a container, run this from `examples/kms/`:
+
+```bash
+docker run --rm -it -v "$(dirname "$PWD")":/examples -w /examples/kms ubuntu:24.04 bash -c 'apt-get update -qq && apt-get install -y -qq curl jq openssl ca-certificates >/dev/null && ./demo.sh --all'
+```
+
+It mounts `examples/`, including `.env`, installs the tools and runs every demo. If the demo keys do not exist yet, run the same command with `./setup.sh` in place of `./demo.sh --all` first. On a Linux host the container writes `.work/` as root, so remove it afterwards with `sudo rm -rf .work`.
+
 ## Demos
+
+Each `run.sh` shows its JSON-RPC requests and `openssl` checks in full, so you can copy them into your own code. `lib/common.sh` only holds the config, output, the `rpc` call, encoding and the local envelope crypto.
 
 ### Dev
 
@@ -89,6 +101,14 @@ For a one-off call, use `rpc.sh`:
 | `examples-eth` | Ethereum secp256k1 | Web3 signing |
 | `examples-rotation-sign` | ECDSA P-256 | rotation drill, incident response |
 | `examples-rotation-encrypt` | AES-256-GCM | rotation drill |
+
+The API has no call to delete keys yet, so these six keys stay in your account.
+
+The key-store demos also leave entries with fake values: `examples/ci/db` and `examples/{dev,prod}/{db,payments}`. The next run creates them again. To delete them:
+
+```bash
+for n in examples/ci/db examples/dev/db examples/dev/payments examples/prod/db examples/prod/payments; do ./rpc.sh kms_keystore.Delete "{\"Name\":\"$n\"}"; done
+```
 
 Most calls use credits from your account. Creating and rotating keys cost more than other operations; the dashboard lists the price per operation. The rotation drill and incident response demos rotate a key on every run. At current prices, the first `./setup.sh` costs about 66 credits and each `./demo.sh --all` about 105.
 

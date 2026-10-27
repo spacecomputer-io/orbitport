@@ -11,7 +11,9 @@ read_record() {
     bad "$1: no data key, record cannot be decrypted"
     return
   fi
-  if envelope_decrypt "records/$1.enc" "$1.out" "keys/$1.json"; then
+  local dk
+  dk=$(rpc kms.Decrypt "$(jq -c '{KeyId:.key_id, CiphertextBlob:.wrapped_key, EncryptionAlgorithm:"AES_256_GCM96"}' "keys/$1.json")" | jq -r '.Plaintext')
+  if envelope_decrypt "$dk" "records/$1.enc" "$1.out" "keys/$1.json"; then
     ok "$1: $(cat "$1.out")"
   else
     bad "$1: integrity check failed"
@@ -23,7 +25,10 @@ mkdir -p records keys
 for user in alice bob; do
   [[ $user == alice ]] && orders="[1042,1077]" || orders="[1103]"
   echo "{\"user\":\"$user\",\"email\":\"$user@example.com\",\"orders\":$orders}" >"$user.json"
-  envelope_encrypt "$KEY_ENCRYPT" "$user.json" "records/$user.enc"
+  dk=$(rpc kms.GenerateDataKey "$(jq -nc --arg k "$KEY_ENCRYPT" '{KeyId:$k, NumberOfBytes:64}')")
+  envelope_encrypt "$dk" "$user.json" "records/$user.enc"
+  # drop the plaintext data key, only the wrapped copy is kept
+  unset dk
   mv "records/$user.enc.json" "keys/$user.json"
   rm "$user.json"
 done
