@@ -73,6 +73,20 @@ All env vars are prefixed `ORBITPORT_`. They can be supplied via `.env` at repo 
 | `ORBITPORT_RATE_LIMIT_WINDOW` | `10` | Rate-limit window in seconds (default ≈ 4 req/s per token) |
 | `ORBITPORT_BULK_MAX` | `10` | Max items per bulk TRNG request |
 | `ORBITPORT_RPC_BODY_MAX_BYTES` | `65536` | Max JSON-RPC request body size |
+| `ORBITPORT_MCP_ENABLED` | `false` | Enables the gateway-native MCP endpoint at `POST /mcp` |
+| `ORBITPORT_MCP_RESOURCE_URL` | `http://localhost:<http-port>/mcp` | Canonical MCP resource URL advertised in protected-resource metadata |
+| `ORBITPORT_MCP_AUTHORIZATION_SERVERS` | — | Comma-separated authorization server URLs advertised to MCP clients |
+| `ORBITPORT_MCP_ALLOWED_ORIGINS` | — | Comma-separated browser `Origin` values allowed to call `/mcp`; if unset, requests with an `Origin` header are rejected |
+
+When MCP is enabled, the gateway serves `POST /mcp` plus OAuth protected
+resource metadata at `/.well-known/oauth-protected-resource` and
+`/.well-known/oauth-protected-resource/mcp`. MCP tool execution reuses the same
+bearer-token auth, rate limiting, account hold/release, and authoritative
+`kms_tenant` resolution as `/api/v1/rpc`; only MCP `tools/call` requests spend
+credits. The endpoint exposes existing KMS operations as MCP tools and does not
+let callers provide `ClientId`, `client_id`, `KmsTenant`, or `kms_tenant`.
+`tools/list` advertises each tool's description, JSON `inputSchema`, and JSON
+`outputSchema` for the structured content returned by `tools/call`.
 
 ### Plugin dispatcher
 

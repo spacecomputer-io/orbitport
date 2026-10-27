@@ -186,6 +186,22 @@ namespace. Operators can copy the default policy and add Cedar `forbid`
 policies, which override permits, to block operations such as deleting
 production entries.
 
+## MCP access
+
+When `ORBITPORT_MCP_ENABLED=true` on the gateway, Orbitport also exposes KMS
+through a gateway-native MCP endpoint at `POST /mcp`. The MCP endpoint is not a
+separate service and does not talk directly to this plugin; it reuses the same
+gateway bearer-token auth, account hold/release, authoritative `kms_tenant`
+resolution, and KMS gRPC routing as `/api/v1/rpc`.
+
+MCP tools are named with snake_case equivalents of the public JSON-RPC methods,
+for example `kms_sign`, `kms_encrypt`, `kms_keystore_put`, and
+`kms_keystore_get`. `tools/list` returns each tool's description, JSON
+`inputSchema`, and JSON `outputSchema`; tool arguments use the same PascalCase
+shapes as the JSON-RPC API. The gateway rejects caller-provided identity fields
+such as `ClientId`, `client_id`, `KmsTenant`, or `kms_tenant`; tenancy always
+comes from the authenticated Orbitport credential and account hold response.
+
 ## Capabilities
 
 `GetCapabilities` (gateway-side) advertises the supported scheme matrix:
