@@ -100,6 +100,11 @@ Wraps a custom OpenBao Ethereum Secrets Engine mounted at
 Wraps the OpenBao PQC Secrets Engine mounted at `ORBITPORT_KMS_PQC_MOUNT`
 (default `pqc`).
 
+ML-KEM is temporarily disabled in the public gateway API: creating
+`ML_KEM_768` or `ML_KEM_1024` keys and calling `Encapsulate` or `Decapsulate`
+returns an error. ML-DSA remains available. The internal KMS plugin and
+OpenBao retain ML-KEM support, described below.
+
 - Key specs: `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87`.
 - Key agreement specs: `ML_KEM_768`, `ML_KEM_1024`.
 - Signing algorithm: `ML_DSA`.
@@ -194,11 +199,12 @@ production entries.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `TRANSIT` | `AES_256_GCM96`, `ECDSA_P256`, `ECDSA_P384`, `ED25519`, `RSA_4096` | ECDSA SHA-256/384, Ed25519, RSASSA PKCS1v15 / PSS SHA-256 (`RAW`, `DIGEST`) | no | yes | `AES_128`, `AES_256` | yes | none |
 | `ETHEREUM` | `ECC_SECG_P256K1` | `ETHEREUM_SECP256K1` (`RAW`, `DIGEST`, `EIP191`) | no | no | no | no | none |
-| `PQC` | `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87`, `ML_KEM_768`, `ML_KEM_1024` | `ML_DSA` (`RAW`) | `ML_KEM` | no | no | no | `experimental` |
+| `PQC` | `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87` | `ML_DSA` (`RAW`) | no | no | no | no | `experimental` |
 
 Clients should call this once at startup to discover what they can ask for. PQC
-scheme, signing, and key agreement capability entries are tagged
-`experimental` in the response.
+scheme and signing capability entries are tagged `experimental` in the
+response. ML-KEM key specs and key agreement capabilities are not advertised;
+`SupportsEncapsulate` and `SupportsDecapsulate` are both `false`.
 
 ## Dependencies
 
