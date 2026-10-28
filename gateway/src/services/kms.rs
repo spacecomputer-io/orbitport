@@ -33,8 +33,8 @@ use crate::proto::services::kms::{
     DecryptResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest, EncryptResponse,
     GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
     GetKeyMetadataRequest, GetKeyMetadataResponse, GetPublicKeyRequest, GetPublicKeyResponse,
-    KeyAgreementCapability, RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest,
-    SignResponse, SigningCapability, Tag,
+    RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest, SignResponse,
+    SigningCapability, Tag,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -216,19 +216,6 @@ enum SigningAlgorithm {
     RsassaPssSha256,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum KeyAgreementAlgorithm {
-    MlKem,
-}
-
-impl KeyAgreementAlgorithm {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::MlKem => "ML_KEM",
-        }
-    }
-}
-
 impl SigningAlgorithm {
     fn parse(value: &str) -> Result<Self, String> {
         match value {
@@ -317,6 +304,7 @@ impl DataKeySpec {
 const MAX_ALIAS_LEN: usize = 128;
 const KEY_ID_PREFIX: &str = "kms:";
 const EXPERIMENTAL_TAG: &str = "experimental";
+const ML_KEM_DISABLED: &str = "ML-KEM is temporarily disabled";
 const MAX_KEY_STORE_NAME_LEN: usize = 256;
 
 #[derive(Clone)]
@@ -705,18 +693,22 @@ impl KmsService {
     }
 
     pub fn validate_encapsulate(req: &EncapsulateRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)
+        validate_key_reference("KeyId", &req.key_id)?;
+        Err(ML_KEM_DISABLED.to_string())
     }
 
     pub fn validate_decapsulate(req: &DecapsulateRequest) -> Result<(), String> {
         validate_key_reference("KeyId", &req.key_id)?;
         validate_required("Ciphertext", &req.ciphertext)?;
-        Ok(())
+        Err(ML_KEM_DISABLED.to_string())
     }
 
     pub fn validate_create_key(req: &CreateKeyRequest) -> Result<(), String> {
         let scheme = Scheme::parse_optional(req.scheme.as_deref())?;
         let key_spec = validate_key_spec(&req.key_spec, scheme)?;
+        if matches!(key_spec, KeySpec::MlKem768 | KeySpec::MlKem1024) {
+            return Err(ML_KEM_DISABLED.to_string());
+        }
         let key_usage = validate_key_usage(&req.key_usage)?;
 
         validate_required("Alias", &req.alias)?;
@@ -1259,20 +1251,11 @@ fn ethereum_capability() -> SchemeCapability {
 fn pqc_capability() -> SchemeCapability {
     SchemeCapability {
         scheme: Scheme::Pqc.as_str().to_string(),
-        key_specs: vec![
-            KeySpec::MlDsa44,
-            KeySpec::MlDsa65,
-            KeySpec::MlDsa87,
-            KeySpec::MlKem768,
-            KeySpec::MlKem1024,
-        ]
-        .into_iter()
-        .map(|spec| spec.as_str().to_string())
-        .collect(),
-        key_usages: vec![KeyUsage::SignVerify, KeyUsage::KeyAgreement]
+        key_specs: vec![KeySpec::MlDsa44, KeySpec::MlDsa65, KeySpec::MlDsa87]
             .into_iter()
-            .map(|usage| usage.as_str().to_string())
+            .map(|spec| spec.as_str().to_string())
             .collect(),
+        key_usages: vec![KeyUsage::SignVerify.as_str().to_string()],
         encryption_algorithms: vec![],
         data_key_specs: vec![],
         signing_capabilities: vec![signing_capability(
@@ -1284,23 +1267,10 @@ fn pqc_capability() -> SchemeCapability {
         supports_decrypt: false,
         supports_generate_data_key: false,
         supports_rotate_key: false,
-        key_agreement_capabilities: vec![key_agreement_capability(
-            KeyAgreementAlgorithm::MlKem,
-            &[EXPERIMENTAL_TAG],
-        )],
-        supports_encapsulate: true,
-        supports_decapsulate: true,
+        key_agreement_capabilities: vec![],
+        supports_encapsulate: false,
+        supports_decapsulate: false,
         tags: capability_tags(&[EXPERIMENTAL_TAG]),
-    }
-}
-
-fn key_agreement_capability(
-    key_agreement_algorithm: KeyAgreementAlgorithm,
-    tags: &[&str],
-) -> KeyAgreementCapability {
-    KeyAgreementCapability {
-        key_agreement_algorithm: key_agreement_algorithm.as_str().to_string(),
-        tags: capability_tags(tags),
     }
 }
 
@@ -1334,10 +1304,7 @@ fn validate_key_spec(value: &str, scheme: Scheme) -> Result<KeySpec, String> {
     let key_spec = KeySpec::parse(value).map_err(|_| match scheme {
         Scheme::Transit => "KeySpec is not supported".to_string(),
         Scheme::Ethereum => "ETHEREUM keys must use ECC_SECG_P256K1".to_string(),
-        Scheme::Pqc => {
-            "PQC keys must use ML_DSA_44, ML_DSA_65, ML_DSA_87, ML_KEM_768, or ML_KEM_1024"
-                .to_string()
-        }
+        Scheme::Pqc => "PQC keys must use ML_DSA_44, ML_DSA_65, or ML_DSA_87".to_string(),
     })?;
 
     if scheme.supports_key_spec(key_spec) {
@@ -1346,10 +1313,7 @@ fn validate_key_spec(value: &str, scheme: Scheme) -> Result<KeySpec, String> {
         Err(match scheme {
             Scheme::Transit => "KeySpec is not supported".to_string(),
             Scheme::Ethereum => "ETHEREUM keys must use ECC_SECG_P256K1".to_string(),
-            Scheme::Pqc => {
-                "PQC keys must use ML_DSA_44, ML_DSA_65, ML_DSA_87, ML_KEM_768, or ML_KEM_1024"
-                    .to_string()
-            }
+            Scheme::Pqc => "PQC keys must use ML_DSA_44, ML_DSA_65, or ML_DSA_87".to_string(),
         })
     }
 }
@@ -1502,28 +1466,35 @@ mod test {
 
     #[test]
     fn test_validate_create_key_pqc_scheme() {
-        let req = CreateKeyRequest {
-            description: String::new(),
-            key_spec: "ML_DSA_65".to_string(),
-            key_usage: "SIGN_VERIFY".to_string(),
-            scheme: Some("PQC".to_string()),
-            alias: "pqc-main".to_string(),
-            tags: vec![],
-        };
-        KmsService::validate_create_key(&req).unwrap();
+        for key_spec in ["ML_DSA_44", "ML_DSA_65", "ML_DSA_87"] {
+            let req = CreateKeyRequest {
+                description: String::new(),
+                key_spec: key_spec.to_string(),
+                key_usage: "SIGN_VERIFY".to_string(),
+                scheme: Some("PQC".to_string()),
+                alias: "pqc-main".to_string(),
+                tags: vec![],
+            };
+            KmsService::validate_create_key(&req).unwrap();
+        }
     }
 
     #[test]
-    fn test_validate_create_key_pqc_kem_scheme() {
-        let req = CreateKeyRequest {
-            description: String::new(),
-            key_spec: "ML_KEM_768".to_string(),
-            key_usage: "KEY_AGREEMENT".to_string(),
-            scheme: Some("PQC".to_string()),
-            alias: "pqc-kem-main".to_string(),
-            tags: vec![],
-        };
-        KmsService::validate_create_key(&req).unwrap();
+    fn test_validate_create_key_rejects_mlkem() {
+        for key_spec in ["ML_KEM_768", "ML_KEM_1024"] {
+            let req = CreateKeyRequest {
+                description: String::new(),
+                key_spec: key_spec.to_string(),
+                key_usage: "KEY_AGREEMENT".to_string(),
+                scheme: Some("PQC".to_string()),
+                alias: "pqc-kem-main".to_string(),
+                tags: vec![],
+            };
+            assert_eq!(
+                KmsService::validate_create_key(&req).unwrap_err(),
+                "ML-KEM is temporarily disabled"
+            );
+        }
     }
 
     #[test]
@@ -1537,7 +1508,7 @@ mod test {
             tags: vec![],
         };
         let err = KmsService::validate_create_key(&req).unwrap_err();
-        assert!(err.contains("KEY_AGREEMENT"));
+        assert_eq!(err, "ML-KEM is temporarily disabled");
     }
 
     #[test]
@@ -1770,10 +1741,8 @@ mod test {
             .iter()
             .find(|scheme| scheme.scheme == "PQC")
             .expect("missing PQC capability");
-        assert!(pqc.key_specs.contains(&"ML_DSA_65".to_string()));
-        assert!(pqc.key_specs.contains(&"ML_KEM_768".to_string()));
-        assert!(pqc.key_usages.contains(&"SIGN_VERIFY".to_string()));
-        assert!(pqc.key_usages.contains(&"KEY_AGREEMENT".to_string()));
+        assert_eq!(pqc.key_specs, vec!["ML_DSA_44", "ML_DSA_65", "ML_DSA_87"]);
+        assert_eq!(pqc.key_usages, vec!["SIGN_VERIFY"]);
         assert_eq!(pqc.tags, vec![EXPERIMENTAL_TAG.to_string()]);
         let pqc_signing = pqc
             .signing_capabilities
@@ -1782,17 +1751,12 @@ mod test {
             .expect("missing PQC signing capability");
         assert_eq!(pqc_signing.message_types, vec!["RAW".to_string()]);
         assert_eq!(pqc_signing.tags, vec![EXPERIMENTAL_TAG.to_string()]);
-        let pqc_key_agreement = pqc
-            .key_agreement_capabilities
-            .iter()
-            .find(|capability| capability.key_agreement_algorithm == "ML_KEM")
-            .expect("missing PQC key agreement capability");
-        assert_eq!(pqc_key_agreement.tags, vec![EXPERIMENTAL_TAG.to_string()]);
+        assert!(pqc.key_agreement_capabilities.is_empty());
         assert!(!pqc.supports_encrypt);
         assert!(!pqc.supports_generate_data_key);
         assert!(!pqc.supports_rotate_key);
-        assert!(pqc.supports_encapsulate);
-        assert!(pqc.supports_decapsulate);
+        assert!(!pqc.supports_encapsulate);
+        assert!(!pqc.supports_decapsulate);
     }
 
     #[test]

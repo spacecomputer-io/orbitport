@@ -556,13 +556,9 @@ mod test {
             .expect("missing ML_DSA signing capability");
         assert_eq!(signing["Tags"], serde_json::json!(["experimental"]));
 
-        let key_agreement = pqc["KeyAgreementCapabilities"]
-            .as_array()
-            .expect("KeyAgreementCapabilities should be an array")
-            .iter()
-            .find(|capability| capability["KeyAgreementAlgorithm"] == "ML_KEM")
-            .expect("missing ML_KEM key agreement capability");
-        assert_eq!(key_agreement["Tags"], serde_json::json!(["experimental"]));
+        assert_eq!(pqc["KeyAgreementCapabilities"], serde_json::json!([]));
+        assert_eq!(pqc["SupportsEncapsulate"], false);
+        assert_eq!(pqc["SupportsDecapsulate"], false);
     }
 
     #[test]
