@@ -87,7 +87,15 @@ func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto
 	if err != nil {
 		return nil, err
 	}
-	resp, err := encryptor.Encrypt(ctx, metadata, req)
+	//this takes this existing context, calls the function to "append" the kms specfic context
+	//and pass that further to the provider
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation:     "encrypt",
+		Algorithm:     metadata.KeySpec,
+		CommitteeSize: "not_applicable",
+	})
+
+	resp, err := encryptor.Encrypt(metricCtx, metadata, req)
 	if err != nil {
 		logger.Warnf("Encrypt failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
@@ -131,7 +139,13 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 	if err != nil {
 		return nil, err
 	}
-	resp, err := decryptor.Decrypt(ctx, blob, req)
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation:     "decrypt",
+		Algorithm:     metadata.KeySpec,
+		CommitteeSize: "not_applicable",
+	})
+
+	resp, err := decryptor.Decrypt(metricCtx, blob, req)
 	if err != nil {
 		logger.Warnf("Decrypt failed for key_id=%s scheme=%s", blob.KeyID, blob.Scheme)
 		return nil, err
@@ -160,7 +174,13 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 		logger.Warnf("Sign rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
-	resp, err := signer.Sign(ctx, metadata, req)
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation:     "sign",
+		Algorithm:     metadata.KeySpec,
+		CommitteeSize: "not_applicable",
+	})
+
+	resp, err := signer.Sign(metricCtx, metadata, req)
 	if err != nil {
 		logger.Warnf("Sign failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
@@ -264,7 +284,13 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	}
 
 	req.Alias = alias
-	record, err := provider.CreateKey(ctx, req, keyID, p.now().UTC())
+
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation:     "create_key",
+		Algorithm:     req.KeySpec,
+		CommitteeSize: "not_applicable",
+	})
+	record, err := provider.CreateKey(metricCtx, req, keyID, p.now().UTC())
 	if err != nil {
 		logger.Warnf("CreateKey failed for key_id=%s scheme=%s", keyID, scheme)
 		return nil, err
@@ -344,7 +370,13 @@ func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKey
 		logger.Warnf("GenerateDataKey rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
-	resp, err := generator.GenerateDataKey(ctx, metadata, req)
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation:     "generate_data_key",
+		Algorithm:     metadata.KeySpec,
+		CommitteeSize: "not_applicable",
+	})
+
+	resp, err := generator.GenerateDataKey(metricCtx, metadata, req)
 	if err != nil {
 		logger.Warnf("GenerateDataKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
@@ -369,7 +401,13 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 		logger.Warnf("RotateKey rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
-	updated, err := rotator.RotateKey(ctx, metadata)
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation:     "rotate_key",
+		Algorithm:     metadata.KeySpec,
+		CommitteeSize: "not_applicable",
+	})
+
+	updated, err := rotator.RotateKey(metricCtx, metadata)
 	if err != nil {
 		logger.Warnf("RotateKey failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
