@@ -90,9 +90,8 @@ func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto
 	//this takes this existing context, calls the function to "append" the kms specfic context
 	//and pass that further to the provider
 	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
-		Operation:     "encrypt",
-		Algorithm:     metadata.KeySpec,
-		CommitteeSize: "not_applicable",
+		Operation: "encrypt",
+		Algorithm: "none",
 	})
 
 	resp, err := encryptor.Encrypt(metricCtx, metadata, req)
@@ -140,9 +139,8 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 		return nil, err
 	}
 	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
-		Operation:     "decrypt",
-		Algorithm:     metadata.KeySpec,
-		CommitteeSize: "not_applicable",
+		Operation: "decrypt",
+		Algorithm: "none",
 	})
 
 	resp, err := decryptor.Decrypt(metricCtx, blob, req)
@@ -175,9 +173,8 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 		return nil, err
 	}
 	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
-		Operation:     "sign",
-		Algorithm:     metadata.KeySpec,
-		CommitteeSize: "not_applicable",
+		Operation: "sign",
+		Algorithm: req.GetSigningAlgorithm(),
 	})
 
 	resp, err := signer.Sign(metricCtx, metadata, req)
@@ -215,6 +212,7 @@ func (p *Plugin) Encapsulate(ctx context.Context, req *proto.EncapsulateRequest)
 }
 
 func (p *Plugin) Decapsulate(ctx context.Context, req *proto.DecapsulateRequest) (*proto.DecapsulateResponse, error) {
+
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
@@ -229,13 +227,18 @@ func (p *Plugin) Decapsulate(ctx context.Context, req *proto.DecapsulateRequest)
 		logger.Warnf("Decapsulate rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
-	resp, err := keyAgreement.Decapsulate(ctx, metadata, req)
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "decapsulate",
+		Algorithm: "none",
+	})
+	resp, err := keyAgreement.Decapsulate(metricCtx, metadata, req)
 	if err != nil {
 		logger.Warnf("Decapsulate failed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
 	logger.Debugf("Decapsulate completed for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 	return resp, nil
+
 }
 
 func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*proto.CreateKeyResponse, error) {
@@ -286,9 +289,8 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	req.Alias = alias
 
 	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
-		Operation:     "create_key",
-		Algorithm:     req.KeySpec,
-		CommitteeSize: "not_applicable",
+		Operation: "create_key",
+		Algorithm: req.KeySpec,
 	})
 	record, err := provider.CreateKey(metricCtx, req, keyID, p.now().UTC())
 	if err != nil {
@@ -325,6 +327,7 @@ func (p *Plugin) GetKeyMetadata(ctx context.Context, req *proto.GetKeyMetadataRe
 }
 
 func (p *Plugin) GetPublicKey(ctx context.Context, req *proto.GetPublicKeyRequest) (*proto.GetPublicKeyResponse, error) {
+
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
@@ -343,7 +346,11 @@ func (p *Plugin) GetPublicKey(ctx context.Context, req *proto.GetPublicKeyReques
 		logger.Warnf("GetPublicKey rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
 		return nil, err
 	}
-	publicKey, err := publicKeyProvider.GetPublicKey(ctx, metadata, version)
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "get_public_key",
+		Algorithm: "none",
+	})
+	publicKey, err := publicKeyProvider.GetPublicKey(metricCtx, metadata, version)
 	if err != nil {
 		logger.Warnf("GetPublicKey failed for key_id=%s scheme=%s version=%d", req.KeyId, metadata.Scheme, version)
 		return nil, err
@@ -371,9 +378,8 @@ func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKey
 		return nil, err
 	}
 	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
-		Operation:     "generate_data_key",
-		Algorithm:     metadata.KeySpec,
-		CommitteeSize: "not_applicable",
+		Operation: "generate_data_key",
+		Algorithm: "none",
 	})
 
 	resp, err := generator.GenerateDataKey(metricCtx, metadata, req)
@@ -402,9 +408,8 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 		return nil, err
 	}
 	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
-		Operation:     "rotate_key",
-		Algorithm:     metadata.KeySpec,
-		CommitteeSize: "not_applicable",
+		Operation: "rotate_key",
+		Algorithm: "none",
 	})
 
 	updated, err := rotator.RotateKey(metricCtx, metadata)

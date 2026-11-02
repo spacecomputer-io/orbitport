@@ -56,7 +56,7 @@ func UnaryMetricsInterceptor(plugin string) grpc.UnaryServerInterceptor {
 
 		resp, err := handler(ctx, req)
 
-		contextValue := metricContext(req, resp)
+		contextValue := metricContext(req)
 
 		code := strings.ToLower(status.Code(err).String())
 		pluginRPCRequestsTotal.WithLabelValues(plugin, method, code, contextValue).Inc()
@@ -69,75 +69,43 @@ func UnaryMetricsInterceptor(plugin string) grpc.UnaryServerInterceptor {
 // The UnaryMetricsInterceptor calls this function to extract a metric label value
 // (we call it context in our monitoring system)
 
-func metricContext(req any, response any) string {
-
-	//the decrypt case I handle as a response type because the user usually provides a cyphertext "blob" as a
-	//decryptRequest but this contains the values encoded as b64, so orbitport then returns the decrypted values
-
-	switch typedResponse := response.(type) {
-	case *proto.DecryptResponse:
-		if typedResponse == nil {
-			return "unknown"
-		}
-
-		algorithm := typedResponse.EncryptionAlgorithm
-		if algorithm == "" {
-			return "unknown"
-		}
-		return algorithm
-	case *proto.EncryptResponse:
-		if typedResponse == nil {
-			break
-		}
-
-		algorithm := typedResponse.EncryptionAlgorithm
-		if algorithm == "" {
-			return "unknown"
-		}
-		return algorithm
-	case *proto.RotateKeyResponse:
-		metadata := typedResponse.GetKeyMetadata()
-		if metadata != nil {
-			algorithm := metadata.KeySpec
-			if algorithm == "" {
-				return "unknown"
-			}
-			return algorithm
-		}
-		return "unknown"
-	}
-
+func metricContext(req any) string {
 	switch typedReq := req.(type) {
 	case *proto.CreateKeyRequest:
-		algorithm := typedReq.KeySpec
-		if algorithm == "" {
-			return "unknown"
+		algorithm := typedReq.GetKeySpec()
+
+		switch algorithm {
+		case "AES_256_GCM96",
+			"ECC_SECG_P256K1",
+			"ECDSA_P256",
+			"ECDSA_P384",
+			"ED25519",
+			"RSA_4096",
+			"ML_DSA_44",
+			"ML_DSA_65",
+			"ML_DSA_87",
+			"ML_KEM_768",
+			"ML_KEM_1024":
+			return algorithm
+		default:
+			return "other"
 		}
-		return algorithm
-	case *proto.EncryptRequest:
-		algorithm := typedReq.GetEncryptionAlgorithm()
-		if algorithm == "" {
-			return "unknown"
-		}
-		return algorithm
+
 	case *proto.SignRequest:
 		algorithm := typedReq.GetSigningAlgorithm()
-		if algorithm == "" {
-			return "unknown"
-		}
-		return algorithm
 
-	case *proto.DecryptRequest:
-		return "unknown"
-
-	case *proto.GenerateDataKeyRequest:
-		algorithm := typedReq.GetDataKeySpec()
-		if algorithm == "" {
-			//in the proto file the user can give the algorithim as optional, or instead the number of bytes
-			//so if the alogrithim is not given we should give "by_bytes" instead
-			return "by_bytes"
+		switch algorithm {
+		case "ECDSA_SHA_256",
+			"ECDSA_SHA_384",
+			"ED25519",
+			"RSASSA_PKCS1_V1_5_SHA_256",
+			"RSASSA_PSS_SHA_256",
+			"ETHEREUM_SECP256K1",
+			"ML_DSA":
+			return algorithm
+		default:
+			return "other"
 		}
-		return algorithm
 
 	default:
 		return "none"

@@ -353,18 +353,28 @@ func (c *openBaoClient) decapsulatePQC(ctx context.Context, keyName, ciphertext 
 }
 
 func (c *openBaoClient) putMetadata(ctx context.Context, clientID, keyID string, metadata *keyMetadataRecord) error {
-	return c.Post(ctx, c.metadataPath(clientID, keyID), map[string]any{
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "metadata_write",
+		Algorithm: "none",
+	})
+
+	return c.Post(metricCtx, c.metadataPath(clientID, keyID), map[string]any{
 		"data": metadata,
 	}, nil)
 }
 
 func (c *openBaoClient) getMetadata(ctx context.Context, clientID, keyID string) (*keyMetadataRecord, error) {
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "metadata_read",
+		Algorithm: "none",
+	})
+
 	var resp struct {
 		Data struct {
 			Data keyMetadataRecord `json:"data"`
 		} `json:"data"`
 	}
-	if err := c.Get(ctx, c.metadataPath(clientID, keyID), &resp); err != nil {
+	if err := c.Get(metricCtx, c.metadataPath(clientID, keyID), &resp); err != nil {
 		return nil, err
 	}
 	record := &resp.Data.Data

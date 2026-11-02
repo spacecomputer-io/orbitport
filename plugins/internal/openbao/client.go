@@ -89,18 +89,16 @@ func (c *Client) do(req *http.Request, into any) error {
 	//define default values
 	op := ""
 	alg := ""
-	committee_size := ""
 	labels, ok := raw.(MetricLabels)
 	if ok {
 		op = labels.Operation
 		alg = labels.Algorithm
-		committee_size = labels.CommitteeSize
 	}
 	defer func() {
 		end := time.Now()
 		total := end.Sub(start)
 
-		openbaoDurationSeconds.WithLabelValues(op, alg, committee_size, statusLabel).Observe(total.Seconds())
+		openbaoDurationSeconds.WithLabelValues(op, alg, statusLabel).Observe(total.Seconds())
 	}()
 	if c.logger != nil {
 		c.logger.Debugf("OpenBao request %s %s", req.Method, req.URL.Path)

@@ -9,9 +9,8 @@ import (
 //which then gets passed to do
 
 type MetricLabels struct {
-	Operation     string
-	Algorithm     string
-	CommitteeSize string
+	Operation string
+	Algorithm string
 }
 
 type metricLabelsKey struct{}
@@ -29,7 +28,7 @@ var (
 			Buckets:   prometheus.DefBuckets,
 			Help:      "OpenBao roundtrip time in seconds",
 		},
-		[]string{"operation", "algorithm", "committee_size", "status"},
+		[]string{"operation", "algorithm", "status"},
 	)
 )
 
