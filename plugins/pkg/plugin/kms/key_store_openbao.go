@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +18,11 @@ type keyStoreRecord struct {
 }
 
 func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name string, secret json.RawMessage, updatedAt time.Time) (uint32, error) {
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "keystore_put",
+		Algorithm: "none",
+	})
+
 	var resp struct {
 		Data struct {
 			Version uint32 `json:"version"`
@@ -32,13 +38,17 @@ func (c *openBaoClient) putKeyStoreSecret(ctx context.Context, clientID, name st
 	if err != nil {
 		return 0, err
 	}
-	if err := c.Post(ctx, target, map[string]any{"data": record}, &resp); err != nil {
+	if err := c.Post(metricCtx, target, map[string]any{"data": record}, &resp); err != nil {
 		return 0, err
 	}
 	return resp.Data.Version, nil
 }
 
 func (c *openBaoClient) getKeyStoreSecret(ctx context.Context, clientID, name string) (*keyStoreRecord, error) {
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "keystore_get",
+		Algorithm: "none",
+	})
 	var resp struct {
 		Data struct {
 			Data keyStoreRecord `json:"data"`
@@ -48,21 +58,29 @@ func (c *openBaoClient) getKeyStoreSecret(ctx context.Context, clientID, name st
 	if err != nil {
 		return nil, err
 	}
-	if err := c.Get(ctx, target, &resp); err != nil {
+	if err := c.Get(metricCtx, target, &resp); err != nil {
 		return nil, err
 	}
 	return &resp.Data.Data, nil
 }
 
 func (c *openBaoClient) ensureKeyStoreSecretExists(ctx context.Context, clientID, name string) error {
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "keystore_exists",
+		Algorithm: "none",
+	})
 	target, err := c.keyStoreMetadataPath(clientID, name)
 	if err != nil {
 		return err
 	}
-	return c.Get(ctx, target, nil)
+	return c.Get(metricCtx, target, nil)
 }
 
 func (c *openBaoClient) listKeyStoreSecrets(ctx context.Context, clientID, prefix string) ([]string, error) {
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "keystore_list",
+		Algorithm: "none",
+	})
 	var resp struct {
 		Data struct {
 			Keys []string `json:"keys"`
@@ -72,7 +90,7 @@ func (c *openBaoClient) listKeyStoreSecrets(ctx context.Context, clientID, prefi
 	if err != nil {
 		return nil, err
 	}
-	if err := c.List(ctx, target, &resp); err != nil {
+	if err := c.List(metricCtx, target, &resp); err != nil {
 		return nil, err
 	}
 
@@ -107,11 +125,15 @@ func (c *openBaoClient) listKeyStoreSecrets(ctx context.Context, clientID, prefi
 }
 
 func (c *openBaoClient) deleteKeyStoreSecret(ctx context.Context, clientID, name string) error {
+	metricCtx := openbao.WithMetricLabels(ctx, openbao.MetricLabels{
+		Operation: "keystore_delete",
+		Algorithm: "none",
+	})
 	target, err := c.keyStoreMetadataPath(clientID, name)
 	if err != nil {
 		return err
 	}
-	return c.Delete(ctx, target, nil)
+	return c.Delete(metricCtx, target, nil)
 }
 
 func (c *openBaoClient) keyStoreDataPath(clientID, name string) (string, error) {
