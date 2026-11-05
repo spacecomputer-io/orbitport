@@ -16,10 +16,12 @@ cargo build --locked --release -p kms-mcp
 ./target/release/kms-mcp --help
 ```
 
-The release workflow publishes `kms-mcp-<target>.tar.gz` archives for macOS
-arm64/x64, Linux arm64/x64, and Windows x64 under `mcp-v*` tags. Archives
-contain the executable (`kms-mcp.exe` on Windows) and a POSIX file-based PAT
-launcher, `kms-mcp-from-file.sh`.
+The release workflow publishes archives for macOS arm64/x64, Linux arm64/x64
+and Windows x64 under `mcp-v*` tags. The release tag must match the version in
+`mcp/Cargo.toml`. macOS and Linux archives (`kms-mcp-<target>.tar.gz`) contain
+the executable and a POSIX file-based PAT launcher, `kms-mcp-from-file.sh`.
+The Windows archive (`kms-mcp-x86_64-pc-windows-msvc.zip`) contains only
+`kms-mcp.exe`.
 Download your platform archive and `SHA256SUMS` from the same GitHub Release.
 On Linux, verify with `sha256sum --check --ignore-missing SHA256SUMS`; on macOS,
 compare `shasum -a 256 <archive>` with its entry. Verify provenance with:
@@ -29,7 +31,10 @@ gh attestation verify <archive> --repo spacecomputer-io/orbitport
 ```
 
 Extract the executable to a user-owned location and configure its absolute
-path in your harness. Releases are built by CI; the executable is not an
+path in your harness. The macOS binaries are not signed or notarized. If the
+archive was downloaded with a browser, macOS may block the executable; after
+verifying it, clear the flag with `xattr -d com.apple.quarantine kms-mcp`.
+Downloads with `gh release download` or `curl` are not flagged. Releases are built by CI; the executable is not an
 OpenBao server or a replacement for the gateway.
 
 ## Configure

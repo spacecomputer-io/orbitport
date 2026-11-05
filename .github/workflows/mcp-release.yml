@@ -8,7 +8,25 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Check tag matches crate version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          crate=$(cargo metadata --no-deps --format-version 1 --manifest-path mcp/Cargo.toml \
+            | jq -r '.packages[] | select(.name == "kms-mcp") | .version')
+          if [[ "${RELEASE_TAG#mcp-v}" != "$crate" ]]; then
+            echo "Tag $RELEASE_TAG does not match kms-mcp version $crate in mcp/Cargo.toml" >&2
+            exit 1
+          fi
+
   build:
+    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -31,9 +49,11 @@ jobs:
     env:
       RUST_TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Install protoc
-        uses: arduino/setup-protoc@v3
+        uses: arduino/setup-protoc@c65c819552d16ad3c9b72d9dfd5ba5237b9c906b # v3.0.0
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install Rust target
@@ -50,22 +70,30 @@ jobs:
           "target/$RUST_TARGET/release/$exe" --version
           cargo test --locked -p orbitport-kms-api -p kms-mcp-core -p kms-mcp --target "$RUST_TARGET"
       - name: Package executable
+        id: package
         shell: bash
         run: |
-          exe="kms-mcp"
-          if [[ "$RUNNER_OS" == "Windows" ]]; then exe="$exe.exe"; fi
           mkdir -p package
-          cp "target/$RUST_TARGET/release/$exe" package/
-          cp mcp/scripts/kms-mcp-from-file.sh package/
-          tar -czf "kms-mcp-$RUST_TARGET.tar.gz" -C package "$exe" kms-mcp-from-file.sh
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            # zip with the executable only, the launcher needs a POSIX shell
+            archive="kms-mcp-$RUST_TARGET.zip"
+            cp "target/$RUST_TARGET/release/kms-mcp.exe" package/
+            pwsh -NoProfile -Command "Compress-Archive -Path package/kms-mcp.exe -DestinationPath $archive"
+          else
+            archive="kms-mcp-$RUST_TARGET.tar.gz"
+            cp "target/$RUST_TARGET/release/kms-mcp" package/
+            cp mcp/scripts/kms-mcp-from-file.sh package/
+            tar -czf "$archive" -C package kms-mcp kms-mcp-from-file.sh
+          fi
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
       - name: Attest archive
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
-          subject-path: kms-mcp-*.tar.gz
-      - uses: actions/upload-artifact@v4
+          subject-path: ${{ steps.package.outputs.archive }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: kms-mcp-${{ matrix.target }}
-          path: kms-mcp-*.tar.gz
+          path: ${{ steps.package.outputs.archive }}
 
   publish:
     needs: build
@@ -75,16 +103,18 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: kms-mcp-*
           merge-multiple: true
           path: dist
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum kms-mcp-*.tar.gz > SHA256SUMS
-      - uses: actions/attest-build-provenance@v2
+        run: sha256sum kms-mcp-*.tar.gz kms-mcp-*.zip > SHA256SUMS
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: dist/SHA256SUMS
       - name: Publish release

@@ -21,8 +21,9 @@ install -m 755 target/release/kms-mcp "$HOME/.local/bin/kms-mcp"
 install -m 700 mcp/scripts/kms-mcp-from-file.sh "$HOME/.config/spacecomputer-kms/run-mcp.sh"
 ```
 
-Release archives contain `kms-mcp` (`kms-mcp.exe` on Windows) and
-`kms-mcp-from-file.sh`. As an alternative to building, after verifying and
+macOS and Linux release archives contain `kms-mcp` and
+`kms-mcp-from-file.sh`; the Windows zip contains only `kms-mcp.exe`.
+As an alternative to building, after verifying and
 extracting a macOS/Linux archive, run these commands in its extracted directory:
 
 ```sh
