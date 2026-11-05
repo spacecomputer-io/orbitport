@@ -573,6 +573,36 @@ mod test {
     use super::*;
 
     #[tokio::test]
+    async fn invalid_credential_rejection_maps_to_401_invalid_credential() {
+        let route = warp::any()
+            .and_then(|| async {
+                Err::<warp::reply::Json, Rejection>(warp::reject::custom(
+                    GatewayError::InvalidCredential,
+                ))
+            })
+            .recover(handle_rejection);
+        let reply = warp::test::request().reply(&route).await;
+        assert_eq!(reply.status(), StatusCode::UNAUTHORIZED);
+        let body: serde_json::Value = serde_json::from_slice(reply.body()).unwrap();
+        assert_eq!(body["error"], "invalid_credential");
+    }
+
+    #[tokio::test]
+    async fn inactive_account_rejection_maps_to_403_account_inactive() {
+        let route = warp::any()
+            .and_then(|| async {
+                Err::<warp::reply::Json, Rejection>(warp::reject::custom(
+                    GatewayError::AccountInactive,
+                ))
+            })
+            .recover(handle_rejection);
+        let reply = warp::test::request().reply(&route).await;
+        assert_eq!(reply.status(), StatusCode::FORBIDDEN);
+        let body: serde_json::Value = serde_json::from_slice(reply.body()).unwrap();
+        assert_eq!(body, serde_json::json!({"error":"account_inactive"}));
+    }
+
+    #[tokio::test]
     async fn pat_expired_rejection_maps_to_401_token_expired() {
         let route = warp::any()
             .and_then(|| async {
