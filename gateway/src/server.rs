@@ -332,6 +332,7 @@ async fn handle_rpc(
     // no release.
     if let Err(e) = rpc_call.validate() {
         tracing::error!("RPC validation error [id={}]: {}", req_id, e);
+        // Clients display this validation reason; it must not echo request values.
         let res: JsonRpcResponse<()> =
             JsonRpcResponse::error(req_id, -32602, format!("Invalid request: {e}"));
         return Ok(warp::reply::json(&res));
@@ -358,7 +359,7 @@ async fn handle_rpc(
             tracing::warn!("RPC execution error [id={}]: {}", req_id, e);
             account_release(account_client, &ledger_id).await;
 
-            let res: JsonRpcResponse<()> = JsonRpcResponse::error(req_id, -32001, e.to_string());
+            let res: JsonRpcResponse<()> = JsonRpcResponse::execution_error(req_id, &e);
 
             Ok(warp::reply::json(&res))
         }

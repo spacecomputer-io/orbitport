@@ -34,6 +34,16 @@ pub enum McpError {
     InvalidRpcResult,
     #[error("Invalid KMS parameters")]
     InvalidParameters,
+    #[error("{0}")]
+    InvalidParametersDetail(String),
+    #[error("The requested KMS resource was not found.")]
+    ResourceNotFound,
+    #[error("You are not allowed to perform this KMS operation.")]
+    KmsPermissionDenied,
+    #[error("The resource is not in a state that allows this KMS operation.")]
+    FailedPrecondition,
+    #[error("KMS rejected the operation arguments.")]
+    InvalidOperationArguments,
     #[error("KMS operation failed; check the resource, permissions and parameters")]
     OperationFailed,
     #[error("Your PAT has expired. Create a new PAT in the Orbitport dashboard.")]

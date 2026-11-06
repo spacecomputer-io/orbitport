@@ -26,13 +26,17 @@ Verified locally on macOS arm64 with Rust 1.96.0 and Go 1.26.0:
 - Workspace formatting and diff whitespace checks passed.
 - After syncing with `4486150` on 2026-11-05, all 107 Rust tests above,
   Go auth/account tests, workspace Clippy and formatting checks passed again.
+- After the review fixes, 111 Rust tests passed, excluding live-stack E2E
+  tests. Coverage includes gateway error reasons and local tool validation
+  results that identify fields without contacting the gateway.
 - Release executable built locally; `--version` reports `0.1.0`.
 - Gateway Docker build stage passed with Rust 1.92 and the root workspace.
 - Workflow YAML parses locally. Actionlint 1.7.12 passed before the executable
   rename; Actionlint and ShellCheck are not installed for the latest changes.
   The release workflow has not run on GitHub.
-- Root lockfile retains all existing package versions; only the three new
-  workspace packages and six Schemars dependencies were added.
+- Root lockfile retains existing package versions. The MCP adds the three
+  workspace packages, schema dependencies, and `serde_path_to_error` for
+  field-level diagnostics.
 - Executable/core names are now `kms-mcp` and `kms-mcp-core`. The file-backed
   PAT launcher is included in release archives; existing dependency versions
   are unchanged by the rename. Client configuration examples parse locally;

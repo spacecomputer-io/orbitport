@@ -1,5 +1,8 @@
-use kms_mcp_core::{Dispatch, ToolPolicy, dispatch, tools::registry};
-use serde_json::{Value, json, value::RawValue};
+use kms_mcp_core::{Dispatch, PrepareError, ToolPolicy, dispatch, tools::registry};
+use serde_json::{
+    Value, json,
+    value::{RawValue, to_raw_value},
+};
 
 fn all_policy() -> ToolPolicy {
     ToolPolicy::new(
@@ -112,17 +115,19 @@ fn registry_maps_every_method_and_applies_visibility_to_listing_and_dispatch() {
         assert_eq!(spec.allow, allow);
         let visible = listed.as_array().unwrap().iter().any(|t| t["name"] == name);
         assert_eq!(visible, allow.is_none());
+        let arguments = to_raw_value(&args).unwrap();
         if allow.is_some() {
-            assert!(
-                default
-                    .prepare(name, &args.to_string())
-                    .unwrap_err()
-                    .contains("disabled")
+            assert_eq!(
+                default.prepare(name, arguments.clone()).unwrap_err(),
+                PrepareError::UnknownOrDisabledTool,
             );
         }
-        let prepared = all_policy().prepare(name, &args.to_string());
+        let prepared = all_policy().prepare(name, arguments);
         if name == "kms_encapsulate" || name == "kms_decapsulate" {
-            assert!(prepared.unwrap_err().contains("temporarily disabled"));
+            assert!(matches!(
+                prepared.unwrap_err(),
+                PrepareError::InvalidArguments(message) if message.contains("temporarily disabled")
+            ));
         } else {
             assert_eq!(prepared.unwrap().method, method);
         }
@@ -185,30 +190,42 @@ fn tenant_fields_invalid_types_and_traversal_never_prepare() {
         let args = json!({"KeyId":"a",field:"other-tenant"});
         assert!(
             ToolPolicy::default()
-                .prepare("kms_get_key_metadata", &args.to_string())
+                .prepare("kms_get_key_metadata", to_raw_value(&args).unwrap())
                 .is_err()
         );
     }
+    let escaped_identity =
+        serde_json::from_str(r#"{"KeyId":"a","\u0043lientId":"other-tenant"}"#).unwrap();
+    assert!(matches!(
+        ToolPolicy::default().prepare("kms_get_key_metadata", escaped_identity),
+        Err(PrepareError::InvalidArguments(message)) if message.starts_with("ClientId ")
+    ));
     for secret in ["[]", "null", "42", "\"secret\""] {
         assert!(
             all_policy()
                 .prepare(
                     "kms_keystore_put",
-                    &format!(r#"{{"Name":"a","Secret":{secret}}}"#)
+                    RawValue::from_string(format!(r#"{{"Name":"a","Secret":{secret}}}"#)).unwrap(),
                 )
                 .is_err()
         );
     }
     assert!(
         all_policy()
-            .prepare("kms_keystore_get", r#"{"Name":"../other-tenant"}"#)
+            .prepare(
+                "kms_keystore_get",
+                serde_json::from_str(r#"{"Name":"../other-tenant"}"#).unwrap(),
+            )
             .is_err()
     );
     assert!(
         ToolPolicy::default()
             .prepare(
                 "kms_sign",
-                r#"{"KeyId":"a","Message":"secret","SigningAlgorithm":"INVALID"}"#
+                serde_json::from_str(
+                    r#"{"KeyId":"a","Message":"secret","SigningAlgorithm":"INVALID"}"#,
+                )
+                .unwrap(),
             )
             .is_err()
     );
@@ -217,7 +234,10 @@ fn tenant_fields_invalid_types_and_traversal_never_prepare() {
 #[test]
 fn raw_precision_survives_argument_and_result_envelopes_without_debug_leaks() {
     let args = r#"{"Name":"github/prod","Secret":{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}}"#;
-    let prepared = all_policy().prepare("kms_keystore_put", args).unwrap();
+    let arguments: Box<RawValue> = serde_json::from_str(args).unwrap();
+    let original_ptr = arguments.get().as_ptr();
+    let prepared = all_policy().prepare("kms_keystore_put", arguments).unwrap();
+    assert_eq!(prepared.arguments.get().as_ptr(), original_ptr);
     assert_eq!(prepared.arguments.get(), args);
     assert!(!format!("{prepared:?}").contains("123456789012345678901234567890"));
     let Dispatch::Call(call) = dispatch(
@@ -280,11 +300,112 @@ fn protocol_versions_notifications_and_errors_are_handled_locally() {
             r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":[]}"#,
             -32602,
         ),
+        (
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"arguments":{}}}"#,
+            -32602,
+        ),
+        (
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"kms_sign","arguments":[]}}"#,
+            -32602,
+        ),
+        (
+            r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"kms_get_capabilities","arguments":null}}"#,
+            -32602,
+        ),
     ] {
         let Dispatch::Reply(reply) = dispatch(request, &ToolPolicy::default()) else {
             panic!("expected error");
         };
         let result: Value = serde_json::from_str(&reply).unwrap();
         assert_eq!(result["error"]["code"], code);
+    }
+}
+
+#[test]
+fn unknown_and_hidden_tools_return_the_same_protocol_error() {
+    let reply_for = |name| {
+        let request = json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": name, "arguments": {}}
+        });
+        let Dispatch::Reply(reply) = dispatch(&request.to_string(), &ToolPolicy::default()) else {
+            panic!("expected unavailable tool error");
+        };
+        let response: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(response["error"]["code"], -32602);
+        assert!(response.get("result").is_none());
+        response
+    };
+    assert_eq!(reply_for("not_a_tool"), reply_for("kms_keystore_get"));
+}
+
+#[test]
+fn tool_input_failures_return_safe_field_paths_in_tool_results() {
+    let cases = [
+        ("kms_sign", None, "KeyId is required."),
+        (
+            "kms_sign",
+            Some(json!({"KeyId":123,"Message":"never-display","SigningAlgorithm":"ED25519"})),
+            "KeyId must be a string.",
+        ),
+        (
+            "kms_create_key",
+            Some(
+                json!({"Alias":"a","Description":"","KeySpec":"AES_256_GCM96","KeyUsage":"ENCRYPT_DECRYPT",
+                "Tags":[{"TagValue":"never-display"}]}),
+            ),
+            "Tags[0].TagKey is required.",
+        ),
+        (
+            "kms_create_key",
+            Some(
+                json!({"Alias":"a","Description":"","KeySpec":"AES_256_GCM96","KeyUsage":"ENCRYPT_DECRYPT",
+                "Tags":[{"TagKey":"label","TagValue":{"never-display":"never-display"}}]}),
+            ),
+            "Tags[0].TagValue must be a string.",
+        ),
+        (
+            "kms_keystore_put",
+            Some(json!({"Name":"a","Secret":"never-display"})),
+            "Secret must be a JSON object.",
+        ),
+        (
+            "kms_sign",
+            Some(json!({"KeyId":"a","Message":"never-display","SigningAlgorithm":"never-display"})),
+            "SigningAlgorithm is not supported",
+        ),
+        (
+            "kms_rotate_key",
+            Some(json!({"KeyId":"a","ClientId":"never-display"})),
+            "ClientId is controlled by Orbitport and must not be provided",
+        ),
+    ];
+    for (tool, arguments, expected) in cases {
+        for modern in [false, true] {
+            let mut params = json!({"name": tool});
+            if let Some(arguments) = &arguments {
+                params["arguments"] = arguments.clone();
+            }
+            if modern {
+                params["_meta"] = json!({"io.modelcontextprotocol/protocolVersion":"2026-07-28"});
+            }
+            let request =
+                json!({"jsonrpc":"2.0","id":"invalid-input","method":"tools/call","params":params});
+            let Dispatch::Reply(reply) = dispatch(&request.to_string(), &ToolPolicy::default())
+            else {
+                panic!("invalid input must be rejected before execution");
+            };
+            assert!(!reply.contains("never-display"));
+            let response: Value = serde_json::from_str(&reply).unwrap();
+            assert_eq!(response["id"], "invalid-input");
+            assert!(response.get("error").is_none());
+            let result = &response["result"];
+            assert_eq!(result["isError"], true);
+            assert_eq!(result["content"][0]["text"], expected);
+            assert_eq!(
+                result.get("resultType").and_then(Value::as_str),
+                modern.then_some("complete"),
+            );
+        }
     }
 }

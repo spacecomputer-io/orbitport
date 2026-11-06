@@ -13,6 +13,7 @@ use std::{
 };
 
 const MAX_RESPONSE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_VALIDATION_MESSAGE_BYTES: usize = 512;
 
 #[derive(Serialize)]
 struct JsonRpcRequest<'a> {
@@ -35,6 +36,13 @@ struct JsonRpcResponse {
 #[derive(Deserialize)]
 struct JsonRpcError {
     code: i64,
+    message: Option<Box<RawValue>>,
+    data: Option<Box<RawValue>>,
+}
+
+#[derive(Deserialize)]
+struct JsonRpcErrorData {
+    reason: String,
 }
 
 #[derive(Deserialize)]
@@ -142,18 +150,52 @@ impl GatewayClient {
             return Err(McpError::InvalidRpcResponse);
         }
         if let Some(error) = envelope.error {
-            return Err(
-                match serde_json::from_str::<JsonRpcError>(error.get()).map(|e| e.code) {
-                    Ok(-32602) => McpError::InvalidParameters,
-                    _ => McpError::OperationFailed,
-                },
-            );
+            return Err(rpc_error(&error));
         }
         let result = envelope.result.ok_or(McpError::InvalidRpcResponse)?;
         if !result.get().trim_start().starts_with('{') {
             return Err(McpError::InvalidRpcResult);
         }
         Ok(result)
+    }
+}
+
+fn rpc_error(raw: &RawValue) -> McpError {
+    let Ok(error) = serde_json::from_str::<JsonRpcError>(raw.get()) else {
+        return McpError::OperationFailed;
+    };
+    match error.code {
+        -32002 => McpError::GatewayRequest,
+        -32602 => {
+            // Only the gateway's pre-execution validation messages are public here.
+            let message = error
+                .message
+                .and_then(|raw| serde_json::from_str::<String>(raw.get()).ok())
+                .filter(|message| {
+                    message.len() <= MAX_VALIDATION_MESSAGE_BYTES
+                        && message
+                            .strip_prefix("Invalid request: ")
+                            .is_some_and(|reason| !reason.trim().is_empty())
+                        && message.bytes().all(|b| b == b' ' || b.is_ascii_graphic())
+                });
+            message.map_or(
+                McpError::InvalidParameters,
+                McpError::InvalidParametersDetail,
+            )
+        }
+        -32001 => {
+            let data = error
+                .data
+                .and_then(|raw| serde_json::from_str::<JsonRpcErrorData>(raw.get()).ok());
+            match data.as_ref().map(|data| data.reason.as_str()) {
+                Some("not_found") => McpError::ResourceNotFound,
+                Some("permission_denied") => McpError::KmsPermissionDenied,
+                Some("failed_precondition") => McpError::FailedPrecondition,
+                Some("invalid_argument") => McpError::InvalidOperationArguments,
+                _ => McpError::OperationFailed,
+            }
+        }
+        _ => McpError::OperationFailed,
     }
 }
 

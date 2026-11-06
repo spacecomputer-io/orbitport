@@ -118,12 +118,26 @@ EOF exits after the active request finishes or times out; Ctrl-C interrupts.
 | Account inactive | Contact your account administrator |
 | Rate limit | Try again shortly |
 | Backend outage | Try again later |
+| Invalid parameters | Correct the parameters using the validation reason, when available |
+| KMS resource not found | Check the key ID or key-store entry name |
+| KMS permission denied | Check your access to the operation |
+| KMS failed precondition | Check whether the resource is in the required state |
+| KMS invalid arguments | Correct the operation arguments |
 | KMS operation error | Check the resource, permissions and arguments |
-| Timeout/interrupted response | Check whether the operation completed before retrying |
+| Gateway or local timeout/interrupted response | Check whether the operation completed before retrying |
 
-Requests are never automatically retried, including writes. Backend failure
-details are sanitized. Successful tool results include text and raw structured
-content; KMS failures use `isError: true`.
+Requests are never automatically retried, including writes. A gateway timeout
+does not establish whether the operation completed. The MCP displays safe,
+bounded gateway validation messages and uses fixed messages for known execution
+failure reasons, without forwarding raw backend details. Older gateways that
+omit a failure reason still get the generic error. Successful tool results
+include text and raw structured content; KMS failures use `isError: true`.
+
+Invalid arguments to an available tool also return `isError: true`, with a
+field name or path where possible and without echoing submitted values. The
+agent can correct the arguments and try again; the rejected call makes no
+gateway request. Unknown or hidden tools and malformed MCP requests remain
+JSON-RPC protocol errors.
 
 ## External Prerequisites
 

@@ -1,6 +1,6 @@
 //! MCP protocol and tools without transport, credentials, or plugin dependencies.
 pub mod tools;
-pub use tools::{PreparedCall, ToolPolicy};
+pub use tools::{PrepareError, PreparedCall, ToolPolicy};
 
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Value, json, value::RawValue};
@@ -31,7 +31,7 @@ fn present_raw<'de, D: Deserializer<'de>>(
 #[derive(Deserialize)]
 struct ToolCallParams {
     name: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "present_raw")]
     arguments: Option<Box<RawValue>>,
 }
 
@@ -49,34 +49,38 @@ pub struct PendingCall {
 
 impl PendingCall {
     pub fn success(self, result: Box<RawValue>) -> String {
-        let result_type = self.modern.then_some("complete");
-        self.finish(ToolResult {
-            result_type,
-            content: vec![TextContent {
-                kind: "text",
-                text: result.get().to_string(),
-            }],
-            structured_content: Some(result),
-            is_error: false,
-        })
+        success_response(
+            &self.id,
+            ToolResult {
+                result_type: self.modern.then_some("complete"),
+                content: vec![TextContent {
+                    kind: "text",
+                    text: result.get().to_string(),
+                }],
+                structured_content: Some(result),
+                is_error: false,
+            },
+        )
     }
 
     pub fn failure(self, message: impl Into<String>) -> String {
-        let result_type = self.modern.then_some("complete");
-        self.finish(ToolResult {
-            result_type,
+        tool_failure_response(&self.id, self.modern, message.into())
+    }
+}
+
+fn tool_failure_response(id: &RawValue, modern: bool, message: String) -> String {
+    success_response(
+        id,
+        ToolResult {
+            result_type: modern.then_some("complete"),
             content: vec![TextContent {
                 kind: "text",
-                text: message.into(),
+                text: message,
             }],
             structured_content: None,
             is_error: true,
-        })
-    }
-
-    fn finish(self, result: ToolResult) -> String {
-        success_response(&self.id, result)
-    }
+        },
+    )
 }
 
 #[derive(Serialize)]
@@ -184,12 +188,24 @@ fn prepare_tool_call(
     };
     let arguments = params
         .arguments
-        .as_deref()
-        .map(RawValue::get)
-        .unwrap_or("{}");
+        .unwrap_or_else(|| serde_json::from_str("{}").expect("empty arguments are valid JSON"));
+    if !arguments.get().trim_start().starts_with('{') {
+        return Dispatch::Reply(protocol_error(
+            Some(&id),
+            -32602,
+            "tools/call arguments must be a JSON object",
+        ));
+    }
     match policy.prepare(&params.name, arguments) {
         Ok(call) => Dispatch::Call(PendingCall { id, modern, call }),
-        Err(error) => Dispatch::Reply(protocol_error(Some(&id), -32602, &error)),
+        Err(PrepareError::UnknownOrDisabledTool) => Dispatch::Reply(protocol_error(
+            Some(&id),
+            -32602,
+            "Unknown or disabled tool; enable sensitive tools in your harness configuration with --allow",
+        )),
+        Err(PrepareError::InvalidArguments(message)) => {
+            Dispatch::Reply(tool_failure_response(&id, modern, message))
+        }
     }
 }
 

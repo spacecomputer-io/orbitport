@@ -1,6 +1,6 @@
 use kms_mcp::{client::GatewayClient, types::McpError};
 use kms_mcp_core::ToolPolicy;
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::{
     io::{BufRead, BufReader, Read, Write},
     net::{TcpListener, TcpStream},
@@ -136,6 +136,7 @@ fn stdio_protocol_calls_hidden_calls_and_bad_arguments_make_no_network_requests(
         r#"{"jsonrpc":"2.0","id":4,"method":"server/discover"}"#,
         r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"kms_keystore_get","arguments":{"Name":"a"}}}"#,
         r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"kms_sign","arguments":{"KeyId":"a","Message":"never-log-me","SigningAlgorithm":"INVALID"}}}"#,
+        r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"kms_get_public_key","arguments":{"KeyId":"a","Version":"never-log-me"}}}"#,
         "{",
         r#"{"jsonrpc":"2.0","id":8,"method":"unsupported"}"#,
     ].join("\n") + "\n";
@@ -152,11 +153,21 @@ fn stdio_protocol_calls_hidden_calls_and_bad_arguments_make_no_network_requests(
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
-    assert_eq!(replies.len(), 8);
+    assert_eq!(replies.len(), 9);
     assert_eq!(replies[0]["id"], "init");
     assert_eq!(replies[0]["result"]["protocolVersion"], "2025-06-18");
     assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 9);
     assert_eq!(replies[4]["error"]["code"], -32602);
+    assert_eq!(replies[5]["result"]["isError"], true);
+    assert_eq!(
+        replies[5]["result"]["content"][0]["text"],
+        "SigningAlgorithm is not supported",
+    );
+    assert_eq!(replies[6]["result"]["isError"], true);
+    assert_eq!(
+        replies[6]["result"]["content"][0]["text"],
+        "Invalid value for Version.",
+    );
     assert!(listener.accept().is_err());
 }
 
@@ -269,7 +280,7 @@ async fn errors_are_sanitized_and_redirects_and_failures_are_not_retried() {
         let fixture = Fixture::new(status, body);
         let client = GatewayClient::new(&fixture.url, "fixture-token").unwrap();
         let call = ToolPolicy::default()
-            .prepare("kms_get_capabilities", "{}")
+            .prepare("kms_get_capabilities", serde_json::from_str("{}").unwrap())
             .unwrap();
         let error = client.execute(&call).await.unwrap_err();
         assert_eq!(error, expected_error);
@@ -292,12 +303,88 @@ async fn timeout_does_not_retry_and_warns_about_indeterminate_completion() {
         GatewayClient::with_timeout(&fixture.url, "fixture-token", Duration::from_millis(100))
             .unwrap();
     let call = ToolPolicy::default()
-        .prepare("kms_get_capabilities", "{}")
+        .prepare("kms_get_capabilities", serde_json::from_str("{}").unwrap())
         .unwrap();
     let error = client.execute(&call).await.unwrap_err();
     assert_eq!(error, McpError::GatewayRequest);
     assert!(error.to_string().contains("may have completed"));
     assert_eq!(fixture.finish().len(), 1);
+}
+
+#[test]
+fn gateway_rpc_errors_have_safe_actionable_stdio_messages() {
+    let verify = |error: Value, expected: &str| {
+        let body = format!(r#"{{"jsonrpc":"2.0","id":__ID__,"error":{error}}}"#);
+        let fixture = Fixture::new(200, &body);
+        let output = subprocess(
+            r#"{"jsonrpc":"2.0","id":"rotate","method":"tools/call","params":{"name":"kms_rotate_key","arguments":{"KeyId":"kms:test"}}}"#,
+            &fixture.url,
+            "",
+        );
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(!stdout.contains("internal-secret"));
+        let reply: Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(reply["id"], "rotate");
+        assert_eq!(reply["result"]["isError"], true);
+        assert_eq!(reply["result"]["content"][0]["text"], expected);
+        assert_eq!(fixture.finish().len(), 1);
+    };
+
+    verify(
+        json!({"code": -32002, "message": "Request timed out"}),
+        &McpError::GatewayRequest.to_string(),
+    );
+    verify(
+        json!({"code": -32602, "message": "Invalid request: KeyId is required"}),
+        "Invalid request: KeyId is required",
+    );
+    for message in [
+        Value::Null,
+        json!({"detail": "internal-secret"}),
+        json!("Invalid request: "),
+        json!("Invalid request: Bad input\ninternal-secret"),
+        json!(format!("Invalid request: {}", "internal-secret".repeat(40))),
+    ] {
+        verify(
+            json!({"code": -32602, "message": message}),
+            "Invalid KMS parameters",
+        );
+    }
+
+    for (reason, message) in [
+        ("not_found", "The requested KMS resource was not found."),
+        (
+            "permission_denied",
+            "You are not allowed to perform this KMS operation.",
+        ),
+        (
+            "failed_precondition",
+            "The resource is not in a state that allows this KMS operation.",
+        ),
+        ("invalid_argument", "KMS rejected the operation arguments."),
+    ] {
+        verify(
+            json!({
+                "code": -32001,
+                "message": "Invalid request: internal-secret",
+                "data": {"reason": reason},
+            }),
+            message,
+        );
+    }
+    for data in [
+        Value::Null,
+        json!("not_found"),
+        json!({"reason": 5}),
+        json!({"reason": "internal-secret"}),
+    ] {
+        verify(
+            json!({"code": -32001, "message": "internal-secret", "data": data}),
+            "KMS operation failed; check the resource, permissions and parameters",
+        );
+    }
 }
 
 #[test]

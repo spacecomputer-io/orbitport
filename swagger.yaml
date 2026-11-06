@@ -231,6 +231,11 @@ components:
           type: string
         data:
           nullable: true
+          description: >-
+            Optional error details. For execution errors (-32001), reason may
+            be not_found, permission_denied, failed_precondition, or invalid_argument.
+          example:
+            reason: not_found
     KmsKeyStorePutParams:
       type: object
       required:

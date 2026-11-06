@@ -3,6 +3,10 @@ name = "kms-mcp"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "kms-mcp"
+path = "src/mcpserver.rs"
+
 [dependencies]
 kms-mcp-core = { path = "../crates/mcp-core" }
 serde = { version = "1.0", features = ["derive"] }

@@ -11,6 +11,7 @@ use orbitport_kms_api::{
 use schemars::JsonSchema;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, value::RawValue};
+use serde_path_to_error::{Path, Segment};
 use std::collections::{BTreeSet, HashMap};
 
 pub struct ToolSpec {
@@ -47,6 +48,12 @@ struct Annotations {
 #[derive(Default)]
 pub struct ToolPolicy {
     allowed: BTreeSet<&'static str>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PrepareError {
+    UnknownOrDisabledTool,
+    InvalidArguments(String),
 }
 
 impl ToolPolicy {
@@ -89,29 +96,30 @@ impl ToolPolicy {
             .collect()
     }
 
-    pub fn prepare(&self, name: &str, arguments: &str) -> Result<PreparedCall, String> {
+    pub fn prepare(
+        &self,
+        name: &str,
+        arguments: Box<RawValue>,
+    ) -> Result<PreparedCall, PrepareError> {
         let spec = registry()
             .into_iter()
             .find(|spec| spec.name == name && self.permits(spec))
-            .ok_or_else(|| {
-                "Unknown or disabled tool; enable sensitive tools in your harness configuration with --allow"
-                    .to_string()
+            .ok_or(PrepareError::UnknownOrDisabledTool)?;
+        let fields: HashMap<String, &RawValue> =
+            serde_json::from_str(arguments.get()).map_err(|_| {
+                PrepareError::InvalidArguments("Tool arguments must be a JSON object".to_string())
             })?;
-        let fields: HashMap<String, Box<RawValue>> =
-            serde_json::from_str(arguments).map_err(|_| "Tool arguments must be a JSON object")?;
         for identity in ["ClientId", "client_id", "KmsTenant", "kms_tenant"] {
             if fields.contains_key(identity) {
-                return Err(
-                    "Identity fields are controlled by Orbitport and must not be provided"
-                        .to_string(),
-                );
+                return Err(PrepareError::InvalidArguments(format!(
+                    "{identity} is controlled by Orbitport and must not be provided"
+                )));
             }
         }
-        (spec.validate)(arguments)?;
+        (spec.validate)(arguments.get()).map_err(PrepareError::InvalidArguments)?;
         Ok(PreparedCall {
             method: spec.method,
-            arguments: RawValue::from_string(arguments.to_string())
-                .map_err(|_| "Invalid tool arguments")?,
+            arguments,
         })
     }
 }
@@ -134,12 +142,81 @@ fn schema<T: JsonSchema>() -> Value {
     serde_json::to_value(schemars::schema_for!(T)).expect("generated schema is JSON")
 }
 
-fn validate<T: DeserializeOwned>(
+fn resolve_schema_ref<'a>(root: &'a Value, node: &'a Value) -> Option<&'a Value> {
+    match node.get("$ref") {
+        Some(reference) => root.pointer(reference.as_str()?.strip_prefix('#')?),
+        None => Some(node),
+    }
+}
+
+fn append_field(path: &mut String, field: &str) {
+    if !path.is_empty() {
+        path.push('.');
+    }
+    path.push_str(field);
+}
+
+fn describe_argument_error(root: &Value, mut raw: &str, path: &Path) -> Option<String> {
+    // Paths may contain caller-controlled map keys. Only display names from our schema.
+    let mut node = root;
+    let mut field_path = String::new();
+    for segment in path {
+        node = resolve_schema_ref(root, node)?;
+        match segment {
+            Segment::Map { key } => {
+                let (field, property) = node.get("properties")?.as_object()?.get_key_value(key)?;
+                let fields: HashMap<String, &RawValue> = serde_json::from_str(raw).ok()?;
+                raw = fields.get(field).copied()?.get();
+                node = property;
+                append_field(&mut field_path, field);
+            }
+            Segment::Seq { index } => {
+                let items: Vec<&RawValue> = serde_json::from_str(raw).ok()?;
+                raw = items.get(*index)?.get();
+                node = node.get("items")?;
+                field_path.push_str(&format!("[{index}]"));
+            }
+            _ => return None,
+        }
+    }
+    let node = resolve_schema_ref(root, node)?;
+    if let Some(required) = node.get("required").and_then(Value::as_array)
+        && let Ok(fields) = serde_json::from_str::<HashMap<String, &RawValue>>(raw)
+        && let Some(missing) = required
+            .iter()
+            .filter_map(Value::as_str)
+            .find(|field| !fields.contains_key(*field))
+    {
+        append_field(&mut field_path, missing);
+        return Some(format!("{field_path} is required."));
+    }
+    if field_path.is_empty() {
+        return None;
+    }
+    let raw = raw.trim_start();
+    let expected = match node.get("type").and_then(Value::as_str) {
+        Some("string") if !raw.starts_with('"') => Some("a string"),
+        Some("object") if !raw.starts_with('{') => Some("a JSON object"),
+        Some("array") if !raw.starts_with('[') => Some("an array"),
+        _ => None,
+    };
+    Some(match expected {
+        Some(expected) => format!("{field_path} must be {expected}."),
+        None => format!("Invalid value for {field_path}."),
+    })
+}
+
+fn validate<T: DeserializeOwned + JsonSchema>(
     raw: &str,
     validate: fn(&T) -> Result<(), String>,
 ) -> Result<(), String> {
-    let req = serde_json::from_str(raw)
-        .map_err(|_| "Invalid tool arguments: missing field or incorrect type")?;
+    let mut deserializer = serde_json::Deserializer::from_str(raw);
+    let req = serde_path_to_error::deserialize(&mut deserializer).map_err(|error| {
+        describe_argument_error(&schema::<T>(), raw, error.path()).unwrap_or_else(|| {
+            "Invalid tool arguments: missing field or incorrect type".to_string()
+        })
+    })?;
+    deserializer.end().map_err(|_| "Invalid tool arguments")?;
     validate(&req)
 }
 
