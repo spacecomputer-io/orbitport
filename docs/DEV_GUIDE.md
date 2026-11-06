@@ -127,6 +127,23 @@ curl -X POST http://localhost:8080/api/v1/rpc \
   }'
 ```
 
+### Local MCP Testing
+
+Build the local executable with `make mcp-build` at the repository root.
+Run `make mcp-test` for protocol, subprocess and HTTP fixture tests, which
+need no real credentials. To test against a local gateway, set
+`ORBITPORT_URL=http://127.0.0.1:8080` and supply the credential appropriate to
+that stack through `ORBITPORT_PAT`. A noop-auth stack is useful for functional
+tests only; keep `accountnoop` configured because an absent account plugin
+fails requests closed. Use real dev PATs for authentication, revocation and
+tenant checks. Production customer authentication is PAT-only; Auth0 service
+tokens remain restricted to internal routes such as PAT issuance.
+Follow the [dev acceptance checklist](../mcp/README.md#dev-acceptance) before
+claiming phase-1 acceptance. This implementation adds no gateway `/mcp` route.
+The [client setup guide](../mcp/CLIENT_SETUP.md) gives file-backed PAT
+configuration for Claude Desktop, Codex desktop, Claude Code and Codex CLI,
+and the exact initialization/tool-listing messages for manual terminal use.
+
 Store an arbitrary JSON secret in the KMS key-store:
 
 Key-store names are slash-separated, capped at 256 characters, and each segment
