@@ -68,7 +68,10 @@ make devenv-down
 
 ## API
 
-The full HTTP and JSON-RPC reference lives in [`swagger.yaml`](swagger.yaml). Example request:
+The full HTTP and JSON-RPC reference lives in [`swagger.yaml`](swagger.yaml).
+When enabled with `ORBITPORT_MCP_ENABLED=true`, the gateway also exposes the
+same KMS capabilities as MCP tools at `POST /mcp`, using the same bearer-token
+auth and tenant resolution as `/api/v1/rpc`. Example request:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/rpc \

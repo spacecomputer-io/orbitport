@@ -142,6 +142,97 @@ paths:
                       Name: github/prod
                       Secret:
                         api_key: replace-me
+  /mcp:
+    post:
+      summary: Gateway-native MCP endpoint
+      description: |
+        Optional Streamable HTTP MCP endpoint for Orbitport KMS. Enable with
+        `ORBITPORT_MCP_ENABLED=true`. The endpoint requires the same bearer
+        tokens as `/api/v1/rpc`, reuses account hold/release and authoritative
+        KMS tenant resolution, and exposes existing KMS operations as MCP tools
+        such as `kms_sign`, `kms_encrypt`, `kms_keystore_put`, and
+        `kms_keystore_get`. Tool arguments use the same PascalCase request
+        shapes as the JSON-RPC API. Caller-provided identity fields such as
+        `ClientId`, `client_id`, `KmsTenant`, and `kms_tenant` are rejected.
+        `tools/list` advertises each tool's `inputSchema` and `outputSchema`.
+      security:
+        - BearerAuth: []
+      parameters:
+        - in: header
+          name: MCP-Protocol-Version
+          schema:
+            type: string
+            example: "2026-07-28"
+          required: false
+          description: Required for modern MCP clients; omitted headers are accepted for legacy compatibility.
+        - in: header
+          name: Mcp-Method
+          schema:
+            type: string
+            example: tools/call
+          required: false
+          description: Required for modern MCP clients and must match the JSON-RPC method.
+        - in: header
+          name: Mcp-Name
+          schema:
+            type: string
+            example: kms_keystore_get
+          required: false
+          description: Required for modern `tools/call` requests and must match `params.name`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/McpJsonRpcRequest'
+            examples:
+              toolsList:
+                summary: List MCP tools
+                value:
+                  jsonrpc: "2.0"
+                  id: 1
+                  method: tools/list
+              keyStoreGet:
+                summary: Call a key-store tool
+                value:
+                  jsonrpc: "2.0"
+                  id: 2
+                  method: tools/call
+                  params:
+                    name: kms_keystore_get
+                    arguments:
+                      Name: github/prod
+      responses:
+        '200':
+          description: MCP JSON-RPC response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpJsonRpcResponse'
+        '401':
+          description: Missing or invalid bearer token. Includes `WWW-Authenticate` with protected-resource metadata.
+  /.well-known/oauth-protected-resource:
+    get:
+      summary: MCP protected-resource metadata
+      description: OAuth protected-resource metadata for MCP clients.
+      responses:
+        '200':
+          description: Protected-resource metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpProtectedResourceMetadata'
+  /.well-known/oauth-protected-resource/mcp:
+    get:
+      summary: MCP protected-resource metadata for `/mcp`
+      description: OAuth protected-resource metadata for the gateway-native MCP endpoint.
+      responses:
+        '200':
+          description: Protected-resource metadata.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpProtectedResourceMetadata'
 components:
   securitySchemes:
     BearerAuth:
@@ -214,6 +305,62 @@ components:
           type: string
         data:
           nullable: true
+    McpJsonRpcRequest:
+      type: object
+      required:
+        - jsonrpc
+        - id
+        - method
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: integer
+            - type: string
+        method:
+          type: string
+          enum:
+            - initialize
+            - ping
+            - tools/list
+            - tools/call
+        params:
+          type: object
+          additionalProperties: true
+    McpJsonRpcResponse:
+      type: object
+      required:
+        - jsonrpc
+        - id
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          nullable: true
+        result:
+          type: object
+          additionalProperties: true
+        error:
+          $ref: '#/components/schemas/JsonRpcError'
+    McpProtectedResourceMetadata:
+      type: object
+      properties:
+        resource:
+          type: string
+          description: Canonical MCP resource URL.
+        authorization_servers:
+          type: array
+          items:
+            type: string
+        bearer_methods_supported:
+          type: array
+          items:
+            type: string
+        resource_documentation:
+          type: string
     KmsKeyStorePutParams:
       type: object
       required:
