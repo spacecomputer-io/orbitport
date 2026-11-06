@@ -37,14 +37,14 @@ Neither installation method requires `sudo`.
 
 ## Store The PAT In A File
 
-Create a named DEV PAT in the DEV dashboard. Create the file without putting
+Create a PAT in the Orbitport dashboard. Create the file without putting
 the token in shell history:
 
 ```sh
 umask 077
-touch "$HOME/.config/spacecomputer-kms/dev.pat"
-chmod 600 "$HOME/.config/spacecomputer-kms/dev.pat"
-nano "$HOME/.config/spacecomputer-kms/dev.pat"
+touch "$HOME/.config/spacecomputer-kms/prod.pat"
+chmod 600 "$HOME/.config/spacecomputer-kms/prod.pat"
+nano "$HOME/.config/spacecomputer-kms/prod.pat"
 ```
 
 The file must contain only the complete PAT on one line, with no quotes,
@@ -53,23 +53,22 @@ Do not put this file in the repository, a cloud-synced directory or a prompt.
 
 The file is plaintext. Directory mode `700` and file mode `600` restrict it
 to your user account, but cannot protect it from other processes running as
-you. Use a dedicated, revocable PAT with a short practical lifetime. Keep
-separate files for dev and production, never use a production PAT with dev.
+you. Use a dedicated, revocable PAT with a short practical lifetime. Use
+each PAT only with the gateway it was issued for.
 
 The launcher reads the file as data, exports `ORBITPORT_PAT` and replaces
 itself with the executable. It does not print the token or evaluate the file
 as shell code. Its settings are:
 
-| Setting | Purpose | Default |
+| Setting | Purpose | Value in these examples |
 | --- | --- | --- |
-| `ORBITPORT_PAT_FILE` | File read by the launcher | `$HOME/.config/spacecomputer-kms/dev.pat` |
+| `ORBITPORT_PAT_FILE` | File read by the launcher | `$HOME/.config/spacecomputer-kms/prod.pat` |
 | `KMS_MCP_BIN` | Executable launched by the script | `$HOME/.local/bin/kms-mcp` |
 | `ORBITPORT_URL` | Gateway base URL read by the executable | `https://op.spacecomputer.io` |
 
 `ORBITPORT_PAT_FILE` and `KMS_MCP_BIN` are launcher settings, not native Rust
 CLI options. The binary still reads its credential only from `ORBITPORT_PAT`.
-Every example below explicitly selects the DEV gateway. Do not omit that
-selection when using the dev file: the executable defaults to production.
+The examples explicitly set both the production PAT file and gateway URL.
 
 ## Configuration Files
 
@@ -85,10 +84,9 @@ configuration entries. Replace `/Users/YOU` in the examples with your actual
 absolute home path, JSON and TOML commands do not automatically expand `~`.
 For a custom `CODEX_HOME`, the user config is `$CODEX_HOME/config.toml`.
 
-The examples opt into `decrypt` and `keystore-get`. Remove those arguments to
-keep the default restrictions, or add `keystore-delete` only if the agent
-should be able to permanently delete entries. These are local exposure
-controls, not server-enforced PAT scopes.
+The setup examples expose the nine default tools without any opt-ins. See
+[Optional Tool Opt-Ins](#optional-tool-opt-ins) if your harness needs a
+tool outside the default set.
 
 ## Claude Desktop
 
@@ -101,15 +99,11 @@ entry into its existing `mcpServers` object:
   "mcpServers": {
     "spacecomputer-kms": {
       "command": "/bin/sh",
-      "args": [
-        "/Users/YOU/.config/spacecomputer-kms/run-mcp.sh",
-        "--allow",
-        "decrypt,keystore-get"
-      ],
+      "args": ["/Users/YOU/.config/spacecomputer-kms/run-mcp.sh"],
       "env": {
-        "ORBITPORT_PAT_FILE": "/Users/YOU/.config/spacecomputer-kms/dev.pat",
+        "ORBITPORT_PAT_FILE": "/Users/YOU/.config/spacecomputer-kms/prod.pat",
         "KMS_MCP_BIN": "/Users/YOU/.local/bin/kms-mcp",
-        "ORBITPORT_URL": "https://op-dev.spacecomputer.io"
+        "ORBITPORT_URL": "https://op.spacecomputer.io"
       }
     }
   }
@@ -130,12 +124,12 @@ environment settings:
 ```toml
 [mcp_servers.spacecomputer-kms]
 command = "/bin/sh"
-args = ["/Users/YOU/.config/spacecomputer-kms/run-mcp.sh", "--allow", "decrypt,keystore-get"]
+args = ["/Users/YOU/.config/spacecomputer-kms/run-mcp.sh"]
 
 [mcp_servers.spacecomputer-kms.env]
-ORBITPORT_PAT_FILE = "/Users/YOU/.config/spacecomputer-kms/dev.pat"
+ORBITPORT_PAT_FILE = "/Users/YOU/.config/spacecomputer-kms/prod.pat"
 KMS_MCP_BIN = "/Users/YOU/.local/bin/kms-mcp"
-ORBITPORT_URL = "https://op-dev.spacecomputer.io"
+ORBITPORT_URL = "https://op.spacecomputer.io"
 ```
 
 Restart the desktop app or its MCP connection. No `env_vars` forwarding of a
@@ -150,11 +144,10 @@ Register a user-scoped stdio server. The CLI writes the connection to
 
 ```sh
 claude mcp add --transport stdio --scope user \
-  --env ORBITPORT_URL=https://op-dev.spacecomputer.io \
-  --env "ORBITPORT_PAT_FILE=$HOME/.config/spacecomputer-kms/dev.pat" \
+  --env ORBITPORT_URL=https://op.spacecomputer.io \
+  --env "ORBITPORT_PAT_FILE=$HOME/.config/spacecomputer-kms/prod.pat" \
   --env "KMS_MCP_BIN=$HOME/.local/bin/kms-mcp" \
-  spacecomputer-kms -- /bin/sh "$HOME/.config/spacecomputer-kms/run-mcp.sh" \
-  --allow decrypt,keystore-get
+  spacecomputer-kms -- /bin/sh "$HOME/.config/spacecomputer-kms/run-mcp.sh"
 
 claude mcp get spacecomputer-kms
 claude
@@ -179,11 +172,10 @@ Alternatively, register it from the terminal instead of editing TOML:
 
 ```sh
 codex mcp add spacecomputer-kms \
-  --env ORBITPORT_URL=https://op-dev.spacecomputer.io \
-  --env "ORBITPORT_PAT_FILE=$HOME/.config/spacecomputer-kms/dev.pat" \
+  --env ORBITPORT_URL=https://op.spacecomputer.io \
+  --env "ORBITPORT_PAT_FILE=$HOME/.config/spacecomputer-kms/prod.pat" \
   --env "KMS_MCP_BIN=$HOME/.local/bin/kms-mcp" \
-  -- /bin/sh "$HOME/.config/spacecomputer-kms/run-mcp.sh" \
-  --allow decrypt,keystore-get
+  -- /bin/sh "$HOME/.config/spacecomputer-kms/run-mcp.sh"
 
 codex mcp list
 codex
@@ -197,7 +189,7 @@ the PAT. See the [official OpenAI MCP CLI instructions](https://learn.chatgpt.co
 
 All four clients launch the local process themselves, do not also start a
 terminal instance for them. Initialization and `tools/list` are handled by
-the client. First inspect the discovered tools and configured opt-ins.
+the client. First confirm that discovery shows the nine default tools.
 
 A non-mutating live check is:
 
@@ -212,10 +204,10 @@ alone is local and does not verify the PAT or contact the gateway.
 Start one local instance with the same file-backed launcher:
 
 ```sh
-ORBITPORT_URL=https://op-dev.spacecomputer.io \
-ORBITPORT_PAT_FILE="$HOME/.config/spacecomputer-kms/dev.pat" \
+ORBITPORT_URL=https://op.spacecomputer.io \
+ORBITPORT_PAT_FILE="$HOME/.config/spacecomputer-kms/prod.pat" \
 KMS_MCP_BIN="$HOME/.local/bin/kms-mcp" \
-/bin/sh "$HOME/.config/spacecomputer-kms/run-mcp.sh" --allow decrypt,keystore-get
+/bin/sh "$HOME/.config/spacecomputer-kms/run-mcp.sh"
 ```
 
 It waits silently for newline-delimited JSON on stdin, it does not open an
@@ -245,7 +237,7 @@ user authentication. See the [MCP initialization lifecycle](https://modelcontext
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
 ```
 
-The response contains visible tools, descriptions, input/output schemas and
+The response contains the nine default tools, descriptions, input/output schemas and
 annotations. Hidden tools remain uncallable even if their names are guessed.
 Initialization and listing make no gateway requests and consume no credits.
 
@@ -255,10 +247,37 @@ Initialization and listing make no gateway requests and consume no credits.
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"kms_get_capabilities","arguments":{}}}
 ```
 
-This call reaches the DEV gateway, which checks the PAT, account and credits.
+This call reaches the production gateway, which checks the PAT, account and credits.
 It does not create or modify keys, but follows normal KMS billing. A tool
 failure appears as `isError: true`. Use Ctrl-C to stop the process and return
 to your shell. Do not paste response JSON back as request arguments.
+
+## Optional Tool Opt-Ins
+
+Enable only the tools your harness needs. To expose key-store Get, append
+`--allow keystore-get` after the launcher script path. In a harness `args`
+array, add the flag and its value as separate entries, for example:
+
+```toml
+args = ["/Users/YOU/.config/spacecomputer-kms/run-mcp.sh", "--allow", "keystore-get"]
+```
+
+Use a comma-separated value to enable more than one option. Restart the MCP
+connection or harness after changing the arguments.
+
+| Opt-in | What it exposes |
+| --- | --- |
+| `decrypt` | Decrypts ciphertext and returns plaintext. |
+| `generate-data-key` | Returns both a plaintext data key and its encrypted copy. |
+| `keystore-get` | Returns the stored JSON secret to the harness. |
+| `keystore-delete` | Permanently deletes a key-store entry and all its versions. |
+| `encapsulate` | Exposes the key-agreement tool; execution is currently disabled. |
+| `decapsulate` | Exposes the shared-key recovery tool; execution is currently disabled. |
+
+These are **local tool exposure controls, not PAT scopes**. A holder of the
+PAT can still call the gateway directly. The default tool set is restricted,
+not read-only: it includes operations that can create keys or write entries.
+Opting in to a tool that returns secrets can expose them to the harness.
 
 ## Credential And Configuration Changes
 
