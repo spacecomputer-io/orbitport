@@ -198,11 +198,9 @@ fn prepare_tool_call(
     }
     match policy.prepare(&params.name, arguments) {
         Ok(call) => Dispatch::Call(PendingCall { id, modern, call }),
-        Err(PrepareError::UnknownOrDisabledTool) => Dispatch::Reply(protocol_error(
-            Some(&id),
-            -32602,
-            "Unknown or disabled tool; enable sensitive tools in your harness configuration with --allow",
-        )),
+        Err(PrepareError::UnknownOrDisabledTool) => {
+            Dispatch::Reply(protocol_error(Some(&id), -32602, "Unknown tool"))
+        }
         Err(PrepareError::InvalidArguments(message)) => {
             Dispatch::Reply(tool_failure_response(&id, modern, message))
         }

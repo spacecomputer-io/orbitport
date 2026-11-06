@@ -333,6 +333,7 @@ fn unknown_and_hidden_tools_return_the_same_protocol_error() {
         };
         let response: Value = serde_json::from_str(&reply).unwrap();
         assert_eq!(response["error"]["code"], -32602);
+        assert_eq!(response["error"]["message"], "Unknown tool");
         assert!(response.get("result").is_none());
         response
     };
