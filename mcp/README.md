@@ -107,7 +107,11 @@ manual call. The process keeps no persistent state or token cache.
 
 Only JSON protocol messages are written to stdout. Diagnostics go to stderr;
 raw arguments, responses and credentials are never logged. Input messages,
-including framing, are limited to 64 KiB; gateway responses to 2 MiB.
+including the newline, are limited to 65 KiB: the default 64 KiB gateway
+body limit plus 1 KiB for MCP framing and metadata. Oversized lines are
+discarded through the next newline, reported as a protocol error, and do not
+close the session. The gateway's own body limit still applies to forwarded
+requests. Gateway responses are limited to 2 MiB.
 The HTTP deadline is 30 seconds with a five-second connect timeout.
 EOF exits after the active request finishes or times out; Ctrl-C interrupts.
 
@@ -118,6 +122,7 @@ EOF exits after the active request finishes or times out; Ctrl-C interrupts.
 | Account inactive | Contact your account administrator |
 | Rate limit | Try again shortly |
 | Backend outage | Try again later |
+| Gateway body too large (HTTP 413) | Reduce the request payload to fit the gateway limit |
 | Invalid parameters | Correct the parameters using the validation reason, when available |
 | KMS resource not found | Check the key ID or key-store entry name |
 | KMS permission denied | Check your access to the operation |

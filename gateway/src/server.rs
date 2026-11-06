@@ -292,6 +292,12 @@ async fn handle_rejection(err: Rejection) -> Result<impl Reply, Infallible> {
         };
         return Ok(warp::reply::with_status(warp::reply::json(&body), status));
     }
+    if err.find::<warp::reject::PayloadTooLarge>().is_some() {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({"error": "payload_too_large"})),
+            StatusCode::PAYLOAD_TOO_LARGE,
+        ));
+    }
     if let Some(e) = err.find::<warp::filters::body::BodyDeserializeError>() {
         return Ok(warp::reply::with_status(
             warp::reply::json(
@@ -572,6 +578,32 @@ fn new_req_id() -> u64 {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[tokio::test]
+    async fn oversized_body_returns_413_before_parsing() {
+        let route = warp::post()
+            .and(warp::body::content_length_limit(2))
+            .and(warp::body::json::<serde_json::Value>())
+            .map(|body| warp::reply::json(&body))
+            .recover(handle_rejection);
+        let at_limit = warp::test::request()
+            .method("POST")
+            .header("content-type", "application/json")
+            .body("{}")
+            .reply(&route)
+            .await;
+        assert_eq!(at_limit.status(), StatusCode::OK);
+
+        let over_limit = warp::test::request()
+            .method("POST")
+            .header("content-type", "application/json")
+            .body("xxx")
+            .reply(&route)
+            .await;
+        assert_eq!(over_limit.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let body: serde_json::Value = serde_json::from_slice(over_limit.body()).unwrap();
+        assert_eq!(body, serde_json::json!({"error": "payload_too_large"}));
+    }
 
     #[tokio::test]
     async fn invalid_credential_rejection_maps_to_401_invalid_credential() {

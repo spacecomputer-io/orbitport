@@ -66,7 +66,7 @@ pub enum McpError {
     RequestTooLarge,
     #[error("The gateway rejected this request.")]
     GatewayRejected,
-    #[error("MCP stdio failed or the message exceeded the size limit")]
+    #[error("MCP stdio failed")]
     StdioFailure,
     #[error("Failed to listen for the termination signal")]
     SignalFailure,

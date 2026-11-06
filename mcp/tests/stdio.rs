@@ -1,4 +1,4 @@
-use kms_mcp::{client::GatewayClient, types::McpError};
+use kms_mcp::{MAX_MESSAGE_BYTES, client::GatewayClient, types::McpError};
 use kms_mcp_core::ToolPolicy;
 use serde_json::{Value, json};
 use std::{
@@ -528,9 +528,113 @@ fn json_metadata() -> String {
 }
 
 #[test]
-fn oversized_input_fails_without_unbounded_buffering_or_stdout_noise() {
-    let output = subprocess(&"x".repeat(65_537), "http://127.0.0.1:1", "");
-    assert!(!output.status.success());
-    assert!(output.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("size limit"));
+fn oversized_input_is_discarded_and_the_next_message_is_answered() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.set_nonblocking(true).unwrap();
+    let oversized = json!({
+        "jsonrpc": "2.0", "id": "oversized", "method": "tools/call",
+        "params": {"name": "kms_keystore_put", "arguments": {
+            "Name": "oversized", "Secret": {
+                "value": format!("discard-this-secret{}", "x".repeat(2 * MAX_MESSAGE_BYTES))
+            }
+        }}
+    });
+    let ping = r#"{"jsonrpc":"2.0","id":"next","method":"ping"}"#;
+    let padding = " ".repeat(MAX_MESSAGE_BYTES - ping.len() - 1);
+    let output = subprocess(
+        &format!("{oversized}\n{ping}{padding}\n"),
+        &format!("http://{}", listener.local_addr().unwrap()),
+        "",
+    );
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(!stdout.contains("discard-this-secret"));
+    let replies: Vec<Value> = stdout
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(
+        replies,
+        vec![
+            json!({"jsonrpc":"2.0","id":null,"error":{"code":-32000,"message":"MCP message exceeds size limit"}}),
+            json!({"jsonrpc":"2.0","id":"next","result":{}}),
+        ]
+    );
+    assert!(matches!(listener.accept(), Err(e) if e.kind() == std::io::ErrorKind::WouldBlock));
+}
+
+#[test]
+fn oversized_unterminated_input_reports_one_error_at_eof() {
+    let output = subprocess(&"x".repeat(MAX_MESSAGE_BYTES + 1), "http://127.0.0.1:1", "");
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let reply: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(reply["id"], Value::Null);
+    assert_eq!(reply["error"]["code"], -32000);
+    assert_eq!(reply["error"]["message"], "MCP message exceeds size limit");
+}
+
+#[test]
+fn framing_headroom_forwards_near_limit_puts_and_reports_gateway_413() {
+    const DEFAULT_GATEWAY_BODY_BYTES: usize = 64 * 1024;
+    let mut arguments = json!({"Name":"near-limit","Secret":{"value":""}});
+    let empty_body = json!({
+        "jsonrpc":"2.0", "id":1, "method":"kms_keystore.Put", "params":arguments
+    });
+    let body_overhead = empty_body.to_string().len();
+    for (body_bytes, status, response_body) in [
+        (
+            DEFAULT_GATEWAY_BODY_BYTES,
+            200,
+            r#"{"jsonrpc":"2.0","id":__ID__,"result":{"Name":"near-limit","Version":1}}"#,
+        ),
+        (
+            DEFAULT_GATEWAY_BODY_BYTES + 1,
+            413,
+            r#"{"error":"payload_too_large"}"#,
+        ),
+    ] {
+        arguments["Secret"]["value"] = json!("x".repeat(body_bytes - body_overhead));
+        let request = json!({
+            "jsonrpc": "2.0", "id": "near-limit-request", "method": "tools/call",
+            "params": {
+                "name": "kms_keystore_put", "arguments": arguments,
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientInfo": {"name":"limit-test","version":"1.0"},
+                    "io.modelcontextprotocol/clientCapabilities": {"sampling":{}}
+                }
+            }
+        });
+        let line = format!("{request}\n");
+        assert!(line.len() > DEFAULT_GATEWAY_BODY_BYTES);
+        assert!(line.len() <= MAX_MESSAGE_BYTES);
+        let fixture = Fixture::new(status, response_body);
+        let ping = r#"{"jsonrpc":"2.0","id":"next","method":"ping"}"#;
+        let output = subprocess(&format!("{line}{ping}\n"), &fixture.url, "");
+        assert!(output.status.success());
+        assert!(output.stderr.is_empty());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        let replies: Vec<Value> = stdout
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        assert_eq!(replies.len(), 2);
+        assert_eq!(replies[0]["id"], "near-limit-request");
+        assert_eq!(replies[0]["result"]["isError"], status == 413);
+        if status == 413 {
+            assert_eq!(
+                replies[0]["result"]["content"][0]["text"],
+                "The request exceeds the gateway body size limit.",
+            );
+        }
+        assert_eq!(replies[1], json!({"jsonrpc":"2.0","id":"next","result":{}}));
+        let requests = fixture.finish();
+        assert_eq!(requests.len(), 1);
+        let body = requests[0].split("\r\n\r\n").nth(1).unwrap();
+        assert_eq!(body.len(), body_bytes);
+        let forwarded: Value = serde_json::from_str(body).unwrap();
+        assert_eq!(forwarded["params"], arguments);
+    }
 }

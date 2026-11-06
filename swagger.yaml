@@ -159,6 +159,19 @@ paths:
                     enum: [account_inactive]
               example:
                 error: account_inactive
+        '413':
+          description: The HTTP request body exceeds ORBITPORT_RPC_BODY_MAX_BYTES (64 KiB by default).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+                    enum: [payload_too_large]
+              example:
+                error: payload_too_large
 components:
   securitySchemes:
     BearerAuth:
