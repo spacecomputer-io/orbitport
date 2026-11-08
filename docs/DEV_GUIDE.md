@@ -72,16 +72,20 @@ make E2E_PROFILE=offline e2e-lazy
 ```
 
 
-### Running with Docker
+### Running with Docker (real auth and account plugins)
 
-Fill the required vars in `.env`, follow `.example.env`.
+`docker-compose.yaml` is the production-shaped, KMS-only stack. Unlike the dev
+stack it runs the real auth plugin (PATs are verified against a local
+`plugin-patissuer`) and the real account plugin, so it covers invalid and
+expired PATs, revocation and credit enforcement. The account plugin needs a
+dashboard backend; see the `docker-compose.yaml` section of `.example.env`.
 
-Run with docker compose:
 ```bash
-docker-compose --env-file .env up
+docker compose --env-file .env up -d --build
 ```
 
-This will start the gateway and all plugins in docker containers.
+Mint PATs on `127.0.0.1:8090/internal/pat/issue` with a dashboard M2M token
+that has `pat:issue`, and call the public API on `:8080` with them.
 
 ### Making calls to KMS
 ```bash
