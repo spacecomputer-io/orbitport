@@ -1,10 +1,10 @@
 # KMS MCP
 
-This Rust executable implements ADR-0001 Step 1: your agent starts a local MCP
-process over stdio; each tool call becomes one HTTPS request to the existing
-Orbitport gateway `POST /api/v1/rpc`. KMS and secret storage remain remote.
-The gateway owns authentication, tenant resolution, pricing and credit holds.
-There is no hosted MCP endpoint, OAuth exchange or new cluster service.
+This Rust executable runs a local MCP server: your agent starts it over
+stdio, and each tool call becomes one HTTPS request to the Orbitport
+gateway `POST /api/v1/rpc`. KMS and secret storage remain remote. The
+gateway owns authentication, tenant resolution, pricing and credit holds.
+There is no hosted MCP endpoint.
 
 ## Install
 
@@ -143,61 +143,3 @@ field name or path where possible and without echoing submitted values. The
 agent can correct the arguments and try again; the rejected call makes no
 gateway request. Unknown or hidden tools and malformed MCP requests remain
 JSON-RPC protocol errors.
-
-## External Prerequisites
-
-Companion work is owned outside this repository:
-
-- Dashboard: configurable five-active-PAT default; selectable 1–365 day
-  lifetimes/default 90 days.
-- Dashboard hold API: HTTP 403 with `code: ACCOUNT_INACTIVE`. Orbitport maps
-  that exact code to `account_inactive`; a generic 400/403 is not treated as
-  suspension. This distinction cannot be verified end to end until deployed.
-- Existing frozen `kmsTenant` values must remain unchanged.
-- Dashboard/Auth0: retire legacy customer credential endpoints and customer
-  M2M apps as part of the coordinated PAT-only rollout; retain internal service
-  clients used for PAT issuance and account-plugin access.
-
-The main branch includes the PAT-only customer-authentication changes from
-[PR #161](https://github.com/spacecomputer-io/orbitport/pull/161), merged as
-`4486150`. Manual JSON-RPC calls remain supported with PATs; legacy Auth0
-customer tokens are rejected. Internal Auth0 service-token authentication for PAT issuance remains
-supported. The account plugin is required, and KMS tenancy always comes from
-its Hold response, never a token claim or a legacy fallback. No MCP Helm
-configuration or ingress path is required.
-
-The suspension contract matches PR #161: dashboard HTTP 403
-`code: ACCOUNT_INACTIVE` becomes gRPC `PermissionDenied("account_inactive")`,
-then gateway HTTP 403 `error: account_inactive`. This branch is based on the
-merged implementation and adds MCP regression tests without changing its
-PAT-only behavior or restoring the former `ok=false` suspension representation.
-
-## Dev Acceptance
-
-Automated checks:
-
-```sh
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --locked -- -D warnings
-make mcp-test
-cd gateway
-make test
-```
-
-Before phase 2, record these with real dev PATs and your target harness:
-
-- Confirm default discovery and explicit opt-ins; guessed hidden tools fail.
-- Create a signing key, sign a fixture and verify the signature externally.
-- Create an encryption key and round-trip plaintext with Encrypt/Decrypt.
-- Put/Get `{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}`;
-  verify exact numeric text in the wire response.
-- Confirm tenant B cannot list or retrieve tenant A's entries.
-- Compare credits/operation tags with equivalent manual JSON-RPC calls.
-- Revoke a disposable PAT and confirm its next tool call fails.
-- Test suspension after the dashboard error prerequisite is deployed.
-- Confirm existing manual PAT callers still work, legacy Auth0 customer
-  credentials return 401, and internal service-token PAT issuance still works.
-
-No real dev credentials are bundled. Fixture success is not production/dev
-acceptance. Record actual binary/image versions and outcomes in
-[`ACCEPTANCE.md`](ACCEPTANCE.md); keep phase 2 blocked until this checklist passes.

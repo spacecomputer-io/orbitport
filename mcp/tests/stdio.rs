@@ -357,7 +357,7 @@ fn gateway_rpc_errors_have_safe_actionable_stdio_messages() {
         ("not_found", "The requested KMS resource was not found."),
         (
             "permission_denied",
-            "You are not allowed to perform this KMS operation.",
+            "The key or resource does not exist or does not belong to you.",
         ),
         (
             "failed_precondition",

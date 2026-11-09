@@ -138,8 +138,17 @@ tests only; keep `accountnoop` configured because an absent account plugin
 fails requests closed. Use real dev PATs for authentication, revocation and
 tenant checks. Production customer authentication is PAT-only; Auth0 service
 tokens remain restricted to internal routes such as PAT issuance.
-Follow the [dev acceptance checklist](../mcp/README.md#dev-acceptance) before
-claiming phase-1 acceptance. This implementation adds no gateway `/mcp` route.
+This implementation adds no gateway `/mcp` route.
+
+Automated checks from the repository root:
+
+```sh
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+make mcp-test
+cd gateway && make test
+```
+
 The [client setup guide](../mcp/CLIENT_SETUP.md) gives file-backed PAT
 configuration for Claude Desktop, Codex desktop, Claude Code and Codex CLI,
 and the exact initialization/tool-listing messages for manual terminal use.

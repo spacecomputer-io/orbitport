@@ -38,7 +38,7 @@ pub enum McpError {
     InvalidParametersDetail(String),
     #[error("The requested KMS resource was not found.")]
     ResourceNotFound,
-    #[error("You are not allowed to perform this KMS operation.")]
+    #[error("The key or resource does not exist or does not belong to you.")]
     KmsPermissionDenied,
     #[error("The resource is not in a state that allows this KMS operation.")]
     FailedPrecondition,

@@ -2,7 +2,7 @@
 set +x
 set -eu
 
-pat_file="${ORBITPORT_PAT_FILE:-${HOME}/.config/spacecomputer-kms/dev.pat}"
+pat_file="${ORBITPORT_PAT_FILE:-${HOME}/.config/spacecomputer-kms/prod.pat}"
 binary="${KMS_MCP_BIN:-${HOME}/.local/bin/kms-mcp}"
 
 if [ ! -f "$pat_file" ] || [ ! -r "$pat_file" ]; then

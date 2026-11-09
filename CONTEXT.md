@@ -92,7 +92,7 @@ protect against prompt injection and are not PAT authorization scopes.
 
 The optional `mcp/scripts/kms-mcp-from-file.sh` launcher reads a PAT file into
 `ORBITPORT_PAT`. Its `ORBITPORT_PAT_FILE` and `KMS_MCP_BIN` settings default to
-`$HOME/.config/spacecomputer-kms/dev.pat` and `$HOME/.local/bin/kms-mcp`.
+`$HOME/.config/spacecomputer-kms/prod.pat` and `$HOME/.local/bin/kms-mcp`.
 These are launcher settings, not native Rust CLI options. The advertised MCP
 server identity is `spacecomputer-kms`. See [client setup](mcp/CLIENT_SETUP.md)
 for the four supported client configuration examples and manual stdio tests.
@@ -103,7 +103,7 @@ precision and PascalCase fields are preserved. Manual API calls and MCP use
 the same PAT-only customer authentication; internal Auth0 service tokens
 remain separate. KMS tenancy always comes from the account Hold response.
 The root lockfile and workspace are used by all Rust builds, including Docker.
-See [local MCP documentation](mcp/README.md) for tools and release prerequisites.
+See [local MCP documentation](mcp/README.md) for tools and configuration.
 
 ### Plugin dispatcher
 

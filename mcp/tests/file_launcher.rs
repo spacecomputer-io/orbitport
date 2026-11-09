@@ -143,7 +143,7 @@ fn launcher_uses_default_user_paths() {
     let bin = fixture.home.join(".local/bin");
     fs::create_dir_all(&config).unwrap();
     fs::create_dir_all(&bin).unwrap();
-    fs::write(config.join("dev.pat"), "fixture-pat").unwrap();
+    fs::write(config.join("prod.pat"), "fixture-pat").unwrap();
     symlink(env!("CARGO_BIN_EXE_kms-mcp"), bin.join("kms-mcp")).unwrap();
     let output = fixture.run(true, false);
     assert_protocol(&output);
