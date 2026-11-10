@@ -10,7 +10,6 @@ use crate::proto::services::kms::{
 };
 use crate::proto::services::threshold::DkgRequest;
 
-use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{
     KeyStoreDeleteRequest, KeyStoreGetRequest, KeyStoreListRequest, KeyStorePutRequest, KmsRpcCall,
     KmsService,
@@ -104,7 +103,6 @@ impl<T> JsonRpcResponse<T> {
 /// This allows for easy routing of RPC calls to the appropriate service handlers.
 #[derive(Debug)]
 pub enum RpcCall {
-    GetCTRNG(CTrngRequest),
     GetCapabilities(GetCapabilitiesRequest),
     CreateKey(CreateKeyRequest),
     Decrypt(DecryptRequest),
@@ -126,11 +124,6 @@ pub enum RpcCall {
 impl RpcCall {
     fn from_method_and_params(method: &str, params_json: &str) -> Result<Self, String> {
         match method {
-            "ctrng.Get" => Ok(Self::GetCTRNG(Self::parse_params(method, params_json)?)),
-            "kms.GetCapabilities" => Ok(Self::GetCapabilities(Self::parse_params(
-                method,
-                params_json,
-            )?)),
             "kms.CreateKey" => Ok(Self::CreateKey(Self::parse_params(method, params_json)?)),
             "kms.GetKeyMetadata" => Ok(Self::GetKeyMetadata(Self::parse_params(
                 method,
@@ -172,16 +165,6 @@ impl RpcCall {
     /// Validates the parameters of the RPC call.
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            RpcCall::GetCTRNG(req) => {
-                if let Some(chunks) = req.chunks {
-                    if chunks > MAX_CHUNKS {
-                        return Err("Max chunks exceeded".to_string());
-                    }
-                    if chunks < 1 {
-                        return Err("Chunks must be at least 1".to_string());
-                    }
-                }
-            }
             RpcCall::GetCapabilities(_) => {}
             RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
             RpcCall::Decrypt(req) => KmsService::validate_decrypt(req)?,
@@ -208,7 +191,6 @@ impl RpcCall {
     /// `validate()` passes, which pins the variant to an exact known value.
     pub fn operation(&self) -> String {
         match self {
-            RpcCall::GetCTRNG(_) => "ctrng.Get".to_string(),
             RpcCall::GetCapabilities(_) => "kms.GetCapabilities".to_string(),
             RpcCall::CreateKey(req) => format!("kms.CreateKey:{}", req.key_spec),
             RpcCall::GetKeyMetadata(_) => "kms.GetKeyMetadata".to_string(),
@@ -236,22 +218,6 @@ impl RpcCall {
         plugin_catalog: &PluginCatalog,
     ) -> Result<JsonRpcRawResponse, tonic::Status> {
         match self {
-            RpcCall::GetCTRNG(req) => {
-                let grpc_client = plugin_catalog.get_masterseed_client().await.map_err(|_| {
-                    if plugin_catalog.ctrng_enabled() {
-                        tonic::Status::unavailable("Masterseed plugin unavailable")
-                    } else {
-                        tonic::Status::unavailable("cTRNG feature disabled")
-                    }
-                })?;
-                let mut svc = CTrngService::new(grpc_client);
-                let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
-                    // We can log _e here for debugging, but we don't want to expose internal errors to the client
-                    tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
-                    tonic::Status::internal("Failed to get mixed cTRNG")
-                })?;
-                serialize_success_response(req_id, results)
-            }
             RpcCall::GetCapabilities(_) => {
                 serialize_success_response(req_id, KmsService::get_capabilities())
             }
