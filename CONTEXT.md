@@ -37,7 +37,7 @@ proto/                      Protobuf source of truth
   services/                 External gateway services (ctrng.proto)
   plugins/                  Internal plugin RPCs (ao, auth, ipfs, masterseed)
 
-docker-compose.yaml         Stack against real upstreams (Aptos Orbital + Auth0)
+docker-compose.yaml         KMS-only stack with the real auth (PAT) and account plugins
 dev.docker-compose.yaml     Dev stack (mocker + authnoop, no external credentials)
 beacons.yaml                Public beacon registry
 ```
