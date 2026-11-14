@@ -24,20 +24,25 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	KmsPlugin_Encrypt_FullMethodName         = "/kmsapi.KmsPlugin/Encrypt"
-	KmsPlugin_Decrypt_FullMethodName         = "/kmsapi.KmsPlugin/Decrypt"
-	KmsPlugin_Sign_FullMethodName            = "/kmsapi.KmsPlugin/Sign"
-	KmsPlugin_Encapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Encapsulate"
-	KmsPlugin_Decapsulate_FullMethodName     = "/kmsapi.KmsPlugin/Decapsulate"
-	KmsPlugin_CreateKey_FullMethodName       = "/kmsapi.KmsPlugin/CreateKey"
-	KmsPlugin_GetKeyMetadata_FullMethodName  = "/kmsapi.KmsPlugin/GetKeyMetadata"
-	KmsPlugin_GetPublicKey_FullMethodName    = "/kmsapi.KmsPlugin/GetPublicKey"
-	KmsPlugin_GenerateDataKey_FullMethodName = "/kmsapi.KmsPlugin/GenerateDataKey"
-	KmsPlugin_RotateKey_FullMethodName       = "/kmsapi.KmsPlugin/RotateKey"
-	KmsPlugin_KeyStorePut_FullMethodName     = "/kmsapi.KmsPlugin/KeyStorePut"
-	KmsPlugin_KeyStoreGet_FullMethodName     = "/kmsapi.KmsPlugin/KeyStoreGet"
-	KmsPlugin_KeyStoreList_FullMethodName    = "/kmsapi.KmsPlugin/KeyStoreList"
-	KmsPlugin_KeyStoreDelete_FullMethodName  = "/kmsapi.KmsPlugin/KeyStoreDelete"
+	KmsPlugin_Encrypt_FullMethodName             = "/kmsapi.KmsPlugin/Encrypt"
+	KmsPlugin_Decrypt_FullMethodName             = "/kmsapi.KmsPlugin/Decrypt"
+	KmsPlugin_Sign_FullMethodName                = "/kmsapi.KmsPlugin/Sign"
+	KmsPlugin_Encapsulate_FullMethodName         = "/kmsapi.KmsPlugin/Encapsulate"
+	KmsPlugin_Decapsulate_FullMethodName         = "/kmsapi.KmsPlugin/Decapsulate"
+	KmsPlugin_CreateKey_FullMethodName           = "/kmsapi.KmsPlugin/CreateKey"
+	KmsPlugin_GetKeyMetadata_FullMethodName      = "/kmsapi.KmsPlugin/GetKeyMetadata"
+	KmsPlugin_GetPublicKey_FullMethodName        = "/kmsapi.KmsPlugin/GetPublicKey"
+	KmsPlugin_GenerateDataKey_FullMethodName     = "/kmsapi.KmsPlugin/GenerateDataKey"
+	KmsPlugin_RotateKey_FullMethodName           = "/kmsapi.KmsPlugin/RotateKey"
+	KmsPlugin_ListKeys_FullMethodName            = "/kmsapi.KmsPlugin/ListKeys"
+	KmsPlugin_DisableKey_FullMethodName          = "/kmsapi.KmsPlugin/DisableKey"
+	KmsPlugin_EnableKey_FullMethodName           = "/kmsapi.KmsPlugin/EnableKey"
+	KmsPlugin_ScheduleKeyDeletion_FullMethodName = "/kmsapi.KmsPlugin/ScheduleKeyDeletion"
+	KmsPlugin_CancelKeyDeletion_FullMethodName   = "/kmsapi.KmsPlugin/CancelKeyDeletion"
+	KmsPlugin_KeyStorePut_FullMethodName         = "/kmsapi.KmsPlugin/KeyStorePut"
+	KmsPlugin_KeyStoreGet_FullMethodName         = "/kmsapi.KmsPlugin/KeyStoreGet"
+	KmsPlugin_KeyStoreList_FullMethodName        = "/kmsapi.KmsPlugin/KeyStoreList"
+	KmsPlugin_KeyStoreDelete_FullMethodName      = "/kmsapi.KmsPlugin/KeyStoreDelete"
 )
 
 // KmsPluginClient is the client API for KmsPlugin service.
@@ -54,6 +59,11 @@ type KmsPluginClient interface {
 	GetPublicKey(ctx context.Context, in *GetPublicKeyRequest, opts ...grpc.CallOption) (*GetPublicKeyResponse, error)
 	GenerateDataKey(ctx context.Context, in *GenerateDataKeyRequest, opts ...grpc.CallOption) (*GenerateDataKeyResponse, error)
 	RotateKey(ctx context.Context, in *RotateKeyRequest, opts ...grpc.CallOption) (*RotateKeyResponse, error)
+	ListKeys(ctx context.Context, in *ListKeysRequest, opts ...grpc.CallOption) (*ListKeysResponse, error)
+	DisableKey(ctx context.Context, in *DisableKeyRequest, opts ...grpc.CallOption) (*DisableKeyResponse, error)
+	EnableKey(ctx context.Context, in *EnableKeyRequest, opts ...grpc.CallOption) (*EnableKeyResponse, error)
+	ScheduleKeyDeletion(ctx context.Context, in *ScheduleKeyDeletionRequest, opts ...grpc.CallOption) (*ScheduleKeyDeletionResponse, error)
+	CancelKeyDeletion(ctx context.Context, in *CancelKeyDeletionRequest, opts ...grpc.CallOption) (*CancelKeyDeletionResponse, error)
 	KeyStorePut(ctx context.Context, in *KeyStorePutRequest, opts ...grpc.CallOption) (*KeyStorePutResponse, error)
 	KeyStoreGet(ctx context.Context, in *KeyStoreGetRequest, opts ...grpc.CallOption) (*KeyStoreGetResponse, error)
 	KeyStoreList(ctx context.Context, in *KeyStoreListRequest, opts ...grpc.CallOption) (*KeyStoreListResponse, error)
@@ -168,6 +178,56 @@ func (c *kmsPluginClient) RotateKey(ctx context.Context, in *RotateKeyRequest, o
 	return out, nil
 }
 
+func (c *kmsPluginClient) ListKeys(ctx context.Context, in *ListKeysRequest, opts ...grpc.CallOption) (*ListKeysResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListKeysResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_ListKeys_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) DisableKey(ctx context.Context, in *DisableKeyRequest, opts ...grpc.CallOption) (*DisableKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DisableKeyResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_DisableKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) EnableKey(ctx context.Context, in *EnableKeyRequest, opts ...grpc.CallOption) (*EnableKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(EnableKeyResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_EnableKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) ScheduleKeyDeletion(ctx context.Context, in *ScheduleKeyDeletionRequest, opts ...grpc.CallOption) (*ScheduleKeyDeletionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ScheduleKeyDeletionResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_ScheduleKeyDeletion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *kmsPluginClient) CancelKeyDeletion(ctx context.Context, in *CancelKeyDeletionRequest, opts ...grpc.CallOption) (*CancelKeyDeletionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CancelKeyDeletionResponse)
+	err := c.cc.Invoke(ctx, KmsPlugin_CancelKeyDeletion_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *kmsPluginClient) KeyStorePut(ctx context.Context, in *KeyStorePutRequest, opts ...grpc.CallOption) (*KeyStorePutResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(KeyStorePutResponse)
@@ -222,6 +282,11 @@ type KmsPluginServer interface {
 	GetPublicKey(context.Context, *GetPublicKeyRequest) (*GetPublicKeyResponse, error)
 	GenerateDataKey(context.Context, *GenerateDataKeyRequest) (*GenerateDataKeyResponse, error)
 	RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error)
+	ListKeys(context.Context, *ListKeysRequest) (*ListKeysResponse, error)
+	DisableKey(context.Context, *DisableKeyRequest) (*DisableKeyResponse, error)
+	EnableKey(context.Context, *EnableKeyRequest) (*EnableKeyResponse, error)
+	ScheduleKeyDeletion(context.Context, *ScheduleKeyDeletionRequest) (*ScheduleKeyDeletionResponse, error)
+	CancelKeyDeletion(context.Context, *CancelKeyDeletionRequest) (*CancelKeyDeletionResponse, error)
 	KeyStorePut(context.Context, *KeyStorePutRequest) (*KeyStorePutResponse, error)
 	KeyStoreGet(context.Context, *KeyStoreGetRequest) (*KeyStoreGetResponse, error)
 	KeyStoreList(context.Context, *KeyStoreListRequest) (*KeyStoreListResponse, error)
@@ -265,6 +330,21 @@ func (UnimplementedKmsPluginServer) GenerateDataKey(context.Context, *GenerateDa
 }
 func (UnimplementedKmsPluginServer) RotateKey(context.Context, *RotateKeyRequest) (*RotateKeyResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RotateKey not implemented")
+}
+func (UnimplementedKmsPluginServer) ListKeys(context.Context, *ListKeysRequest) (*ListKeysResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListKeys not implemented")
+}
+func (UnimplementedKmsPluginServer) DisableKey(context.Context, *DisableKeyRequest) (*DisableKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DisableKey not implemented")
+}
+func (UnimplementedKmsPluginServer) EnableKey(context.Context, *EnableKeyRequest) (*EnableKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method EnableKey not implemented")
+}
+func (UnimplementedKmsPluginServer) ScheduleKeyDeletion(context.Context, *ScheduleKeyDeletionRequest) (*ScheduleKeyDeletionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ScheduleKeyDeletion not implemented")
+}
+func (UnimplementedKmsPluginServer) CancelKeyDeletion(context.Context, *CancelKeyDeletionRequest) (*CancelKeyDeletionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CancelKeyDeletion not implemented")
 }
 func (UnimplementedKmsPluginServer) KeyStorePut(context.Context, *KeyStorePutRequest) (*KeyStorePutResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method KeyStorePut not implemented")
@@ -479,6 +559,96 @@ func _KmsPlugin_RotateKey_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _KmsPlugin_ListKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).ListKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_ListKeys_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).ListKeys(ctx, req.(*ListKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_DisableKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DisableKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).DisableKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_DisableKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).DisableKey(ctx, req.(*DisableKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_EnableKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(EnableKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).EnableKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_EnableKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).EnableKey(ctx, req.(*EnableKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_ScheduleKeyDeletion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScheduleKeyDeletionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).ScheduleKeyDeletion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_ScheduleKeyDeletion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).ScheduleKeyDeletion(ctx, req.(*ScheduleKeyDeletionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _KmsPlugin_CancelKeyDeletion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelKeyDeletionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(KmsPluginServer).CancelKeyDeletion(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: KmsPlugin_CancelKeyDeletion_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(KmsPluginServer).CancelKeyDeletion(ctx, req.(*CancelKeyDeletionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _KmsPlugin_KeyStorePut_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(KeyStorePutRequest)
 	if err := dec(in); err != nil {
@@ -597,6 +767,26 @@ var KmsPlugin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RotateKey",
 			Handler:    _KmsPlugin_RotateKey_Handler,
+		},
+		{
+			MethodName: "ListKeys",
+			Handler:    _KmsPlugin_ListKeys_Handler,
+		},
+		{
+			MethodName: "DisableKey",
+			Handler:    _KmsPlugin_DisableKey_Handler,
+		},
+		{
+			MethodName: "EnableKey",
+			Handler:    _KmsPlugin_EnableKey_Handler,
+		},
+		{
+			MethodName: "ScheduleKeyDeletion",
+			Handler:    _KmsPlugin_ScheduleKeyDeletion_Handler,
+		},
+		{
+			MethodName: "CancelKeyDeletion",
+			Handler:    _KmsPlugin_CancelKeyDeletion_Handler,
 		},
 		{
 			MethodName: "KeyStorePut",

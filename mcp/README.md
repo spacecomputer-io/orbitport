@@ -74,6 +74,11 @@ protocol query. Current ML-KEM operations remain disabled.
 | `kms_encrypt` | `kms.Encrypt` | default |
 | `kms_sign` | `kms.Sign` | default |
 | `kms_rotate_key` | `kms.RotateKey` | default |
+| `kms_list_keys` | `kms.ListKeys` | default |
+| `kms_disable_key` | `kms.DisableKey` | `disable-key` |
+| `kms_enable_key` | `kms.EnableKey` | `enable-key` |
+| `kms_schedule_key_deletion` | `kms.ScheduleKeyDeletion` | `schedule-key-deletion` |
+| `kms_cancel_key_deletion` | `kms.CancelKeyDeletion` | `cancel-key-deletion` |
 | `kms_keystore_put` | `kms_keystore.Put` | default |
 | `kms_keystore_list` | `kms_keystore.List` | default |
 | `kms_decrypt` | `kms.Decrypt` | `decrypt` |
@@ -87,6 +92,12 @@ Hidden tools are neither listed nor executable, even if an agent guesses
 their names. The allowlist is fixed at startup and cannot be changed through
 tool arguments. This protects against prompt injection; it is not a PAT scope.
 Someone holding the PAT can still call the gateway directly.
+
+There are ten default tools and ten opt-in tools. Lifecycle mutations are
+Transit-only; listing includes all tenant engines. Schedule disables immediately
+and becomes eligible for irreversible deletion after 7-30 days (default 30).
+Cancel works only before the deadline/worker claim and leaves the key disabled.
+See [lifecycle behavior and rollout](../plugins/pkg/plugin/kms/LIFECYCLE.md).
 
 Read-only lookups carry MCP annotations. Put and Delete are marked destructive:
 Put overwrites the latest entry; Delete removes all versions. Annotations

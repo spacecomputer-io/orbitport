@@ -1,5 +1,8 @@
 //! Schema constraints come from the same capabilities used by the gateway.
-use crate::KmsValidation;
+use crate::{
+    DEFAULT_DELETION_WINDOW_DAYS, DEFAULT_LIST_KEYS_LIMIT, KmsValidation, MAX_DELETION_WINDOW_DAYS,
+    MAX_LIST_KEYS_LIMIT, MIN_DELETION_WINDOW_DAYS,
+};
 use schemars::{Schema, SchemaGenerator};
 use serde_json::{Value, json};
 
@@ -33,6 +36,27 @@ pub fn positive_u32(_: &mut SchemaGenerator) -> Schema {
         "type": ["integer", "null"], "minimum": 1, "maximum": u32::MAX
     }))
     .expect("static schema")
+}
+
+pub fn list_keys_limit(_: &mut SchemaGenerator) -> Schema {
+    Schema::try_from(
+        json!({"type": ["integer", "null"], "minimum": 1, "maximum": MAX_LIST_KEYS_LIMIT, "default": DEFAULT_LIST_KEYS_LIMIT}),
+    )
+    .expect("static schema")
+}
+
+pub fn deletion_window(_: &mut SchemaGenerator) -> Schema {
+    Schema::try_from(
+        json!({"type": ["integer", "null"], "minimum": MIN_DELETION_WINDOW_DAYS, "maximum": MAX_DELETION_WINDOW_DAYS, "default": DEFAULT_DELETION_WINDOW_DAYS}),
+    )
+    .expect("static schema")
+}
+
+pub fn key_state(_: &mut SchemaGenerator) -> Schema {
+    choices(
+        ["ENABLED", "DISABLED", "PENDING_DELETION"].map(str::to_string),
+        true,
+    )
 }
 
 pub fn key_usage(_: &mut SchemaGenerator) -> Schema {

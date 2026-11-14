@@ -100,7 +100,7 @@ fn assert_protocol(output: &Output) {
         "spacecomputer-kms"
     );
     let tools = replies[1]["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 10);
+    assert_eq!(tools.len(), 11);
     assert!(tools.iter().any(|tool| tool["name"] == "kms_keystore_get"));
     assert!(
         !tools

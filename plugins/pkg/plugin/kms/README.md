@@ -7,6 +7,9 @@ agent-oriented key-store to clients without leaking the underlying engine.
 
 ## Overview
 
+See [Key Lifecycle and Listing](LIFECYCLE.md) for tenant-wide ListKeys and
+Transit-only enable/disable and scheduled-deletion operations.
+
 Implements `KmsPlugin` (`proto/plugins/kms.proto`) with crypto RPCs and
 key-store RPCs:
 

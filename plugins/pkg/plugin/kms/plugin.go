@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
@@ -23,6 +24,10 @@ type Plugin struct {
 	now                func() time.Time
 	providers          map[string]kmsProvider
 	keyStoreAuthorizer *keyStoreAuthorizer
+	deletionInterval   time.Duration
+	threads            utils.ThreadControl
+	startOnce          sync.Once
+	closeOnce          sync.Once
 }
 
 var logger = utils.GetLogger("orbitport:kms")
@@ -61,10 +66,16 @@ func newPluginWithConfig(cfg *kmsConfig, client *openBaoClient) (*Plugin, error)
 	if err != nil {
 		return nil, err
 	}
+	interval, err := time.ParseDuration(cfg.DeletionSweepInterval)
+	if err != nil || interval < 0 {
+		return nil, fmt.Errorf("invalid KMS_DELETION_SWEEP_INTERVAL")
+	}
 	return &Plugin{
 		client:             client,
 		now:                time.Now,
 		keyStoreAuthorizer: authorizer,
+		deletionInterval:   interval,
+		threads:            utils.NewThreadControl(),
 		providers: map[string]kmsProvider{
 			schemeTransit:  newTransitProvider(client),
 			schemeEthereum: newEthereumProvider(client),
@@ -83,6 +94,10 @@ func (p *Plugin) Encrypt(ctx context.Context, req *proto.EncryptRequest) (*proto
 		logger.Warnf("Encrypt failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
+	if err := requireUsableKey(metadata); err != nil {
+		return nil, err
+	}
+
 	encryptor, err := requireCipherProvider(provider, req.KeyId, metadata.Scheme, cipherOperationEncryption)
 	if err != nil {
 		return nil, err
@@ -127,6 +142,9 @@ func (p *Plugin) Decrypt(ctx context.Context, req *proto.DecryptRequest) (*proto
 		logger.Warnf("Decrypt rejected mismatched ciphertext blob for key_id=%s", blob.KeyID)
 		return nil, status.Error(codes.PermissionDenied, "CiphertextBlob does not belong to the authenticated client")
 	}
+	if err := requireUsableKey(metadata); err != nil {
+		return nil, err
+	}
 	decryptor, err := requireCipherProvider(provider, blob.KeyID, metadata.Scheme, cipherOperationDecryption)
 	if err != nil {
 		return nil, err
@@ -155,6 +173,10 @@ func (p *Plugin) Sign(ctx context.Context, req *proto.SignRequest) (*proto.SignR
 		logger.Warnf("Sign failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
+	if err := requireUsableKey(metadata); err != nil {
+		return nil, err
+	}
+
 	signer, err := requireSignProvider(provider, metadata.Scheme)
 	if err != nil {
 		logger.Warnf("Sign rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
@@ -180,6 +202,9 @@ func (p *Plugin) Encapsulate(ctx context.Context, req *proto.EncapsulateRequest)
 		logger.Warnf("Encapsulate failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
+	if err := requireUsableKey(metadata); err != nil {
+		return nil, err
+	}
 	keyAgreement, err := requireKeyAgreementProvider(provider, metadata.Scheme)
 	if err != nil {
 		logger.Warnf("Encapsulate rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
@@ -202,6 +227,9 @@ func (p *Plugin) Decapsulate(ctx context.Context, req *proto.DecapsulateRequest)
 	metadata, provider, err := p.metadataProvider(ctx, req.ClientId, req.KeyId)
 	if err != nil {
 		logger.Warnf("Decapsulate failed to resolve metadata for key_id=%s", req.KeyId)
+		return nil, err
+	}
+	if err := requireUsableKey(metadata); err != nil {
 		return nil, err
 	}
 	keyAgreement, err := requireKeyAgreementProvider(provider, metadata.Scheme)
@@ -253,8 +281,11 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 		var statusErr *openbao.StatusError
 		if !errors.As(err, &statusErr) || statusErr.StatusCode != http.StatusNotFound {
 			logger.Warnf("CreateKey failed to verify key availability alias=%q", alias)
-			return nil, status.Error(codes.Internal, err.Error())
+			return nil, kmsBackendStatus("check alias availability", err)
 		}
+	}
+	if err := p.client.ensureAliasNotDeleted(ctx, req.ClientId, keyID); err != nil {
+		return nil, err
 	}
 
 	provider, err := p.providerForScheme(scheme)
@@ -273,7 +304,7 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 	record.normalize()
 	if err := p.client.putMetadata(ctx, req.ClientId, keyID, record); err != nil {
 		logger.Warnf("CreateKey failed to persist metadata for key_id=%s scheme=%s", keyID, scheme)
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, kmsBackendStatus("create key metadata", err)
 	}
 	logger.Infof("CreateKey completed key_id=%s scheme=%s", keyID, scheme)
 
@@ -339,6 +370,10 @@ func (p *Plugin) GenerateDataKey(ctx context.Context, req *proto.GenerateDataKey
 		logger.Warnf("GenerateDataKey failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
+	if err := requireUsableKey(metadata); err != nil {
+		return nil, err
+	}
+
 	generator, err := requireDataKeyProvider(provider, metadata.Scheme)
 	if err != nil {
 		logger.Warnf("GenerateDataKey rejected: unsupported operation for key_id=%s scheme=%s", req.KeyId, metadata.Scheme)
@@ -363,6 +398,9 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 		logger.Warnf("RotateKey failed to resolve metadata for key_id=%s", req.KeyId)
 		return nil, err
 	}
+	if err := requireUsableKey(metadata); err != nil {
+		return nil, err
+	}
 
 	rotator, err := requireRotateKeyProvider(provider, metadata.Scheme)
 	if err != nil {
@@ -377,7 +415,7 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 	updated.normalize()
 	if err := p.client.putMetadata(ctx, req.ClientId, updated.KeyID, updated); err != nil {
 		logger.Warnf("RotateKey failed to persist metadata for key_id=%s", updated.KeyID)
-		return nil, status.Error(codes.Internal, err.Error())
+		return nil, kmsBackendStatus("rotate key metadata", err)
 	}
 	logger.Infof(
 		"RotateKey completed for key_id=%s scheme=%s primary_version=%d",
@@ -477,6 +515,10 @@ func toProtoMetadata(record *keyMetadataRecord) *proto.KeyMetadata {
 		CreationDate:   record.CreatedAt,
 		Scheme:         record.Scheme,
 		Tags:           toProtoTags(record.Tags),
+		KeyState:       &record.KeyState,
+	}
+	if record.DeletionDate != "" {
+		metadata.DeletionDate = &record.DeletionDate
 	}
 	if record.PublicKey != "" {
 		metadata.PublicKey = &record.PublicKey

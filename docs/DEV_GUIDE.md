@@ -195,3 +195,9 @@ curl -X POST http://localhost:8080/api/v1/rpc \
     }
   }'
 ```
+## Transit Key Lifecycle
+
+See [lifecycle APIs, worker configuration and the isolated OpenBao test](../plugins/pkg/plugin/kms/LIFECYCLE.md).
+The worker defaults to 1h in code but must stay at 0 in deployments until the
+reviewed Transit/KV metadata delete grants are applied. Public scheduling retains
+the seven-day minimum; tests advance an injected clock, not a production setting.

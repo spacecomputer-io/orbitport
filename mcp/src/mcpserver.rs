@@ -20,7 +20,7 @@ struct Args {
     #[arg(
         long,
         default_value = "",
-        help = "Comma-separated opt-ins: decrypt,generate-data-key,encapsulate,decapsulate,keystore-get,keystore-delete"
+        help = "Comma-separated opt-ins: decrypt,generate-data-key,encapsulate,decapsulate,keystore-get,keystore-delete,disable-key,enable-key,schedule-key-deletion,cancel-key-deletion"
     )]
     allow: String,
 }

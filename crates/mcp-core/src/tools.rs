@@ -1,12 +1,14 @@
 use orbitport_kms_api::{
-    CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
-    DecryptResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest, EncryptResponse,
-    GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesRequest,
-    GetCapabilitiesResponse, GetKeyMetadataRequest, GetKeyMetadataResponse, GetPublicKeyRequest,
-    GetPublicKeyResponse, KeyStoreDeleteRequest, KeyStoreDeleteResponse, KeyStoreGetRequest,
-    KeyStoreGetResponse, KeyStoreListRequest, KeyStoreListResponse, KeyStorePutRequest,
-    KeyStorePutResponse, KmsValidation, RotateKeyRequest, RotateKeyResponse, SignRequest,
-    SignResponse,
+    CancelKeyDeletionRequest, CancelKeyDeletionResponse, CreateKeyRequest, CreateKeyResponse,
+    DecapsulateRequest, DecapsulateResponse, DecryptRequest, DecryptResponse, DisableKeyRequest,
+    DisableKeyResponse, EnableKeyRequest, EnableKeyResponse, EncapsulateRequest,
+    EncapsulateResponse, EncryptRequest, EncryptResponse, GenerateDataKeyRequest,
+    GenerateDataKeyResponse, GetCapabilitiesRequest, GetCapabilitiesResponse,
+    GetKeyMetadataRequest, GetKeyMetadataResponse, GetPublicKeyRequest, GetPublicKeyResponse,
+    KeyStoreDeleteRequest, KeyStoreDeleteResponse, KeyStoreGetRequest, KeyStoreGetResponse,
+    KeyStoreListRequest, KeyStoreListResponse, KeyStorePutRequest, KeyStorePutResponse,
+    KmsValidation, ListKeysRequest, ListKeysResponse, RotateKeyRequest, RotateKeyResponse,
+    ScheduleKeyDeletionRequest, ScheduleKeyDeletionResponse, SignRequest, SignResponse,
 };
 use schemars::JsonSchema;
 use serde::{Serialize, de::DeserializeOwned};
@@ -241,6 +243,46 @@ pub fn registry() -> Vec<ToolSpec> {
         };
     }
     vec![
+        tool!(
+            "kms_list_keys", "kms.ListKeys", ListKeysRequest, ListKeysResponse,
+            KmsValidation::validate_list_keys,
+            allow: None,
+            read_only: true,
+            destructive: false,
+            description: "List tenant-owned cryptographic key IDs across all schemes. Limit defaults to 100, maximum 1000; continue with NextToken."
+        ),
+        tool!(
+            "kms_disable_key", "kms.DisableKey", DisableKeyRequest, DisableKeyResponse,
+            KmsValidation::validate_disable_key,
+            allow: Some("disable-key"),
+            read_only: false,
+            destructive: true,
+            description: "Disable a TRANSIT key without deleting its key material."
+        ),
+        tool!(
+            "kms_enable_key", "kms.EnableKey", EnableKeyRequest, EnableKeyResponse,
+            KmsValidation::validate_enable_key,
+            allow: Some("enable-key"),
+            read_only: false,
+            destructive: true,
+            description: "Enable a disabled TRANSIT key. Pending deletion must be cancelled first."
+        ),
+        tool!(
+            "kms_schedule_key_deletion", "kms.ScheduleKeyDeletion", ScheduleKeyDeletionRequest, ScheduleKeyDeletionResponse,
+            KmsValidation::validate_schedule_key_deletion,
+            allow: Some("schedule-key-deletion"),
+            read_only: false,
+            destructive: true,
+            description: "Disable a TRANSIT key and schedule irreversible deletion after 7 to 30 days (default 30)."
+        ),
+        tool!(
+            "kms_cancel_key_deletion", "kms.CancelKeyDeletion", CancelKeyDeletionRequest, CancelKeyDeletionResponse,
+            KmsValidation::validate_cancel_key_deletion,
+            allow: Some("cancel-key-deletion"),
+            read_only: false,
+            destructive: true,
+            description: "Cancel TRANSIT deletion before its deadline. The key remains disabled until explicitly enabled."
+        ),
         tool!(
             "kms_get_capabilities",
             "kms.GetCapabilities",

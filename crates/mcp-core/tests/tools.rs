@@ -6,14 +6,109 @@ use serde_json::{
 
 fn all_policy() -> ToolPolicy {
     ToolPolicy::new(
-        "decrypt,generate-data-key,encapsulate,decapsulate,keystore-get,keystore-delete",
+        "decrypt,generate-data-key,encapsulate,decapsulate,keystore-get,keystore-delete,disable-key,enable-key,schedule-key-deletion,cancel-key-deletion",
     )
     .unwrap()
 }
 
 #[test]
+fn lifecycle_schemas_defaults_annotations_and_invalid_arguments() {
+    for capability in orbitport_kms_api::KmsValidation::get_capabilities().schemes {
+        assert!(capability.supports_list_keys);
+        assert_eq!(
+            capability.supports_disable_key,
+            capability.scheme == "TRANSIT"
+        );
+        assert_eq!(
+            capability.supports_enable_key,
+            capability.scheme == "TRANSIT"
+        );
+        assert_eq!(
+            capability.supports_schedule_key_deletion,
+            capability.scheme == "TRANSIT"
+        );
+        assert_eq!(
+            capability.supports_cancel_key_deletion,
+            capability.scheme == "TRANSIT"
+        );
+    }
+    let listed = serde_json::to_value(all_policy().definitions()).unwrap();
+    let tool = |name: &str| {
+        listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == name)
+            .unwrap()
+    };
+    let list = tool("kms_list_keys");
+    assert_eq!(list["annotations"]["readOnlyHint"], true);
+    assert_eq!(list["inputSchema"]["properties"]["Limit"]["default"], 100);
+    assert_eq!(list["inputSchema"]["properties"]["Limit"]["maximum"], 1000);
+    assert_eq!(
+        tool("kms_schedule_key_deletion")["inputSchema"]["properties"]["PendingWindowInDays"]["minimum"],
+        7
+    );
+    assert_eq!(
+        tool("kms_schedule_key_deletion")["inputSchema"]["properties"]["PendingWindowInDays"]["default"],
+        30
+    );
+    for name in [
+        "kms_disable_key",
+        "kms_enable_key",
+        "kms_schedule_key_deletion",
+        "kms_cancel_key_deletion",
+    ] {
+        assert_eq!(tool(name)["annotations"]["destructiveHint"], true);
+    }
+    for (name, args) in [
+        ("kms_list_keys", json!({"Limit":1001})),
+        (
+            "kms_schedule_key_deletion",
+            json!({"KeyId":"a","PendingWindowInDays":1}),
+        ),
+        ("kms_disable_key", json!({"KeyId":"../a"})),
+    ] {
+        let line = json!({"jsonrpc":"2.0","id":"invalid","method":"tools/call",
+            "params":{"name":name,"arguments":args}})
+        .to_string();
+        let Dispatch::Reply(reply) = dispatch(&line, &all_policy()) else {
+            panic!("invalid arguments dispatched")
+        };
+        let value: Value = serde_json::from_str(&reply).unwrap();
+        assert_eq!(value["result"]["isError"], true);
+        assert!(value.get("error").is_none());
+    }
+}
+
+#[test]
 fn registry_maps_every_method_and_applies_visibility_to_listing_and_dispatch() {
     let cases = [
+        ("kms_list_keys", "kms.ListKeys", json!({}), None),
+        (
+            "kms_disable_key",
+            "kms.DisableKey",
+            json!({"KeyId":"a"}),
+            Some("disable-key"),
+        ),
+        (
+            "kms_enable_key",
+            "kms.EnableKey",
+            json!({"KeyId":"a"}),
+            Some("enable-key"),
+        ),
+        (
+            "kms_schedule_key_deletion",
+            "kms.ScheduleKeyDeletion",
+            json!({"KeyId":"a","PendingWindowInDays":7}),
+            Some("schedule-key-deletion"),
+        ),
+        (
+            "kms_cancel_key_deletion",
+            "kms.CancelKeyDeletion",
+            json!({"KeyId":"a"}),
+            Some("cancel-key-deletion"),
+        ),
         (
             "kms_get_capabilities",
             "kms.GetCapabilities",
@@ -108,7 +203,7 @@ fn registry_maps_every_method_and_applies_visibility_to_listing_and_dispatch() {
     assert_eq!(registry().len(), cases.len());
     let default = ToolPolicy::default();
     let listed = serde_json::to_value(default.definitions()).unwrap();
-    assert_eq!(listed.as_array().unwrap().len(), 9);
+    assert_eq!(listed.as_array().unwrap().len(), 10);
     for (name, method, args, allow) in cases {
         let spec = registry().into_iter().find(|s| s.name == name).unwrap();
         assert_eq!(spec.method, method);

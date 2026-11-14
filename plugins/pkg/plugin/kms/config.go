@@ -3,12 +3,13 @@ package kms
 import "github.com/spf13/viper"
 
 const (
-	defaultKMSEthereumMount = "ethereum"
-	defaultKMSPQCMount      = "pqc"
-	defaultKMSTransitMount  = "transit"
-	defaultKMSKVMount       = "secret"
-	defaultKMSKeyStoreMount = "key-store"
-	defaultKMSTimeoutSecs   = 10
+	defaultKMSEthereumMount         = "ethereum"
+	defaultKMSPQCMount              = "pqc"
+	defaultKMSTransitMount          = "transit"
+	defaultKMSKVMount               = "secret"
+	defaultKMSKeyStoreMount         = "key-store"
+	defaultKMSTimeoutSecs           = 10
+	defaultKMSDeletionSweepInterval = "1h"
 )
 
 type kmsConfig struct {
@@ -20,6 +21,7 @@ type kmsConfig struct {
 	KeyStoreMount           string
 	KeyStoreCedarPolicyPath string
 	TimeoutSecs             int
+	DeletionSweepInterval   string
 }
 
 func readFromEnv() *kmsConfig {
@@ -34,6 +36,7 @@ func readFromEnv() *kmsConfig {
 		KeyStoreMount:           viper.GetString("KMS_KEY_STORE_MOUNT"),
 		KeyStoreCedarPolicyPath: viper.GetString("KMS_KEY_STORE_CEDAR_POLICY_PATH"),
 		TimeoutSecs:             viper.GetInt("KMS_TIMEOUT_SECS"),
+		DeletionSweepInterval:   viper.GetString("KMS_DELETION_SWEEP_INTERVAL"),
 	}
 }
 
@@ -45,6 +48,7 @@ func setDefaults() {
 	viper.SetDefault("KMS_KEY_STORE_MOUNT", defaultKMSKeyStoreMount)
 	viper.SetDefault("KMS_KEY_STORE_CEDAR_POLICY_PATH", "")
 	viper.SetDefault("KMS_TIMEOUT_SECS", defaultKMSTimeoutSecs)
+	viper.SetDefault("KMS_DELETION_SWEEP_INTERVAL", defaultKMSDeletionSweepInterval)
 }
 
 func withKMSConfigDefaults(cfg *kmsConfig) *kmsConfig {
@@ -52,6 +56,9 @@ func withKMSConfigDefaults(cfg *kmsConfig) *kmsConfig {
 		cfg = &kmsConfig{}
 	}
 	next := *cfg
+	if next.DeletionSweepInterval == "" {
+		next.DeletionSweepInterval = defaultKMSDeletionSweepInterval
+	}
 	if next.EthereumMount == "" {
 		next.EthereumMount = defaultKMSEthereumMount
 	}

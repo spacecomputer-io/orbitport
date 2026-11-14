@@ -191,6 +191,7 @@ fn rpc_error(raw: &RawValue) -> McpError {
                 Some("not_found") => McpError::ResourceNotFound,
                 Some("permission_denied") => McpError::KmsPermissionDenied,
                 Some("failed_precondition") => McpError::FailedPrecondition,
+                Some("aborted") => McpError::ConcurrentChange,
                 Some("invalid_argument") => McpError::InvalidOperationArguments,
                 _ => McpError::OperationFailed,
             }
