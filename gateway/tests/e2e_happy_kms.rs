@@ -1,5 +1,3 @@
-#![cfg(feature = "kms")]
-
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 

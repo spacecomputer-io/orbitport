@@ -18,7 +18,7 @@ struct Args {
     metric_port: u16,
     #[clap(long, env = "ORBITPORT_AUTH_PLUGIN")]
     auth_plugin: String,
-    #[cfg(feature = "kms")]
+
     #[clap(long, env = "ORBITPORT_KMS_PLUGIN")]
     kms_plugin: String,
     #[cfg(feature = "kms_threshold")]
@@ -27,9 +27,6 @@ struct Args {
     #[cfg(feature = "kms_threshold")]
     #[clap(long, env = "ORBITPORT_THRESHOLD_GROUPS", default_value = "")]
     threshold_groups: String,
-    #[cfg(feature = "ctrng")]
-    #[clap(long, env = "ORBITPORT_MASTERSEED_PLUGIN")]
-    masterseed_plugin: Option<String>,
     /// Optional account plugin gRPC URL. When set, JWT-authenticated routes
     /// hold credits via the account plugin before serving the request and
     /// release on downstream failure.
@@ -129,13 +126,7 @@ async fn main() -> Result<(), GatewayError> {
         });
     }
 
-    let mut plugin_urls = vec![
-        args.auth_plugin.to_string(),
-        #[cfg(feature = "kms")]
-        args.kms_plugin.to_string(),
-        #[cfg(feature = "ctrng")]
-        args.masterseed_plugin.to_string(),
-    ];
+    let mut plugin_urls = vec![args.auth_plugin.to_string(), args.kms_plugin.to_string()];
     if let Some(ref url) = args.account_plugin {
         plugin_urls.push(url.to_string());
     }
@@ -177,9 +168,6 @@ async fn main() -> Result<(), GatewayError> {
 
     let plugin_catalog = Arc::new(gateway::plugins::PluginCatalog::new(
         &args.auth_plugin,
-        #[cfg(feature = "ctrng")]
-        &args.masterseed_plugin,
-        #[cfg(feature = "kms")]
         &args.kms_plugin,
         args.account_plugin.as_deref(),
         args.patissuer_plugin.as_deref(),

@@ -23,26 +23,6 @@ pub enum E2EError {
 }
 
 #[allow(dead_code)]
-pub async fn rpc_ctrng_get(
-    base_url: &str,
-    access_token: &str,
-    count: u32,
-) -> Result<gateway::proto::services::ctrng::CTrngResponse, E2EError> {
-    let req_id = 1;
-    let payload = serde_json::json!(
-        {
-            "jsonrpc": "2.0",
-            "id": req_id,
-            "method": "ctrng.Get",
-            "params": serde_json::json!({
-                "chunks": count
-            }),
-        }
-    );
-    rpc_success_result(base_url, access_token, req_id, payload).await
-}
-
-#[allow(dead_code)]
 pub async fn rpc_threshold_coordinate_dkg(
     base_url: &str,
     access_token: &str,

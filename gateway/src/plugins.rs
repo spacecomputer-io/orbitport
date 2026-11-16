@@ -10,10 +10,8 @@ use tonic_health::pb::{
 
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
 use crate::proto::plugins::auth::auth_plugin_client::AuthPluginClient;
-#[cfg(feature = "kms")]
+
 use crate::proto::plugins::kms::kms_plugin_client::KmsPluginClient;
-#[cfg(feature = "ctrng")]
-use crate::proto::plugins::masterseed::master_seed_plugin_client::MasterSeedPluginClient;
 use crate::proto::plugins::patissuer::pat_issuer_plugin_client::PatIssuerPluginClient;
 #[cfg(feature = "kms_threshold")]
 use crate::proto::plugins::threshold::threshold_plugin_client::ThresholdPluginClient;
@@ -131,8 +129,7 @@ impl PluginCatalog {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         auth_url: &str,
-        #[cfg(feature = "ctrng")] masterseed_url: &str,
-        #[cfg(feature = "kms")] kms_url: &str,
+        kms_url: &str,
         account_url: Option<&str>,
         patissuer_url: Option<&str>,
         #[cfg(feature = "kms_threshold")] threshold_url: &str,
@@ -140,15 +137,11 @@ impl PluginCatalog {
     ) -> Self {
         let mut urls = HashMap::new();
         urls.insert("auth".to_string(), auth_url.to_string());
-        #[cfg(feature = "kms")]
+
         {
             urls.insert("kms".to_string(), kms_url.to_string());
             #[cfg(feature = "kms_threshold")]
             urls.insert("threshold".to_string(), threshold_url.to_string());
-        }
-        #[cfg(feature = "ctrng")]
-        {
-            urls.insert("masterseed".to_string(), masterseed_url.to_string());
         }
 
         if let Some(url) = account_url {
@@ -184,15 +177,6 @@ impl PluginCatalog {
         Ok(AuthPluginClient::new(channel))
     }
 
-    #[cfg(feature = "ctrng")]
-    pub async fn get_masterseed_client(
-        &self,
-    ) -> Result<MasterSeedPluginClient<Channel>, PluginError> {
-        let channel = self.get_client("masterseed").await?;
-        Ok(MasterSeedPluginClient::new(channel))
-    }
-
-    #[cfg(feature = "kms")]
     pub async fn get_kms_client(&self) -> Result<KmsPluginClient<Channel>, PluginError> {
         let channel = self.get_client("kms").await?;
         Ok(KmsPluginClient::new(channel))

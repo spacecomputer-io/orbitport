@@ -12,7 +12,7 @@ async fn assert_rpc_validation_error(
     let payload = serde_json::json!({
         "jsonrpc": "2.0",
         "id": req_id,
-        "method": "ctrng.Get",
+        "method": "ctrng.Get", // TODO (cleanup): change to existing method after removing ctrng feature
         "params": {
             "chunks": chunks
         }
@@ -96,7 +96,7 @@ async fn test_e2e_error_rpc_bad_method() {
         let payload = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 21,
-            "method": "ctrng.Missing",
+            "method": "ctrng.Missing", // TODO (cleanup): change to existing method after removing ctrng feature
             "params": {
                 "chunks": 1
             }

@@ -1,18 +1,12 @@
 use crate::plugins::PluginCatalog;
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "ctrng")]
-use crate::proto::services::ctrng::{CTrngRequest, CTrngResponse};
-#[cfg(feature = "ctrng")]
-use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
-
-#[cfg(feature = "kms")]
 use crate::proto::services::kms::{
     CreateKeyRequest, DecapsulateRequest, DecryptRequest, EncapsulateRequest, EncryptRequest,
     GenerateDataKeyRequest, GetCapabilitiesRequest, GetKeyMetadataRequest, GetPublicKeyRequest,
     RotateKeyRequest, SignRequest,
 };
-#[cfg(feature = "kms")]
+
 use crate::services::kms::{KmsRpcCall, KmsService};
 
 #[cfg(feature = "kms_threshold")]
@@ -132,37 +126,33 @@ impl<T> JsonRpcResponse<T> {
 /// This allows for easy routing of RPC calls to the appropriate service handlers.
 #[derive(Debug)]
 pub enum RpcCall {
-    #[cfg(feature = "ctrng")]
-    #[serde(rename = "ctrng.Get")]
-    GetCTRNG(CTrngRequest),
-    #[cfg(feature = "kms")]
     #[serde(rename = "kms.GetCapabilities")]
     GetCapabilities(GetCapabilitiesRequest),
-    #[cfg(feature = "kms")]
+
     #[serde(rename = "kms.CreateKey")]
     CreateKey(CreateKeyRequest),
-    #[cfg(feature = "kms")]
+
     #[serde(rename = "kms.Decrypt")]
     Decrypt(DecryptRequest),
-    #[cfg(feature = "kms")]
+
     #[serde(rename = "kms.Encrypt")]
     Encrypt(EncryptRequest),
-    #[cfg(feature = "kms")]
+
     #[serde(rename = "kms.GenerateDataKey")]
     GenerateDataKey(GenerateDataKeyRequest),
-    #[cfg(feature = "kms")]
+
     #[serde(rename = "kms.RotateKey")]
     RotateKey(RotateKeyRequest),
-    #[cfg(feature = "kms")]
+
     KeyStorePut(KeyStorePutRequest),
     KeyStoreGet(KeyStoreGetRequest),
     KeyStoreList(KeyStoreListRequest),
     KeyStoreDelete(KeyStoreDeleteRequest),
     Sign(SignRequest),
-    #[cfg(feature = "kms")]
+
     #[serde(rename = "kms.Encapsulate")]
     Encapsulate(EncapsulateRequest),
-    #[cfg(feature = "kms")]
+
     #[serde(rename = "kms.Decapsulate")]
     Decapsulate(DecapsulateRequest),
     #[cfg(feature = "kms_threshold")]
@@ -175,7 +165,6 @@ pub enum RpcCall {
 impl RpcCall {
     fn from_method_and_params(method: &str, params_json: &str) -> Result<Self, String> {
         match method {
-            "ctrng.Get" => Ok(Self::GetCTRNG(Self::parse_params(method, params_json)?)),
             "kms.GetCapabilities" => Ok(Self::GetCapabilities(Self::parse_params(
                 method,
                 params_json,
@@ -222,7 +211,6 @@ impl RpcCall {
     pub fn validate(&self) -> Result<(), String> {
         tracing::trace!("Validating RPC call: {:?}", self);
 
-        #[cfg(feature = "kms")]
         match self {
             RpcCall::GetCapabilities(_) => {}
             RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
@@ -246,18 +234,6 @@ impl RpcCall {
             _ => {}
         }
 
-        #[cfg(feature = "ctrng")]
-        if let RpcCall::GetCTRNG(req) = self
-            && let Some(chunks) = req.chunks
-        {
-            if chunks > MAX_CHUNKS {
-                return Err("Max chunks exceeded".to_string());
-            }
-            if chunks < 1 {
-                return Err("Chunks must be at least 1".to_string());
-            }
-        }
-
         Ok(())
     }
 
@@ -265,7 +241,6 @@ impl RpcCall {
     /// `validate()` passes, which pins the variant to an exact known value.
     pub fn operation(&self) -> String {
         match self {
-            RpcCall::GetCTRNG(_) => "ctrng.Get".to_string(),
             RpcCall::GetCapabilities(_) => "kms.GetCapabilities".to_string(),
             RpcCall::CreateKey(req) => format!("kms.CreateKey:{}", req.key_spec),
             RpcCall::GetKeyMetadata(_) => "kms.GetKeyMetadata".to_string(),
@@ -299,7 +274,6 @@ impl RpcCall {
             client_id
         );
 
-        #[cfg(feature = "kms")]
         match self {
             RpcCall::GetCapabilities(_) => {
                 return serialize_success_response(req_id, KmsService::get_capabilities());
@@ -445,22 +419,6 @@ impl RpcCall {
             _ => {}
         };
 
-        #[allow(irrefutable_let_patterns)]
-        #[cfg(feature = "ctrng")]
-        if let RpcCall::GetCTRNG(req) = self {
-            let grpc_client = plugin_catalog
-                .get_masterseed_client()
-                .await
-                .map_err(|_| tonic::Status::unavailable("Masterseed plugin unavailable"))?;
-            let mut svc = CTrngService::new(grpc_client);
-            let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
-                // We can log _e here for debugging, but we don't want to expose internal errors to the client
-                tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
-                tonic::Status::internal("Failed to get mixed cTRNG")
-            })?;
-            return serialize_success_response(req_id, results);
-        }
-
         Err(tonic::Status::unimplemented("Unsupported RPC call"))
     }
 }
@@ -475,7 +433,6 @@ fn serialize_success_response<T: Serialize>(
         .map_err(|e| tonic::Status::internal(format!("Failed to serialize response: {e}")))
 }
 
-#[cfg(feature = "kms")]
 async fn execute_kms(
     req_id: u64,
     client_id: &str,
@@ -559,13 +516,11 @@ mod test {
         }
     }
 
-    #[cfg(feature = "kms")]
     fn request_from_value(raw: serde_json::Value) -> JsonRpcRequest {
         let raw_json = serde_json::to_string(&raw).unwrap();
         serde_json::from_str(&raw_json).unwrap()
     }
 
-    #[cfg(feature = "kms")]
     #[test]
     fn test_deserialize_kms_encrypt_pascal_case() {
         let raw = serde_json::json!({
@@ -593,7 +548,6 @@ mod test {
         }
     }
 
-    #[cfg(feature = "kms")]
     #[test]
     fn test_deserialize_kms_get_capabilities_pascal_case() {
         let raw = serde_json::json!({
@@ -781,7 +735,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "kms")]
     #[test]
     fn test_deserialize_kms_get_key_metadata_pascal_case() {
         let raw = serde_json::json!({
@@ -953,7 +906,6 @@ mod test {
         );
     }
 
-    #[cfg(feature = "kms")]
     #[test]
     fn test_deserialize_kms_decapsulate_pascal_case() {
         let raw = serde_json::json!({
@@ -1333,10 +1285,6 @@ mod test {
             "kms.GetPublicKey"
         );
         assert_eq!(
-            operation_of("ctrng.Get", serde_json::json!({})),
-            "ctrng.Get"
-        );
-        assert_eq!(
             operation_of(
                 "kms_keystore.Put",
                 serde_json::json!({"Name": "github/prod", "Secret": {"api_key": "secret"}})
@@ -1423,10 +1371,6 @@ mod test {
                 serde_json::json!({"KeyId": "telemetry-signing"})
             ),
             "kms.GetPublicKey"
-        );
-        assert_eq!(
-            operation_of("ctrng.Get", serde_json::json!({})),
-            "ctrng.Get"
         );
         assert_eq!(
             operation_of(

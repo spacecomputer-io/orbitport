@@ -123,6 +123,7 @@ async fn run_test(
 
                 request_handles.push(tokio::spawn(async move {
                     sent.fetch_add(1, Ordering::SeqCst);
+                    // TODO (cleanup): change to existing method after removing ctrng feature
                     match common::rpc_ctrng_get(&base_url, &access_token, 1).await {
                         Ok(resp) => {
                             if !resp.items.is_empty() {

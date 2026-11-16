@@ -10,20 +10,11 @@ pub mod proto {
         pub mod auth {
             tonic::include_proto!("auth");
         }
-        pub mod ao {
-            tonic::include_proto!("ao");
-        }
-        pub mod ipfs {
-            tonic::include_proto!("ipfs");
-        }
         pub mod patissuer {
             tonic::include_proto!("patissuer");
         }
         pub mod kms {
             tonic::include_proto!("kmsapi");
-        }
-        pub mod masterseed {
-            tonic::include_proto!("masterseed");
         }
         pub mod threshold {
             tonic::include_proto!("thresholdapi");
@@ -31,9 +22,7 @@ pub mod proto {
     }
 
     pub mod services {
-        pub mod ctrng {
-            tonic::include_proto!("ctrng");
-        }
+
         pub mod kms {
             pub use orbitport_kms_api::kms::*;
         }
