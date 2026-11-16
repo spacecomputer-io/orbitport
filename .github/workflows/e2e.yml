@@ -3,8 +3,10 @@ name: E2e Tests
 on:
   push:
     branches: [ "main" ]
+    paths-ignore: [ "examples/**" ]
   pull_request:
     branches: [ "*" ]
+    paths-ignore: [ "examples/**" ]
 
 jobs:
   build:
@@ -43,6 +45,14 @@ jobs:
           path: openbao-threshold-plugin
           fetch-depth: 1
           token: ${{ secrets.OPENBAO_THRESHOLD_PLUGIN_PAT }}
+      # runtime bases come from dhi.io, which needs its own login
+      - name: Log in to the DHI registry
+        uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
       - name: Build docker images
         run: |
           make docker-build

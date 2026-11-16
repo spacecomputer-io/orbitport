@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"strings"
 	"sync"
 	"time"
@@ -179,11 +178,13 @@ func parseJWKS(jwksJSON string) (map[string]*ecdsa.PublicKey, error) {
 		if err != nil {
 			return nil, fmt.Errorf("JWK kid %q: decoding y: %w", k.Kid, err)
 		}
-		keys[k.Kid] = &ecdsa.PublicKey{
-			Curve: elliptic.P256(),
-			X:     new(big.Int).SetBytes(x),
-			Y:     new(big.Int).SetBytes(y),
+		// uncompressed SEC 1 point: 0x04 || X || Y
+		point := append(append([]byte{4}, x...), y...)
+		pub, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point)
+		if err != nil {
+			return nil, fmt.Errorf("JWK kid %q: invalid P-256 point: %w", k.Kid, err)
 		}
+		keys[k.Kid] = pub
 	}
 	if len(keys) == 0 {
 		return nil, fmt.Errorf("JWKS contains no usable EC P-256 keys")
@@ -220,20 +221,20 @@ func (p *Plugin) validatePAT(ctx context.Context, tokenString string) (*proto.To
 			// matches on the string.
 			return nil, status.Error(codes.Unauthenticated, "pat_expired: "+err.Error())
 		}
-		return nil, fmt.Errorf("failed to validate PAT: %w", err)
+		return nil, status.Errorf(codes.Unauthenticated, "invalid_credential: %v", err)
 	}
 
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("unexpected PAT claims type %T", parsed.Claims)
+		return nil, status.Errorf(codes.Unauthenticated, "invalid_credential: unexpected PAT claims type %T", parsed.Claims)
 	}
 	sub, _ := claims["sub"].(string)
 	if sub == "" {
-		return nil, fmt.Errorf("validated PAT is missing sub claim")
+		return nil, status.Errorf(codes.Unauthenticated, "invalid_credential: validated PAT is missing sub claim")
 	}
 	jti, _ := claims["jti"].(string)
 	if jti == "" {
-		return nil, fmt.Errorf("validated PAT is missing jti claim")
+		return nil, status.Errorf(codes.Unauthenticated, "invalid_credential: validated PAT is missing jti claim")
 	}
 	// Optional until the D9 backfill lands — empty means no frozen tenant.
 	kmsTenant, _ := claims["kms_tenant"].(string)

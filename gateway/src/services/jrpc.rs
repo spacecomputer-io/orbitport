@@ -88,13 +88,38 @@ impl<T> JsonRpcResponse<T> {
     }
 
     pub fn error(id: u64, code: i32, message: impl Into<String>) -> Self {
+        Self::error_with_data(id, code, message.into(), None)
+    }
+
+    pub fn execution_error(id: u64, status: &tonic::Status) -> Self {
+        let reason = match status.code() {
+            tonic::Code::NotFound => Some("not_found"),
+            tonic::Code::PermissionDenied => Some("permission_denied"),
+            tonic::Code::FailedPrecondition => Some("failed_precondition"),
+            tonic::Code::InvalidArgument => Some("invalid_argument"),
+            _ => None,
+        };
+        Self::error_with_data(
+            id,
+            -32001,
+            status.to_string(),
+            reason.map(|reason| serde_json::json!({"reason": reason})),
+        )
+    }
+
+    fn error_with_data(
+        id: u64,
+        code: i32,
+        message: String,
+        data: Option<serde_json::Value>,
+    ) -> Self {
         Self {
             jsonrpc: "2.0",
             result: None,
             error: Some(JsonRpcError {
                 code,
-                message: message.into(),
-                data: None,
+                message,
+                data,
             }),
             id,
         }
@@ -486,6 +511,54 @@ async fn execute_threshold(
 mod test {
     use super::*;
 
+    #[test]
+    fn execution_errors_preserve_legacy_fields_and_include_known_reasons() {
+        for (code, reason) in [
+            (tonic::Code::NotFound, Some("not_found")),
+            (tonic::Code::PermissionDenied, Some("permission_denied")),
+            (tonic::Code::FailedPrecondition, Some("failed_precondition")),
+            (tonic::Code::InvalidArgument, Some("invalid_argument")),
+            (tonic::Code::Internal, None),
+        ] {
+            let status = tonic::Status::new(code, "backend detail");
+            let reply =
+                serde_json::to_value(JsonRpcResponse::<()>::execution_error(7, &status)).unwrap();
+            assert_eq!(reply["jsonrpc"], "2.0");
+            assert_eq!(reply["id"], 7);
+            let error = &reply["error"];
+            assert_eq!(error["code"], -32001);
+            assert_eq!(error["message"], status.to_string());
+            match reason {
+                Some(reason) => assert_eq!(error["data"], serde_json::json!({"reason": reason})),
+                None => assert!(error.get("data").is_none()),
+            }
+        }
+    }
+
+    #[test]
+    fn execution_errors_preserve_legacy_fields_and_include_known_reasons() {
+        for (code, reason) in [
+            (tonic::Code::NotFound, Some("not_found")),
+            (tonic::Code::PermissionDenied, Some("permission_denied")),
+            (tonic::Code::FailedPrecondition, Some("failed_precondition")),
+            (tonic::Code::InvalidArgument, Some("invalid_argument")),
+            (tonic::Code::Internal, None),
+        ] {
+            let status = tonic::Status::new(code, "backend detail");
+            let reply =
+                serde_json::to_value(JsonRpcResponse::<()>::execution_error(7, &status)).unwrap();
+            assert_eq!(reply["jsonrpc"], "2.0");
+            assert_eq!(reply["id"], 7);
+            let error = &reply["error"];
+            assert_eq!(error["code"], -32001);
+            assert_eq!(error["message"], status.to_string());
+            match reason {
+                Some(reason) => assert_eq!(error["data"], serde_json::json!({"reason": reason})),
+                None => assert!(error.get("data").is_none()),
+            }
+        }
+    }
+
     #[cfg(feature = "kms")]
     fn request_from_value(raw: serde_json::Value) -> JsonRpcRequest {
         let raw_json = serde_json::to_string(&raw).unwrap();
@@ -584,7 +657,8 @@ mod test {
             "id": 8,
             "method": "kms.GetPublicKey",
             "params": {
-                "KeyId": "telemetry-signing"
+                "KeyId": "telemetry-signing",
+                "Version": 1
             }
         });
 
@@ -592,6 +666,7 @@ mod test {
         match req.call {
             RpcCall::GetPublicKey(params) => {
                 assert_eq!(params.key_id, "telemetry-signing");
+                assert_eq!(params.version, Some(1));
             }
             _ => panic!("expected kms.GetPublicKey"),
         }
@@ -620,13 +695,9 @@ mod test {
             .expect("missing ML_DSA signing capability");
         assert_eq!(signing["Tags"], serde_json::json!(["experimental"]));
 
-        let key_agreement = pqc["KeyAgreementCapabilities"]
-            .as_array()
-            .expect("KeyAgreementCapabilities should be an array")
-            .iter()
-            .find(|capability| capability["KeyAgreementAlgorithm"] == "ML_KEM")
-            .expect("missing ML_KEM key agreement capability");
-        assert_eq!(key_agreement["Tags"], serde_json::json!(["experimental"]));
+        assert_eq!(pqc["KeyAgreementCapabilities"], serde_json::json!([]));
+        assert_eq!(pqc["SupportsEncapsulate"], false);
+        assert_eq!(pqc["SupportsDecapsulate"], false);
     }
 
     #[test]
@@ -664,12 +735,14 @@ mod test {
     }
 
     #[test]
-    fn test_serialize_kms_get_public_key_only_includes_public_key() {
+    fn test_serialize_kms_sign_includes_key_version() {
         let response = serialize_success_response(
             8,
-            crate::proto::services::kms::GetPublicKeyResponse {
-                public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
-                    .to_string(),
+            crate::proto::services::kms::SignResponse {
+                key_id: "kms:telemetry-signing".to_string(),
+                signature: "vault:v2:signature".to_string(),
+                signing_algorithm: "ECDSA_SHA_256".to_string(),
+                key_version: 2,
             },
         )
         .expect("serialize");
@@ -678,7 +751,32 @@ mod test {
         assert_eq!(
             response["result"],
             serde_json::json!({
-                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+                "KeyId": "kms:telemetry-signing",
+                "Signature": "vault:v2:signature",
+                "SigningAlgorithm": "ECDSA_SHA_256",
+                "KeyVersion": 2
+            })
+        );
+    }
+
+    #[test]
+    fn test_serialize_kms_get_public_key_includes_version() {
+        let response = serialize_success_response(
+            8,
+            crate::proto::services::kms::GetPublicKeyResponse {
+                public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+                    .to_string(),
+                version: 2,
+            },
+        )
+        .expect("serialize");
+
+        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
+        assert_eq!(
+            response["result"],
+            serde_json::json!({
+                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
+                "Version": 2
             })
         );
     }
@@ -731,7 +829,8 @@ mod test {
             "id": 8,
             "method": "kms.GetPublicKey",
             "params": {
-                "KeyId": "telemetry-signing"
+                "KeyId": "telemetry-signing",
+                "Version": 1
             }
         });
 
@@ -739,6 +838,7 @@ mod test {
         match req.call {
             RpcCall::GetPublicKey(params) => {
                 assert_eq!(params.key_id, "telemetry-signing");
+                assert_eq!(params.version, Some(1));
             }
             _ => panic!("expected kms.GetPublicKey"),
         }
@@ -767,13 +867,9 @@ mod test {
             .expect("missing ML_DSA signing capability");
         assert_eq!(signing["Tags"], serde_json::json!(["experimental"]));
 
-        let key_agreement = pqc["KeyAgreementCapabilities"]
-            .as_array()
-            .expect("KeyAgreementCapabilities should be an array")
-            .iter()
-            .find(|capability| capability["KeyAgreementAlgorithm"] == "ML_KEM")
-            .expect("missing ML_KEM key agreement capability");
-        assert_eq!(key_agreement["Tags"], serde_json::json!(["experimental"]));
+        assert_eq!(pqc["KeyAgreementCapabilities"], serde_json::json!([]));
+        assert_eq!(pqc["SupportsEncapsulate"], false);
+        assert_eq!(pqc["SupportsDecapsulate"], false);
     }
 
     #[test]
@@ -811,12 +907,14 @@ mod test {
     }
 
     #[test]
-    fn test_serialize_kms_get_public_key_only_includes_public_key() {
+    fn test_serialize_kms_sign_includes_key_version() {
         let response = serialize_success_response(
             8,
-            crate::proto::services::kms::GetPublicKeyResponse {
-                public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
-                    .to_string(),
+            crate::proto::services::kms::SignResponse {
+                key_id: "kms:telemetry-signing".to_string(),
+                signature: "vault:v2:signature".to_string(),
+                signing_algorithm: "ECDSA_SHA_256".to_string(),
+                key_version: 2,
             },
         )
         .expect("serialize");
@@ -825,7 +923,32 @@ mod test {
         assert_eq!(
             response["result"],
             serde_json::json!({
-                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+                "KeyId": "kms:telemetry-signing",
+                "Signature": "vault:v2:signature",
+                "SigningAlgorithm": "ECDSA_SHA_256",
+                "KeyVersion": 2
+            })
+        );
+    }
+
+    #[test]
+    fn test_serialize_kms_get_public_key_includes_version() {
+        let response = serialize_success_response(
+            8,
+            crate::proto::services::kms::GetPublicKeyResponse {
+                public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
+                    .to_string(),
+                version: 2,
+            },
+        )
+        .expect("serialize");
+
+        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
+        assert_eq!(
+            response["result"],
+            serde_json::json!({
+                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
+                "Version": 2
             })
         );
     }

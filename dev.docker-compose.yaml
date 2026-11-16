@@ -6,7 +6,7 @@ x-plugin-base:
       max-size: "10m"
       max-file: "3"
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+    test: ["CMD", "/app", "healthcheck"]
     interval: 10s
     timeout: 5s
     retries: 3
@@ -535,7 +535,7 @@ services:
       # beyond localhost. Host 8090 avoids ipfs-node's 8081 binding.
       - 127.0.0.1:8090:8081
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "/bin/gateway", "healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 3

@@ -138,6 +138,10 @@ func (p *pqcProvider) Sign(ctx context.Context, metadata *keyMetadataRecord, req
 	}, nil
 }
 
+func (p *pqcProvider) GetPublicKey(ctx context.Context, metadata *keyMetadataRecord, version uint32) (*publicKeyRecord, error) {
+	return publicKeyFromMetadata(ctx, metadata, version)
+}
+
 func (p *pqcProvider) Encapsulate(_ context.Context, metadata *keyMetadataRecord, _ *proto.EncapsulateRequest) (*proto.EncapsulateResponse, error) {
 	if err := validatePQCKeyUsage(metadata.KeySpec, metadata.KeyUsage); err != nil {
 		return nil, status.Error(codes.FailedPrecondition, "key does not support PQC key agreement")

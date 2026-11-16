@@ -24,7 +24,7 @@ build:
 	@cargo build --release --features "${RUST_FEATURES}" --no-default-features
 
 run: build
-	@./target/release/gateway
+	@cargo run --release --bin gateway
 
 docker-build:
 	@${CONTAINER_TOOL} build --build-arg RUST_FEATURES="${RUST_FEATURES}" -f Dockerfile -t ${DOCKER_IMAGE}:${DOCKER_TAG} ..

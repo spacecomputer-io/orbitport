@@ -2,8 +2,8 @@
 
 ################################################################################
 
-ARG GO_VERSION=1.25
-ARG ALPINE_VERSION=3.22
+ARG GO_VERSION=1.26
+ARG ALPINE_VERSION=3.24
 
 FROM dhi.io/golang:${GO_VERSION}-alpine${ALPINE_VERSION} AS builder
 
@@ -20,22 +20,21 @@ RUN go mod download
 
 COPY . .
 
-RUN go build -o bin/ ./cmd/${BUILD_TARGET}/...
+RUN CGO_ENABLED=0 go build -o bin/ ./cmd/${BUILD_TARGET}/...
 
 ################################################################################
 
-FROM dhi.io/alpine-base:${ALPINE_VERSION}-alpine${ALPINE_VERSION}-dev
+# distroless: CA certs and a nonroot user, no shell or package manager
+# pinned by digest because the TEE measures this image
+FROM dhi.io/static:20250419-debian13@sha256:98ef7a853608577e8d66dad1d25ada75d745d782f28d84e9ecfb85dfeb1f9c98
 
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
 ARG BUILD_TARGET=plugin
 
-RUN apk --no-cache add curl \
-    && addgroup -S appgroup \
-    && adduser -S -G appgroup appuser
+COPY --from=builder /app/bin/${BUILD_TARGET} /app
 
-COPY --from=builder --chown=appuser:appgroup /app/bin/${BUILD_TARGET} /app
-USER appuser
+USER 65532:65532
 
 ENTRYPOINT ["/app"]

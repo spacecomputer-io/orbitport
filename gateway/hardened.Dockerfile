@@ -25,34 +25,33 @@ RUN apt-get update && apt-get install -y \
 # Leverage a bind mount to the src directory to avoid having to copy the
 # source code into the container. Once built, copy the executable to an
 # output directory before the cache mounted /app/target is unmounted.
-RUN --mount=type=bind,source=gateway/src,target=src \
+RUN --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
+    --mount=type=bind,source=Cargo.lock,target=Cargo.lock \
+    --mount=type=bind,source=gateway/src,target=gateway/src \
+    --mount=type=bind,source=gateway/build.rs,target=gateway/build.rs \
+    --mount=type=bind,source=gateway/Cargo.toml,target=gateway/Cargo.toml \
+    --mount=type=bind,source=crates,target=crates \
+    --mount=type=bind,source=mcp,target=mcp \
     --mount=type=bind,source=proto,target=proto \
-    --mount=type=bind,source=gateway/build.rs,target=build.rs \
-    --mount=type=bind,source=gateway/Cargo.toml,target=Cargo.toml \
-    --mount=type=bind,source=gateway/Cargo.lock,target=Cargo.lock \
     --mount=type=cache,target=/app/target/ \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
     <<EOF
 set -e
-cargo build --locked --release --bin gateway --no-default-features --features "${RUST_FEATURES}"
+cargo build --locked --release -p gateway --bin gateway--no-default-features --features "${RUST_FEATURES}"
 cp ./target/release/gateway /bin/gateway
 EOF
 
 ################################################################################
 
-FROM dhi.io/debian-base:trixie AS final
+# distroless with glibc and libgcc for the gnu build, no shell or package manager
+# pinned by digest because the TEE measures this image
+FROM dhi.io/static:20250419-glibc@sha256:235b1831903e5ed82142b85b8b8b940d548d92af57cba0021afec39f17ffac00 AS final
 
 ARG SOURCE_DATE_EPOCH
 ENV SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH}
 
-# dhi.io/debian-base ships neither shadow-utils nor a writable /etc, so
-# there's no way to register a named user/group here. USER accepts a raw
-# numeric UID:GID with no /etc/passwd entry required — the kernel only
-# needs one to resolve a UID to a *name* (e.g. `whoami`), not to run a
-# process as that UID. 10001 is picked to avoid colliding with this
-# image's existing system accounts (which occupy the low/system range).
-COPY --from=build --chown=10001:10001 /bin/gateway /bin/gateway
+COPY --from=build /bin/gateway /bin/gateway
 
-USER 10001:10001
+USER 65532:65532
 
 ENTRYPOINT ["/bin/gateway"]

@@ -31,6 +31,14 @@ func requireSignProvider(provider kmsProvider, scheme string) (signProvider, err
 	return typed, nil
 }
 
+func requirePublicKeyProvider(provider kmsProvider, scheme string) (publicKeyProvider, error) {
+	typed, ok := provider.(publicKeyProvider)
+	if !ok {
+		return nil, status.Error(codes.FailedPrecondition, fmt.Sprintf("%s keys do not have public keys", scheme))
+	}
+	return typed, nil
+}
+
 func requireKeyAgreementProvider(provider kmsProvider, scheme string) (keyAgreementProvider, error) {
 	typed, ok := provider.(keyAgreementProvider)
 	if !ok {

@@ -15,7 +15,7 @@ Orbitport is a unified gateway to space-based orbital services operated by Space
 
 - **cTRNG** — cosmic true random numbers, served by the `masterseed` plugin from a rolling pool of satellite-harvested entropy.
 - **Randomness Beacon** — a background service that pins a continuously updated beacon record to IPFS and republishes it under a stable IPNS name. Public registry: [`beacons.yaml`](beacons.yaml).
-- **KMS** — multi-tenant Key Management Service backed by OpenBao. Encrypt/decrypt with Transit (`AES_256_GCM96`), sign with Transit (ECDSA, Ed25519, RSA), Ethereum (secp256k1, including EIP-191), use PQC ML-DSA / ML-KEM, and store/retrieve arbitrary JSON secrets through the KMS key-store. See the [`kms`](plugins/pkg/plugin/kms/README.md) plugin.
+- **KMS** — multi-tenant Key Management Service backed by OpenBao. Encrypt/decrypt with Transit (`AES_256_GCM96`), sign with Transit (ECDSA, Ed25519, RSA), Ethereum (secp256k1, including EIP-191), use PQC ML-DSA / ML-KEM, and store/retrieve arbitrary JSON secrets through the KMS key-store. See the [`kms`](plugins/pkg/plugin/kms/README.md) plugin. Try it with the runnable use cases in [`examples/kms`](examples/kms/).
 - **spaceTEE** — Space Trusted Execution Environment. Planned.
 
 ## Architecture
@@ -68,7 +68,12 @@ make devenv-down
 
 ## API
 
-The full HTTP and JSON-RPC reference lives in [`swagger.yaml`](swagger.yaml). Example request:
+The full HTTP and JSON-RPC reference lives in [`swagger.yaml`](swagger.yaml).
+
+Customer requests require a PAT. Auth0 service tokens are accepted only on
+internal service routes such as PAT issuance, not the customer API.
+
+Example request:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/rpc \
@@ -76,6 +81,16 @@ curl -X POST http://localhost:8080/api/v1/rpc \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"ctrng.Get","params":{"chunks":2}}'
 ```
+
+## Local MCP Server
+
+Agents can use KMS through the local `kms-mcp` stdio executable, which calls the existing
+gateway JSON-RPC API with your PAT. It adds no public MCP endpoint; manual API
+calls remain available with the same PAT authentication. Build with `make mcp-build`, installation,
+harness configuration, opt-in tools and release verification are documented in
+[`mcp/README.md`](mcp/README.md). See [client setup](mcp/CLIENT_SETUP.md) for
+file-based PAT configuration for Claude Desktop, Codex desktop, Claude Code
+and Codex CLI, plus manual terminal testing.
 
 ## Configuration
 

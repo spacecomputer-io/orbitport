@@ -9,7 +9,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"math/big"
 	"testing"
 	"time"
 
@@ -84,11 +83,8 @@ func jwksKey(t *testing.T, p *Plugin) (kid string, pub *ecdsa.PublicKey) {
 	require.Len(t, xb, 32)
 	require.Len(t, yb, 32)
 
-	pub = &ecdsa.PublicKey{
-		Curve: elliptic.P256(),
-		X:     new(big.Int).SetBytes(xb),
-		Y:     new(big.Int).SetBytes(yb),
-	}
+	pub, err = ecdsa.ParseUncompressedPublicKey(elliptic.P256(), append(append([]byte{4}, xb...), yb...))
+	require.NoError(t, err)
 	return k.Kid, pub
 }
 

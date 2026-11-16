@@ -47,7 +47,7 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+      test: ["CMD", "/app", "healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 3
