@@ -33,8 +33,12 @@ cannot be recalled, non-Transit crypto behavior is unchanged.
 KeyMetadata adds nullable KeyState and DeletionDate. Legacy stored records derive
 state from Enabled in memory, without a bulk migration. Invalid lifecycle records
 fail closed. KV check-and-set (CAS) uses the metadata revision, not key version,
-stale rotation writes cannot overwrite a newer disable/schedule. CAS conflicts
-return Aborted: inspect current state before retrying mutations.
+stale rotation writes cannot overwrite a newer disable/schedule. After Transit
+rotates, a metadata CAS conflict re-reads the record and merges only the key version
+and public key, preserving lifecycle changes and any newer recorded key version.
+Rotation makes at most three metadata write attempts and never repeats the Transit
+rotation during those retries. Unresolved CAS conflicts return Aborted, inspect
+current state before retrying mutations.
 
 ## Configurable Defaults
 

@@ -426,9 +426,10 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 		return nil, err
 	}
 	updated.normalize()
-	if err := p.client.putMetadata(ctx, req.ClientId, updated.KeyID, updated); err != nil {
-		logger.Warnf("RotateKey failed to persist metadata for key_id=%s", updated.KeyID)
-		return nil, kmsBackendStatus("rotate key metadata", err)
+	updated, err = p.persistRotatedMetadata(ctx, req.ClientId, updated)
+	if err != nil {
+		logger.Warnf("RotateKey failed to persist metadata for key_id=%s", metadata.KeyID)
+		return nil, err
 	}
 	logger.Infof(
 		"RotateKey completed for key_id=%s scheme=%s primary_version=%d",
@@ -440,6 +441,55 @@ func (p *Plugin) RotateKey(ctx context.Context, req *proto.RotateKeyRequest) (*p
 	return &proto.RotateKeyResponse{
 		KeyMetadata: toProtoMetadata(updated),
 	}, nil
+}
+
+// Transit has already rotated. Only retry metadata persistence, preserving any
+// lifecycle changes made since the original read.
+func (p *Plugin) persistRotatedMetadata(ctx context.Context, clientID string, rotated *keyMetadataRecord) (*keyMetadataRecord, error) {
+	const maxAttempts = 3
+	if rotated.metadataRevision == 0 || rotated.PrimaryVersion == 0 {
+		return nil, status.Error(codes.FailedPrecondition, "rotated key metadata is invalid")
+	}
+	candidate := rotated
+	for attempt := 1; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, status.FromContextError(err).Err()
+		}
+		err := p.client.putMetadata(ctx, clientID, candidate.KeyID, candidate)
+		if err == nil {
+			return candidate, nil
+		}
+		if !isMetadataCASConflict(err) || attempt >= maxAttempts {
+			return nil, kmsBackendStatus("rotate key metadata", err)
+		}
+
+		timer := time.NewTimer(time.Duration(attempt) * 10 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, status.FromContextError(ctx.Err()).Err()
+		case <-timer.C:
+		}
+		current, err := p.client.getMetadata(ctx, clientID, rotated.KeyID)
+		if err != nil {
+			if isOpenBaoNotFound(err) {
+				return nil, status.Error(codes.FailedPrecondition, "key metadata no longer exists after rotation")
+			}
+			return nil, kmsBackendStatus("read rotated key metadata", err)
+		}
+		if current.KeyID != rotated.KeyID || current.Scheme != rotated.Scheme ||
+			current.backendKey() != rotated.backendKey() || current.KeySpec != rotated.KeySpec ||
+			current.KeyUsage != rotated.KeyUsage || current.CreatedAt != rotated.CreatedAt ||
+			current.metadataRevision == 0 || current.PrimaryVersion == 0 || !validLifecycleState(current) {
+			return nil, status.Error(codes.FailedPrecondition, "key metadata changed during rotation")
+		}
+		if current.PrimaryVersion >= rotated.PrimaryVersion {
+			return current, nil
+		}
+		current.PrimaryVersion = rotated.PrimaryVersion
+		current.PublicKey = rotated.PublicKey
+		candidate = current
+	}
 }
 
 func (p *Plugin) metadataProvider(ctx context.Context, clientID, keyID string) (*keyMetadataRecord, kmsProvider, error) {

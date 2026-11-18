@@ -24,14 +24,15 @@ type lifecycleKV struct {
 }
 
 type lifecycleFixture struct {
-	mu        sync.Mutex
-	kv        map[string]lifecycleKV
-	material  map[string]bool
-	allowed   map[string]bool
-	versions  map[string]uint32
-	requests  []string
-	fail      string
-	beforeCAS func(string)
+	mu         sync.Mutex
+	kv         map[string]lifecycleKV
+	material   map[string]bool
+	allowed    map[string]bool
+	versions   map[string]uint32
+	publicKeys map[string]string
+	requests   []string
+	fail       string
+	beforeCAS  func(string)
 }
 
 func newLifecycleFixture(t *testing.T) (*Plugin, *lifecycleFixture) {
@@ -41,7 +42,7 @@ func newLifecycleFixture(t *testing.T) (*Plugin, *lifecycleFixture) {
 
 func newLifecycleFixtureWithConfig(t *testing.T, cfg *kmsConfig) (*Plugin, *lifecycleFixture) {
 	t.Helper()
-	fixture := &lifecycleFixture{kv: map[string]lifecycleKV{}, material: map[string]bool{}, allowed: map[string]bool{}, versions: map[string]uint32{}}
+	fixture := &lifecycleFixture{kv: map[string]lifecycleKV{}, material: map[string]bool{}, allowed: map[string]bool{}, versions: map[string]uint32{}, publicKeys: map[string]string{}}
 	server := httptest.NewServer(http.HandlerFunc(fixture.serve))
 	t.Cleanup(server.Close)
 	cfg = withKMSConfigDefaults(cfg)
@@ -135,10 +136,13 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 			if version == 0 {
 				version = 1
 			}
-			writeJSON(map[string]any{"data": map[string]any{"latest_version": version}})
+			writeJSON(map[string]any{"data": map[string]any{"latest_version": version, "public_key": f.publicKeys[key]}})
 		} else if r.Method == http.MethodPost && strings.HasSuffix(key, "/rotate") {
 			key = strings.TrimSuffix(key, "/rotate")
-			f.versions[key] = 2
+			if f.versions[key] == 0 {
+				f.versions[key] = 1
+			}
+			f.versions[key]++
 			writeJSON(map[string]any{})
 		} else if r.Method == http.MethodPost && strings.HasSuffix(key, "/config") {
 			f.allowed[strings.TrimSuffix(key, "/config")] = true
@@ -172,6 +176,18 @@ func (f *lifecycleFixture) save(t *testing.T, record *keyMetadataRecord) {
 	path := "/v1/secret/data/kms/metadata/" + tenantNamespace(record.ClientID) + "/" + record.KeyID
 	current := f.kv[path]
 	f.kv[path] = lifecycleKV{record: raw, version: current.version + 1}
+}
+
+func (f *lifecycleFixture) requestCount(request string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	count := 0
+	for _, recorded := range f.requests {
+		if recorded == request {
+			count++
+		}
+	}
+	return count
 }
 
 func TestListKeysTenantPagingUsesExactlyOneList(t *testing.T) {
@@ -424,24 +440,243 @@ func TestWorkerCancellationAndMultipleReplicas(t *testing.T) {
 }
 
 func TestRotationCannotOverwriteConcurrentDisable(t *testing.T) {
+	for _, conflicts := range []int{1, 2} {
+		t.Run(fmt.Sprintf("%d conflicts", conflicts), func(t *testing.T) {
+			p, f := newLifecycleFixture(t)
+			record := f.add(t, "a", "key", schemeTransit)
+			record.KeySpec, record.KeyUsage, record.PublicKey = keySpecECDSAP256, signVerifyUsage, "public-v1"
+			f.save(t, record)
+			f.publicKeys[record.ProviderKey] = "public-v2"
+			path := "/v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID
+			writes := 0
+			f.beforeCAS = func(target string) {
+				if target != path {
+					return
+				}
+				writes++
+				if writes <= conflicts {
+					record.KeyState, record.Enabled = keyStateDisabled, false
+					record.Description = fmt.Sprintf("concurrent update %d", writes)
+					record.Tags = []*pluginTag{{TagKey: "concurrent", TagValue: fmt.Sprint(writes)}}
+					f.save(t, record)
+				}
+			}
+			resp, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: record.KeyID})
+			require.NoError(t, err)
+			require.False(t, resp.KeyMetadata.Enabled)
+			require.Equal(t, uint32(2), resp.KeyMetadata.PrimaryVersion)
+			require.Equal(t, "public-v2", resp.KeyMetadata.GetPublicKey())
+			current, err := p.client.getMetadata(context.Background(), "a", record.KeyID)
+			require.NoError(t, err)
+			require.False(t, current.Enabled)
+			require.Equal(t, keyStateDisabled, current.KeyState)
+			require.Equal(t, fmt.Sprintf("concurrent update %d", conflicts), current.Description)
+			require.Equal(t, []*pluginTag{{TagKey: "concurrent", TagValue: fmt.Sprint(conflicts)}}, current.Tags)
+			require.Equal(t, uint32(2), current.PrimaryVersion)
+			require.Equal(t, "public-v2", current.PublicKey)
+			require.Equal(t, conflicts+1, writes)
+			require.Equal(t, uint32(2), f.versions[record.ProviderKey])
+			require.Equal(t, 1, f.requestCount("POST /v1/transit/keys/"+record.ProviderKey+"/rotate"))
+		})
+	}
+}
+
+func TestRotationPersistsMetadataWithoutConflict(t *testing.T) {
+	p, f := newLifecycleFixture(t)
+	record := f.add(t, "a", "key", schemeTransit)
+	resp, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: record.KeyID})
+	require.NoError(t, err)
+	require.True(t, resp.KeyMetadata.Enabled)
+	require.Equal(t, uint32(2), resp.KeyMetadata.PrimaryVersion)
+	require.Equal(t, []string{
+		"GET /v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID,
+		"POST /v1/transit/keys/" + record.ProviderKey + "/rotate",
+		"GET /v1/transit/keys/" + record.ProviderKey,
+		"POST /v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID,
+	}, f.requests)
+}
+
+func TestRotationPreservesConcurrentDeletionSchedule(t *testing.T) {
+	for _, claimed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("claimed=%t", claimed), func(t *testing.T) {
+			p, f := newLifecycleFixture(t)
+			record := f.add(t, "a", "key", schemeTransit)
+			path := "/v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID
+			f.beforeCAS = func(target string) {
+				if target != path {
+					return
+				}
+				record.KeyState, record.Enabled = keyStatePendingDeletion, false
+				record.DeletionDate = "2026-12-11T12:00:00Z"
+				record.DeletionIndex = record.KeyID + "_20261211T120000Z_01234567"
+				if claimed {
+					record.DeletionStartedAt = "2026-12-11T12:00:00Z"
+				}
+				f.save(t, record)
+				f.beforeCAS = nil
+			}
+			resp, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: record.KeyID})
+			require.NoError(t, err)
+			require.False(t, resp.KeyMetadata.Enabled)
+			require.Equal(t, keyStatePendingDeletion, resp.KeyMetadata.GetKeyState())
+			require.Equal(t, uint32(2), resp.KeyMetadata.PrimaryVersion)
+			current, err := p.client.getMetadata(context.Background(), "a", record.KeyID)
+			require.NoError(t, err)
+			require.Equal(t, record.DeletionDate, current.DeletionDate)
+			require.Equal(t, record.DeletionIndex, current.DeletionIndex)
+			require.Equal(t, record.DeletionStartedAt, current.DeletionStartedAt)
+			require.True(t, validLifecycleState(current))
+			require.Equal(t, uint32(2), current.PrimaryVersion)
+			require.Equal(t, 1, f.requestCount("POST /v1/transit/keys/"+record.ProviderKey+"/rotate"))
+		})
+	}
+}
+
+func TestRotationDoesNotOverwriteConcurrentVersion(t *testing.T) {
+	for _, version := range []uint32{2, 3} {
+		t.Run(fmt.Sprintf("version=%d", version), func(t *testing.T) {
+			p, f := newLifecycleFixture(t)
+			record := f.add(t, "a", "key", schemeTransit)
+			record.KeySpec, record.KeyUsage, record.PublicKey = keySpecECDSAP256, signVerifyUsage, "public-v1"
+			f.save(t, record)
+			f.publicKeys[record.ProviderKey] = "public-v2"
+			path := "/v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID
+			f.beforeCAS = func(target string) {
+				if target != path {
+					return
+				}
+				record.KeyState, record.Enabled = keyStateDisabled, false
+				record.PrimaryVersion, record.PublicKey = version, fmt.Sprintf("public-v%d", version)
+				f.versions[record.ProviderKey] = version
+				f.save(t, record)
+				f.beforeCAS = nil
+			}
+			resp, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: record.KeyID})
+			require.NoError(t, err)
+			require.False(t, resp.KeyMetadata.Enabled)
+			require.Equal(t, version, resp.KeyMetadata.PrimaryVersion)
+			require.Equal(t, record.PublicKey, resp.KeyMetadata.GetPublicKey())
+			current, err := p.client.getMetadata(context.Background(), "a", record.KeyID)
+			require.NoError(t, err)
+			require.Equal(t, version, current.PrimaryVersion)
+			require.Equal(t, record.PublicKey, current.PublicKey)
+			require.Equal(t, 1, f.requestCount("POST "+path))
+			require.Equal(t, 1, f.requestCount("POST /v1/transit/keys/"+record.ProviderKey+"/rotate"))
+		})
+	}
+}
+
+func TestRotationMetadataRetriesAreBounded(t *testing.T) {
 	p, f := newLifecycleFixture(t)
 	record := f.add(t, "a", "key", schemeTransit)
 	path := "/v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID
 	f.beforeCAS = func(target string) {
-		if target != path {
-			return
+		if target == path {
+			record.KeyState, record.Enabled = keyStateDisabled, false
+			f.save(t, record)
 		}
-		record.KeyState, record.Enabled = keyStateDisabled, false
-		f.save(t, record)
-		f.beforeCAS = nil
 	}
 	_, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: record.KeyID})
 	require.Equal(t, codes.Aborted, status.Code(err))
+	require.Equal(t, 3, f.requestCount("POST "+path))
+	require.Equal(t, 1, f.requestCount("POST /v1/transit/keys/"+record.ProviderKey+"/rotate"))
 	current, err := p.client.getMetadata(context.Background(), "a", record.KeyID)
 	require.NoError(t, err)
 	require.False(t, current.Enabled)
-	require.Equal(t, keyStateDisabled, current.KeyState)
-	require.Equal(t, uint32(2), f.versions[record.ProviderKey]) // the engine operation cannot be rolled back
+	require.Equal(t, uint32(1), current.PrimaryVersion)
+	require.Equal(t, uint32(2), f.versions[record.ProviderKey])
+}
+
+func TestRotationDoesNotRecreateRemovedMetadata(t *testing.T) {
+	p, f := newLifecycleFixture(t)
+	record := f.add(t, "a", "key", schemeTransit)
+	path := "/v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID
+	f.beforeCAS = func(target string) {
+		if target == path {
+			delete(f.kv, path)
+			f.beforeCAS = nil
+		}
+	}
+	_, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: record.KeyID})
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	require.NotContains(t, f.kv, path)
+	require.Equal(t, 1, f.requestCount("POST "+path))
+	require.Equal(t, 1, f.requestCount("POST /v1/transit/keys/"+record.ProviderKey+"/rotate"))
+}
+
+func TestRotationRejectsChangedMetadataOnRetry(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		change func(*keyMetadataRecord)
+		code   codes.Code
+	}{
+		{"owner", func(r *keyMetadataRecord) { r.ClientID = "foreign-client" }, codes.Internal},
+		{"key ID", func(r *keyMetadataRecord) { r.KeyID = "kms:other" }, codes.FailedPrecondition},
+		{"scheme", func(r *keyMetadataRecord) { r.Scheme = schemeEthereum }, codes.FailedPrecondition},
+		{"backend", func(r *keyMetadataRecord) { r.ProviderKey = "foreign-key" }, codes.FailedPrecondition},
+		{"spec", func(r *keyMetadataRecord) { r.KeySpec = keySpecECDSAP256 }, codes.FailedPrecondition},
+		{"usage", func(r *keyMetadataRecord) { r.KeyUsage = signVerifyUsage }, codes.FailedPrecondition},
+		{"creation", func(r *keyMetadataRecord) { r.CreatedAt = "2026-11-12T12:00:00Z" }, codes.FailedPrecondition},
+		{"version", func(r *keyMetadataRecord) { r.PrimaryVersion = 0 }, codes.FailedPrecondition},
+		{"state", func(r *keyMetadataRecord) { r.KeyState = "INVALID" }, codes.FailedPrecondition},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, f := newLifecycleFixture(t)
+			record := f.add(t, "a", "key", schemeTransit)
+			path := "/v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID
+			f.beforeCAS = func(target string) {
+				if target != path {
+					return
+				}
+				tc.change(record)
+				raw, err := json.Marshal(record)
+				require.NoError(t, err)
+				f.kv[path] = lifecycleKV{record: raw, version: f.kv[path].version + 1}
+				f.beforeCAS = nil
+			}
+			_, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: "kms:key"})
+			require.Equal(t, tc.code, status.Code(err))
+			require.NotContains(t, status.Convert(err).Message(), "foreign")
+			require.Equal(t, 1, f.requestCount("POST "+path))
+		})
+	}
+}
+
+func TestRotationDoesNotRetryBackendFailures(t *testing.T) {
+	for _, failRead := range []bool{false, true} {
+		t.Run(fmt.Sprintf("read=%t", failRead), func(t *testing.T) {
+			p, f := newLifecycleFixture(t)
+			record := f.add(t, "a", "key", schemeTransit)
+			path := "/v1/secret/data/kms/metadata/" + tenantNamespace("a") + "/" + record.KeyID
+			if failRead {
+				f.beforeCAS = func(target string) {
+					if target == path {
+						f.save(t, record)
+						f.fail = "GET " + path
+						f.beforeCAS = nil
+					}
+				}
+			} else {
+				f.fail = "POST " + path
+			}
+			_, err := p.RotateKey(context.Background(), &proto.RotateKeyRequest{ClientId: "a", KeyId: record.KeyID})
+			require.Equal(t, codes.Internal, status.Code(err))
+			require.Equal(t, "KMS backend error", status.Convert(err).Message())
+			require.Equal(t, 1, f.requestCount("POST "+path))
+			require.Equal(t, 1, f.requestCount("POST /v1/transit/keys/"+record.ProviderKey+"/rotate"))
+		})
+	}
+}
+
+func TestRotationMetadataPersistenceHonorsCancellation(t *testing.T) {
+	p, f := newLifecycleFixture(t)
+	record := f.add(t, "a", "key", schemeTransit)
+	record.metadataRevision = 1
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := p.persistRotatedMetadata(ctx, "a", record)
+	require.Equal(t, codes.Canceled, status.Code(err))
+	require.Empty(t, f.requests)
 }
 
 func TestWorkerSkipsFutureAndRejectsForeignProviderReference(t *testing.T) {
