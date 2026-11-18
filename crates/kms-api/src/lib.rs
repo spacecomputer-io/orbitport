@@ -10,11 +10,9 @@ pub mod kms {
 pub use kms::*;
 pub mod schema;
 
-const DEFAULT_LIST_KEYS_LIMIT: u32 = 100;
 const MAX_LIST_KEYS_LIMIT: u32 = 1000;
 const MIN_DELETION_WINDOW_DAYS: u32 = 7;
 const MAX_DELETION_WINDOW_DAYS: u32 = 30;
-const DEFAULT_DELETION_WINDOW_DAYS: u32 = 30;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Scheme {

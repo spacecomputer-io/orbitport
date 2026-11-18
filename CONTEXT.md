@@ -225,6 +225,9 @@ rather than gRPC and holds no key material. See
 | `ORBITPORT_KMS_KEY_STORE_MOUNT` | `key-store` | KV v2 mount used by KMS key-store put/get/delete storage |
 | `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` | — | Cedar policy document loaded for key-store authorization, compose mounts the default owner policy at `/etc/orbitport/kms/key_store_default.cedar`, Kubernetes deployments should provide it through a ConfigMap |
 | `ORBITPORT_KMS_TIMEOUT_SECS` | `10` | HTTP timeout per OpenBao request |
+| `ORBITPORT_KMS_LIST_KEYS_DEFAULT_LIMIT` | `100` | Page size when ListKeys omits Limit, must be 1-1000 and no greater than the configured maximum |
+| `ORBITPORT_KMS_LIST_KEYS_MAX_LIMIT` | `1000` | Maximum ListKeys page size for this deployment, must be 1-1000 |
+| `ORBITPORT_KMS_DEFAULT_DELETION_WINDOW_DAYS` | `30` | Deletion window when ScheduleKeyDeletion omits PendingWindowInDays, must be 7-30 days |
 | `ORBITPORT_KMS_DELETION_SWEEP_INTERVAL` | `1h` | Background Transit deletion interval, `0` disables sweeps. Charts default to `0` pending policy verification. |
 
 ### Plugin: `account`

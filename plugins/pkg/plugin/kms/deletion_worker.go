@@ -119,7 +119,7 @@ func (p *Plugin) deleteScheduledKey(ctx context.Context, tenant, entry, keyID st
 	recordDate, dateErr := time.Parse(time.RFC3339, record.DeletionDate)
 	if record.ClientID == "" || tenantNamespace(record.ClientID) != tenant || record.KeyID != keyID ||
 		keyErr != nil || record.backendKey() != expectedBackend || dateErr != nil || !recordDate.Equal(deadline) ||
-		!validLifecycleState(record) || record.kvVersion == 0 {
+		!validLifecycleState(record) || record.metadataRevision == 0 {
 		return fmt.Errorf("invalid scheduled deletion metadata")
 	}
 	if record.Scheme != schemeTransit {

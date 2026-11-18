@@ -95,7 +95,10 @@ Someone holding the PAT can still call the gateway directly.
 
 There are ten default tools and ten opt-in tools. Lifecycle mutations are
 Transit-only, listing includes all tenant engines. Schedule disables immediately
-and becomes eligible for irreversible deletion after 7-30 days (default 30).
+and becomes eligible for irreversible deletion after 7-30 days. When omitted,
+the window uses the KMS server's configured default (30 days unless changed).
+ListKeys likewise uses the server's configured default page size when Limit is
+omitted (100 unless changed), with a server maximum no greater than 1000.
 Cancel works only before the deadline/worker claim and leaves the key disabled.
 See [lifecycle behavior and rollout](../plugins/pkg/plugin/kms/LIFECYCLE.md).
 

@@ -1,3 +1,5 @@
+// OpenBao helpers for tenant-scoped key listing, deletion schedules, alias
+// tombstones, and permanent Transit key deletion.
 package kms
 
 import (

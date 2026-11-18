@@ -19,12 +19,12 @@ import (
 )
 
 const (
-	keyStateEnabled         = "ENABLED"
-	keyStateDisabled        = "DISABLED"
-	keyStatePendingDeletion = "PENDING_DELETION"
-	defaultListKeysLimit    = 100
-	maxListKeysLimit        = 1000
-	defaultDeletionWindow   = 30
+	keyStateEnabled           = "ENABLED"
+	keyStateDisabled          = "DISABLED"
+	keyStatePendingDeletion   = "PENDING_DELETION"
+	maxSupportedListKeysLimit = 1000
+	minDeletionWindowDays     = 7
+	maxDeletionWindowDays     = 30
 )
 
 func isMetadataCASConflict(err error) bool {
@@ -38,7 +38,7 @@ func kmsBackendStatus(operation string, err error) error {
 	if errors.As(err, &backend) {
 		logger.Warnf("KMS %s backend status=%d body=%s", operation, backend.StatusCode, backend.Body)
 		if isMetadataCASConflict(err) {
-			return status.Error(codes.Aborted, "key changed concurrently; check its state before retrying")
+			return status.Error(codes.Aborted, "key changed concurrently. check its state before retrying")
 		}
 	} else {
 		logger.Warnf("KMS %s backend failure: %v", operation, err)
@@ -100,7 +100,7 @@ func (p *Plugin) lifecycleMetadata(ctx context.Context, clientID, keyID string) 
 		}
 		return nil, kmsBackendStatus("read lifecycle metadata", err)
 	}
-	if record.KeyID != resolved || record.kvVersion == 0 || !validLifecycleState(record) {
+	if record.KeyID != resolved || record.metadataRevision == 0 || !validLifecycleState(record) {
 		return nil, status.Error(codes.FailedPrecondition, "key lifecycle metadata is invalid")
 	}
 	if record.Scheme != schemeTransit {
@@ -110,7 +110,7 @@ func (p *Plugin) lifecycleMetadata(ctx context.Context, clientID, keyID string) 
 	if err != nil || record.backendKey() != expectedBackend {
 		return nil, status.Error(codes.FailedPrecondition, "key lifecycle metadata is invalid")
 	}
-	// Legacy records may omit the owner; the tenant-scoped lookup established it.
+	// Legacy records may omit the owner. the tenant-scoped lookup established it.
 	record.ClientID = clientID
 	return record, nil
 }
@@ -121,7 +121,7 @@ func (p *Plugin) setKeyEnabled(ctx context.Context, clientID, keyID string, enab
 		return nil, err
 	}
 	if record.KeyState == keyStatePendingDeletion {
-		return nil, status.Error(codes.FailedPrecondition, "key is pending deletion; call kms.CancelKeyDeletion first")
+		return nil, status.Error(codes.FailedPrecondition, "key is pending deletion. call kms.CancelKeyDeletion first")
 	}
 	if record.Enabled == enabled {
 		return toProtoMetadata(record), nil
@@ -154,12 +154,12 @@ func (p *Plugin) EnableKey(ctx context.Context, req *proto.EnableKeyRequest) (*p
 }
 
 func (p *Plugin) ScheduleKeyDeletion(ctx context.Context, req *proto.ScheduleKeyDeletionRequest) (*proto.ScheduleKeyDeletionResponse, error) {
-	window := uint32(defaultDeletionWindow)
+	window := p.defaultDeletionWindowDays
 	if req.PendingWindowInDays != nil {
 		window = *req.PendingWindowInDays
 	}
-	if window < 7 || window > 30 {
-		return nil, status.Error(codes.InvalidArgument, "PendingWindowInDays must be between 7 and 30")
+	if window < minDeletionWindowDays || window > maxDeletionWindowDays {
+		return nil, status.Errorf(codes.InvalidArgument, "PendingWindowInDays must be between %d and %d", minDeletionWindowDays, maxDeletionWindowDays)
 	}
 	record, err := p.lifecycleMetadata(ctx, req.ClientId, req.KeyId)
 	if err != nil {
@@ -224,12 +224,12 @@ func (p *Plugin) ListKeys(ctx context.Context, req *proto.ListKeysRequest) (*pro
 	if err := requireClientID(req.ClientId); err != nil {
 		return nil, err
 	}
-	limit := uint32(defaultListKeysLimit)
+	limit := p.listKeysDefaultLimit
 	if req.Limit != nil {
 		limit = *req.Limit
 	}
-	if limit < 1 || limit > maxListKeysLimit {
-		return nil, status.Error(codes.InvalidArgument, "Limit must be between 1 and 1000")
+	if limit < 1 || limit > p.listKeysMaxLimit {
+		return nil, status.Errorf(codes.InvalidArgument, "Limit must be between 1 and %d", p.listKeysMaxLimit)
 	}
 	after := ""
 	if req.NextToken != nil {

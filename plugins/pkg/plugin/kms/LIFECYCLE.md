@@ -7,7 +7,8 @@ from plugins/. Only use a disposable local dev instance, unique fixture mounts
 are removed after the test. The no-store-token flag protects existing CLI logins.
 
 `kms.ListKeys {Limit?, NextToken?}` returns sorted canonical key IDs across all
-engines for the authenticated tenant. Limit defaults to 100 (range 1-1000).
+engines for the authenticated tenant. Limit uses the server's configured default
+(100 unless changed), with a configured maximum no greater than the API ceiling of 1000.
 One OpenBao LIST reads that tenant's existing metadata directory, validation,
 sorting and pagination happen in the plugin, without per-key reads. The backend
 still returns the whole folder. NextToken is opaque and null on the last page.
@@ -21,7 +22,7 @@ These methods accept KeyId (canonical ID or alias), returning updated KeyMetadat
 | --- | --- |
 | `kms.DisableKey` | DISABLED, Enabled=false. Already disabled succeeds without a write. |
 | `kms.EnableKey` | ENABLED/true. Pending deletion must first be cancelled. |
-| `kms.ScheduleKeyDeletion` | PENDING_DELETION/false and DeletionDate. PendingWindowInDays is 7-30, default 30, returned in the response. Already pending is rejected. |
+| `kms.ScheduleKeyDeletion` | PENDING_DELETION/false and DeletionDate. PendingWindowInDays is 7-30, using the server's configured default when omitted (30 unless changed). The effective window is returned in the response. Already pending is rejected. |
 | `kms.CancelKeyDeletion` | Before the deadline and worker claim, clear the schedule and return DISABLED, not ENABLED. |
 
 Other engines return Unimplemented before mutation. Transit crypto and rotation
@@ -34,6 +35,26 @@ state from Enabled in memory, without a bulk migration. Invalid lifecycle record
 fail closed. KV check-and-set (CAS) uses the metadata revision, not key version,
 stale rotation writes cannot overwrite a newer disable/schedule. CAS conflicts
 return Aborted: inspect current state before retrying mutations.
+
+## Configurable Defaults
+
+Set these environment variables on the KMS plugin, not the gateway or MCP client:
+
+| Variable | Default | Allowed values |
+| --- | --- | --- |
+| `ORBITPORT_KMS_LIST_KEYS_DEFAULT_LIMIT` | `100` | 1-1000, no greater than the configured maximum |
+| `ORBITPORT_KMS_LIST_KEYS_MAX_LIMIT` | `1000` | 1-1000 |
+| `ORBITPORT_KMS_DEFAULT_DELETION_WINDOW_DAYS` | `30` | 7-30 |
+
+Invalid settings prevent startup. For example, lowering the maximum to 50 also
+requires setting the default to 50 or less. These settings are read once, restart
+the plugin after changing them. Changing the deletion default does not alter
+existing schedules, which retain their recorded DeletionDate.
+
+Explicit request values override the defaults, within the applicable bounds.
+Gateway and MCP validation retain the API limits, the plugin additionally
+enforces the deployment's configured list maximum. Tool schemas describe server
+defaults rather than supplying a fixed value that could override configuration.
 
 ## Deletion Worker
 

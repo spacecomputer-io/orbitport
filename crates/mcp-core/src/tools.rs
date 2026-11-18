@@ -249,7 +249,7 @@ pub fn registry() -> Vec<ToolSpec> {
             allow: None,
             read_only: true,
             destructive: false,
-            description: "List tenant-owned cryptographic key IDs across all schemes. Limit defaults to 100, maximum 1000; continue with NextToken."
+            description: "List tenant-owned cryptographic key IDs across all schemes. Omitted Limit uses the server's configured default. The server's maximum may be lower than the API ceiling of 1000. Continue with NextToken."
         ),
         tool!(
             "kms_disable_key", "kms.DisableKey", DisableKeyRequest, DisableKeyResponse,
@@ -273,7 +273,7 @@ pub fn registry() -> Vec<ToolSpec> {
             allow: Some("schedule-key-deletion"),
             read_only: false,
             destructive: true,
-            description: "Disable a TRANSIT key and schedule irreversible deletion after 7 to 30 days (default 30)."
+            description: "Disable a TRANSIT key and schedule irreversible deletion after 7 to 30 days. Omitted PendingWindowInDays uses the server's configured default."
         ),
         tool!(
             "kms_cancel_key_deletion", "kms.CancelKeyDeletion", CancelKeyDeletionRequest, CancelKeyDeletionResponse,

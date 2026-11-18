@@ -90,7 +90,7 @@ func TestTransitLifecycleOpenBaoIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = p.ScheduleKeyDeletion(ctx, &proto.ScheduleKeyDeletionRequest{ClientId: "integration-tenant", KeyId: key})
 	require.NoError(t, err)
-	now = now.Add(31 * 24 * time.Hour) // test clock only; no production deadline override
+	now = now.Add(31 * 24 * time.Hour) // test clock only. no production deadline override
 	p.sweepDeletedKeys(ctx)
 	list, err := p.ListKeys(ctx, &proto.ListKeysRequest{ClientId: "integration-tenant"})
 	require.NoError(t, err)

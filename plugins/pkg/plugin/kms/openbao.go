@@ -44,7 +44,7 @@ type keyMetadataRecord struct {
 	DeletionDate      string       `json:"deletion_date,omitempty"`
 	DeletionIndex     string       `json:"deletion_index,omitempty"`
 	DeletionStartedAt string       `json:"deletion_started_at,omitempty"`
-	kvVersion         uint64
+	metadataRevision  uint64
 }
 
 type pluginTag struct {
@@ -366,7 +366,7 @@ func (c *openBaoClient) decapsulatePQC(ctx context.Context, keyName, ciphertext 
 func (c *openBaoClient) putMetadata(ctx context.Context, clientID, keyID string, metadata *keyMetadataRecord) error {
 	return c.Post(ctx, c.metadataPath(clientID, keyID), map[string]any{
 		"data":    metadata,
-		"options": map[string]any{"cas": metadata.kvVersion},
+		"options": map[string]any{"cas": metadata.metadataRevision},
 	}, nil)
 }
 
@@ -394,7 +394,7 @@ func (c *openBaoClient) getMetadataAt(ctx context.Context, target string) (*keyM
 		return nil, err
 	}
 	record := &resp.Data.Data
-	record.kvVersion = resp.Data.Metadata.Version
+	record.metadataRevision = resp.Data.Metadata.Version
 	record.normalize()
 	return record, nil
 }

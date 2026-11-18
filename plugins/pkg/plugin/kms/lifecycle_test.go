@@ -36,10 +36,17 @@ type lifecycleFixture struct {
 
 func newLifecycleFixture(t *testing.T) (*Plugin, *lifecycleFixture) {
 	t.Helper()
+	return newLifecycleFixtureWithConfig(t, nil)
+}
+
+func newLifecycleFixtureWithConfig(t *testing.T, cfg *kmsConfig) (*Plugin, *lifecycleFixture) {
+	t.Helper()
 	fixture := &lifecycleFixture{kv: map[string]lifecycleKV{}, material: map[string]bool{}, allowed: map[string]bool{}, versions: map[string]uint32{}}
 	server := httptest.NewServer(http.HandlerFunc(fixture.serve))
 	t.Cleanup(server.Close)
-	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, DeletionSweepInterval: "0"}
+	cfg = withKMSConfigDefaults(cfg)
+	cfg.OpenBaoProxyURL = server.URL
+	cfg.DeletionSweepInterval = "0"
 	p := newPlugin(cfg, newOpenBaoClient(cfg))
 	p.now = func() time.Time { return time.Date(2026, 11, 11, 12, 0, 0, 0, time.UTC) }
 	t.Cleanup(p.Close)
@@ -205,6 +212,53 @@ func TestListKeysRejectsInvalidInputWithoutBackendCalls(t *testing.T) {
 		require.Equal(t, codes.InvalidArgument, status.Code(err))
 	}
 	require.Empty(t, f.requests)
+}
+
+func TestListKeysConfiguredDefaultsAndMaximum(t *testing.T) {
+	p, f := newLifecycleFixtureWithConfig(t, &kmsConfig{ListKeysDefaultLimit: 2, ListKeysMaxLimit: 3})
+	for i := 0; i < 5; i++ {
+		f.add(t, "a", fmt.Sprintf("key-%d", i), schemeTransit)
+	}
+	first, err := p.ListKeys(context.Background(), &proto.ListKeysRequest{ClientId: "a"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"kms:key-0", "kms:key-1"}, first.KeyIds)
+	require.NotNil(t, first.NextToken)
+	require.Len(t, f.requests, 1)
+
+	limit := uint32(3)
+	second, err := p.ListKeys(context.Background(), &proto.ListKeysRequest{ClientId: "a", Limit: &limit, NextToken: first.NextToken})
+	require.NoError(t, err)
+	require.Equal(t, []string{"kms:key-2", "kms:key-3", "kms:key-4"}, second.KeyIds)
+	require.Nil(t, second.NextToken)
+	require.Len(t, f.requests, 2)
+
+	limit = 4
+	_, err = p.ListKeys(context.Background(), &proto.ListKeysRequest{ClientId: "a", Limit: &limit})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Equal(t, "Limit must be between 1 and 3", status.Convert(err).Message())
+	require.Len(t, f.requests, 2)
+
+	limit = 1
+	page, err := p.ListKeys(context.Background(), &proto.ListKeysRequest{ClientId: "a", Limit: &limit})
+	require.NoError(t, err)
+	require.Equal(t, []string{"kms:key-0"}, page.KeyIds)
+	require.Len(t, f.requests, 3)
+}
+
+func TestScheduleKeyDeletionConfiguredDefaultAndOverride(t *testing.T) {
+	p, f := newLifecycleFixtureWithConfig(t, &kmsConfig{DefaultDeletionWindowDays: 14})
+	first := f.add(t, "a", "configured-default", schemeTransit)
+	scheduled, err := p.ScheduleKeyDeletion(context.Background(), &proto.ScheduleKeyDeletionRequest{ClientId: "a", KeyId: first.KeyID})
+	require.NoError(t, err)
+	require.Equal(t, uint32(14), scheduled.PendingWindowInDays)
+	require.Equal(t, "2026-11-25T12:00:00Z", scheduled.KeyMetadata.GetDeletionDate())
+
+	second := f.add(t, "a", "request-override", schemeTransit)
+	window := uint32(7)
+	scheduled, err = p.ScheduleKeyDeletion(context.Background(), &proto.ScheduleKeyDeletionRequest{ClientId: "a", KeyId: second.KeyID, PendingWindowInDays: &window})
+	require.NoError(t, err)
+	require.Equal(t, window, scheduled.PendingWindowInDays)
+	require.Equal(t, "2026-11-18T12:00:00Z", scheduled.KeyMetadata.GetDeletionDate())
 }
 
 func TestTransitLifecycleAndLegacyState(t *testing.T) {

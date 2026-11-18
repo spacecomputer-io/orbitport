@@ -12,7 +12,7 @@ fn all_policy() -> ToolPolicy {
 }
 
 #[test]
-fn lifecycle_schemas_defaults_annotations_and_invalid_arguments() {
+fn lifecycle_schemas_server_defaults_annotations_and_invalid_arguments() {
     for capability in orbitport_kms_api::KmsValidation::get_capabilities().schemes {
         assert!(capability.supports_list_keys);
         assert_eq!(
@@ -43,15 +43,30 @@ fn lifecycle_schemas_defaults_annotations_and_invalid_arguments() {
     };
     let list = tool("kms_list_keys");
     assert_eq!(list["annotations"]["readOnlyHint"], true);
-    assert_eq!(list["inputSchema"]["properties"]["Limit"]["default"], 100);
+    assert!(
+        list["inputSchema"]["properties"]["Limit"]
+            .get("default")
+            .is_none()
+    );
+    assert!(
+        list["inputSchema"]["properties"]["Limit"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("configured default")
+    );
     assert_eq!(list["inputSchema"]["properties"]["Limit"]["maximum"], 1000);
     assert_eq!(
         tool("kms_schedule_key_deletion")["inputSchema"]["properties"]["PendingWindowInDays"]["minimum"],
         7
     );
-    assert_eq!(
-        tool("kms_schedule_key_deletion")["inputSchema"]["properties"]["PendingWindowInDays"]["default"],
-        30
+    let window =
+        &tool("kms_schedule_key_deletion")["inputSchema"]["properties"]["PendingWindowInDays"];
+    assert!(window.get("default").is_none());
+    assert!(
+        window["description"]
+            .as_str()
+            .unwrap()
+            .contains("configured default")
     );
     for name in [
         "kms_disable_key",

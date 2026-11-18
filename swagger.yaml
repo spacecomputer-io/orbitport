@@ -265,13 +265,13 @@ components:
           nullable: true
           minimum: 1
           maximum: 1000
-          default: 100
+          description: Uses the server's configured default when omitted (100 unless changed). The server can enforce a maximum below the API ceiling of 1000.
         NextToken:
           type: string
           nullable: true
           minLength: 1
           maxLength: 512
-          description: Opaque continuation cursor; does not select or change the tenant.
+          description: Opaque continuation cursor. does not select or change the tenant.
     KmsListKeysResult:
       type: object
       required: [KeyIds, NextToken]
@@ -284,7 +284,7 @@ components:
         NextToken:
           type: string
           nullable: true
-          description: Null at the end of the list; listing is not a snapshot across pages.
+          description: Null at the end of the list. listing is not a snapshot across pages.
     KmsLifecycleParams:
       type: object
       required: [KeyId]
@@ -303,8 +303,7 @@ components:
               nullable: true
               minimum: 7
               maximum: 30
-              default: 30
-              description: Disables the key immediately. Permanent deletion becomes eligible after this window; it is processed by the background worker, not an OpenBao TTL.
+              description: Uses the server's configured default when omitted (30 unless changed). Disables the key immediately. Permanent deletion becomes eligible after this window. it is processed by the background worker, not an OpenBao TTL.
     KmsLifecycleResult:
       type: object
       properties:
@@ -322,7 +321,7 @@ components:
               type: string
               format: date-time
               nullable: true
-          description: Existing metadata plus lifecycle fields. Cancellation returns DISABLED; enabled and pending metadata/public keys remain readable while material exists.
+          description: Existing metadata plus lifecycle fields. Cancellation returns DISABLED. enabled and pending metadata/public keys remain readable while material exists.
     KmsScheduleKeyDeletionResult:
       allOf:
         - $ref: '#/components/schemas/KmsLifecycleResult'

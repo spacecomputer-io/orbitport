@@ -20,14 +20,17 @@ import (
 type Plugin struct {
 	proto.UnimplementedKmsPluginServer
 
-	client             *openBaoClient
-	now                func() time.Time
-	providers          map[string]kmsProvider
-	keyStoreAuthorizer *keyStoreAuthorizer
-	deletionInterval   time.Duration
-	threads            utils.ThreadControl
-	startOnce          sync.Once
-	closeOnce          sync.Once
+	client                    *openBaoClient
+	now                       func() time.Time
+	providers                 map[string]kmsProvider
+	keyStoreAuthorizer        *keyStoreAuthorizer
+	deletionInterval          time.Duration
+	listKeysDefaultLimit      uint32
+	listKeysMaxLimit          uint32
+	defaultDeletionWindowDays uint32
+	threads                   utils.ThreadControl
+	startOnce                 sync.Once
+	closeOnce                 sync.Once
 }
 
 var logger = utils.GetLogger("orbitport:kms")
@@ -36,6 +39,10 @@ var reservedKmsRe = regexp.MustCompile(`^kms:`)
 
 func NewPlugin() (*Plugin, error) {
 	cfg := readFromEnv()
+	// Environment values already have defaults, so reject explicit invalid zeros before fallback.
+	if err := validateLifecycleConfig(cfg); err != nil {
+		return nil, err
+	}
 	cfg = withKMSConfigDefaults(cfg)
 	if cfg.OpenBaoProxyURL == "" {
 		return nil, fmt.Errorf("ORBITPORT_KMS_OPENBAO_PROXY_URL is required")
@@ -62,6 +69,9 @@ func newPlugin(cfg *kmsConfig, client *openBaoClient) *Plugin {
 
 func newPluginWithConfig(cfg *kmsConfig, client *openBaoClient) (*Plugin, error) {
 	cfg = withKMSConfigDefaults(cfg)
+	if err := validateLifecycleConfig(cfg); err != nil {
+		return nil, err
+	}
 	authorizer, err := newKeyStoreAuthorizer(cfg)
 	if err != nil {
 		return nil, err
@@ -71,11 +81,14 @@ func newPluginWithConfig(cfg *kmsConfig, client *openBaoClient) (*Plugin, error)
 		return nil, fmt.Errorf("invalid KMS_DELETION_SWEEP_INTERVAL")
 	}
 	return &Plugin{
-		client:             client,
-		now:                time.Now,
-		keyStoreAuthorizer: authorizer,
-		deletionInterval:   interval,
-		threads:            utils.NewThreadControl(),
+		client:                    client,
+		now:                       time.Now,
+		keyStoreAuthorizer:        authorizer,
+		deletionInterval:          interval,
+		listKeysDefaultLimit:      uint32(cfg.ListKeysDefaultLimit),
+		listKeysMaxLimit:          uint32(cfg.ListKeysMaxLimit),
+		defaultDeletionWindowDays: uint32(cfg.DefaultDeletionWindowDays),
+		threads:                   utils.NewThreadControl(),
 		providers: map[string]kmsProvider{
 			schemeTransit:  newTransitProvider(client),
 			schemeEthereum: newEthereumProvider(client),
