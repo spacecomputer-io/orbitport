@@ -316,6 +316,10 @@ func (p *Plugin) CreateKey(ctx context.Context, req *proto.CreateKeyRequest) (*p
 
 	record.normalize()
 	if err := p.client.putMetadata(ctx, req.ClientId, keyID, record); err != nil {
+		if isMetadataCASConflict(err) {
+			logger.Warnf("CreateKey rejected duplicate alias=%q", alias)
+			return nil, status.Error(codes.AlreadyExists, "Alias already exists for this tenant")
+		}
 		logger.Warnf("CreateKey failed to persist metadata for key_id=%s scheme=%s", keyID, scheme)
 		return nil, kmsBackendStatus("create key metadata", err)
 	}
