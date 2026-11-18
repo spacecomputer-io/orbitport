@@ -10,6 +10,10 @@ pub mod kms {
 pub use kms::*;
 pub mod schema;
 
+const MAX_LIST_KEYS_LIMIT: u32 = 1000;
+const MIN_DELETION_WINDOW_DAYS: u32 = 7;
+const MAX_DELETION_WINDOW_DAYS: u32 = 30;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Scheme {
     Transit,
@@ -503,6 +507,47 @@ impl KmsValidation {
         validate_key_reference("KeyId", &req.key_id)
     }
 
+    pub fn validate_list_keys(req: &ListKeysRequest) -> Result<(), String> {
+        if req
+            .limit
+            .is_some_and(|limit| !(1..=MAX_LIST_KEYS_LIMIT).contains(&limit))
+        {
+            return Err(format!("Limit must be between 1 and {MAX_LIST_KEYS_LIMIT}"));
+        }
+        if req
+            .next_token
+            .as_ref()
+            .is_some_and(|token| token.trim().is_empty() || token.trim().len() > 512)
+        {
+            return Err("NextToken must contain between 1 and 512 bytes".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn validate_disable_key(req: &DisableKeyRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)
+    }
+
+    pub fn validate_enable_key(req: &EnableKeyRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)
+    }
+
+    pub fn validate_schedule_key_deletion(req: &ScheduleKeyDeletionRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)?;
+        if req.pending_window_in_days.is_some_and(|days| {
+            !(MIN_DELETION_WINDOW_DAYS..=MAX_DELETION_WINDOW_DAYS).contains(&days)
+        }) {
+            return Err(format!(
+                "PendingWindowInDays must be between {MIN_DELETION_WINDOW_DAYS} and {MAX_DELETION_WINDOW_DAYS}"
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn validate_cancel_key_deletion(req: &CancelKeyDeletionRequest) -> Result<(), String> {
+        validate_key_reference("KeyId", &req.key_id)
+    }
+
     pub fn validate_key_store_put(req: &KeyStorePutRequest) -> Result<(), String> {
         validate_key_store_name("Name", &req.name)
     }
@@ -535,6 +580,11 @@ impl KmsValidation {
 
 fn transit_capability() -> SchemeCapability {
     SchemeCapability {
+        supports_list_keys: true,
+        supports_disable_key: true,
+        supports_enable_key: true,
+        supports_schedule_key_deletion: true,
+        supports_cancel_key_deletion: true,
         scheme: Scheme::Transit.as_str().to_string(),
         key_specs: vec![
             KeySpec::Aes256Gcm96,
@@ -595,6 +645,11 @@ fn transit_capability() -> SchemeCapability {
 
 fn ethereum_capability() -> SchemeCapability {
     SchemeCapability {
+        supports_list_keys: true,
+        supports_disable_key: false,
+        supports_enable_key: false,
+        supports_schedule_key_deletion: false,
+        supports_cancel_key_deletion: false,
         scheme: Scheme::Ethereum.as_str().to_string(),
         key_specs: vec![KeySpec::EccSecgP256k1.as_str().to_string()],
         key_usages: vec![KeyUsage::SignVerify.as_str().to_string()],
@@ -618,6 +673,11 @@ fn ethereum_capability() -> SchemeCapability {
 
 fn pqc_capability() -> SchemeCapability {
     SchemeCapability {
+        supports_list_keys: true,
+        supports_disable_key: false,
+        supports_enable_key: false,
+        supports_schedule_key_deletion: false,
+        supports_cancel_key_deletion: false,
         scheme: Scheme::Pqc.as_str().to_string(),
         key_specs: vec![KeySpec::MlDsa44, KeySpec::MlDsa65, KeySpec::MlDsa87]
             .into_iter()

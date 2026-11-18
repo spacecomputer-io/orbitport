@@ -17,6 +17,10 @@ func newTransitProvider(client *openBaoClient) kmsProvider {
 	return &transitProvider{client: client}
 }
 
+func (p *transitProvider) DeleteKey(ctx context.Context, metadata *keyMetadataRecord) error {
+	return p.client.deleteTransitKey(ctx, metadata.backendKey())
+}
+
 func (p *transitProvider) CreateKey(ctx context.Context, req *proto.CreateKeyRequest, keyID string, now time.Time) (*keyMetadataRecord, error) {
 	if err := validateTransitKeyUsage(req.KeySpec, req.KeyUsage); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())

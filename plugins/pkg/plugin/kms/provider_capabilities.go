@@ -62,3 +62,11 @@ func requireRotateKeyProvider(provider kmsProvider, scheme string) (rotateKeyPro
 	}
 	return typed, nil
 }
+
+func requireDeleteKeyProvider(provider kmsProvider, scheme string) (deleteKeyProvider, error) {
+	typed, ok := provider.(deleteKeyProvider)
+	if !ok {
+		return nil, status.Error(codes.Unimplemented, fmt.Sprintf("%s key deletion is not implemented", scheme))
+	}
+	return typed, nil
+}

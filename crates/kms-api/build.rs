@@ -7,6 +7,15 @@ fn main() -> Result<()> {
         "#[derive(serde::Serialize, serde::Deserialize, schemars::JsonSchema)]",
     );
     config.type_attribute(".", "#[serde(rename_all = \"PascalCase\")]");
+    for field in [
+        "supports_list_keys",
+        "supports_disable_key",
+        "supports_enable_key",
+        "supports_schedule_key_deletion",
+        "supports_cancel_key_deletion",
+    ] {
+        config.field_attribute(format!("kms.SchemeCapability.{field}"), "#[serde(default)]");
+    }
     for (field, schema) in [
         ("kms.CreateKeyRequest.key_spec", "key_spec"),
         ("kms.CreateKeyRequest.key_usage", "key_usage"),
@@ -24,6 +33,12 @@ fn main() -> Result<()> {
         ("kms.GenerateDataKeyRequest.data_key_spec", "data_key_spec"),
         ("kms.GenerateDataKeyRequest.number_of_bytes", "positive_u32"),
         ("kms.GetPublicKeyRequest.version", "positive_u32"),
+        ("kms.ListKeysRequest.limit", "list_keys_limit"),
+        (
+            "kms.ScheduleKeyDeletionRequest.pending_window_in_days",
+            "deletion_window",
+        ),
+        ("kms.KeyMetadata.key_state", "key_state"),
     ] {
         config.field_attribute(
             field,

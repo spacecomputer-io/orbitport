@@ -7,6 +7,9 @@ agent-oriented key-store to clients without leaking the underlying engine.
 
 ## Overview
 
+See [Key Lifecycle and Listing](LIFECYCLE.md) for tenant-wide ListKeys and
+Transit-only enable/disable and scheduled-deletion operations.
+
 Implements `KmsPlugin` (`proto/plugins/kms.proto`) with crypto RPCs and
 key-store RPCs:
 
@@ -31,8 +34,8 @@ key-store RPCs:
   provider and tenant without the caller tracking it.
 - `Sign(key_id, message, signing_algorithm, message_type)` — asymmetric
   signing. Transit handles the standard suites (ECDSA P-256/P-384, Ed25519,
-  RSA-4096); the Ethereum provider handles secp256k1 with `RAW`, `DIGEST`,
-  and `EIP191` message types; the PQC provider handles ML-DSA with `RAW`
+  RSA-4096), the Ethereum provider handles secp256k1 with `RAW`, `DIGEST`,
+  and `EIP191` message types, the PQC provider handles ML-DSA with `RAW`
   base64-encoded messages.
 - `Encapsulate(key_id)` — ML-KEM key agreement. Computes locally from the
   stored PQC ML-KEM public key and returns a base64 ciphertext plus the
@@ -112,7 +115,7 @@ OpenBao retain ML-KEM support, described below.
 - Message type: `RAW` only. Messages must be base64-encoded bytes.
 - `CreateKey` returns the ML-DSA public key or ML-KEM encapsulation key as
   base64 in `KeyMetadata.public_key`. ML-KEM encapsulation uses that public
-  key locally; ML-KEM decapsulation is delegated to OpenBao.
+  key locally, ML-KEM decapsulation is delegated to OpenBao.
 - Encrypt / Decrypt / GenerateDataKey / RotateKey are intentionally rejected
   with `FailedPrecondition` — PQC keys are sign/key-agreement only.
 
@@ -131,7 +134,7 @@ keys. Tenant isolation is enforced in two places:
 
 Aliases are user-chosen, validated to `[A-Za-z0-9.-]{1,128}`, and may not
 start with the reserved `kms:` prefix. The canonical external identifier is
-always `kms:<alias>`; both forms resolve to the same backend key.
+always `kms:<alias>`, both forms resolve to the same backend key.
 
 ## Public-key retrieval for verification
 
@@ -161,7 +164,7 @@ without numeric precision loss. It is separate from operational KMS metadata:
   (default `key-store`) under `owners/<tenant>/<name>`.
 - **Tenant scope** — the same authenticated `client_id` model as the existing
   KMS. The plugin hashes it into `tenant_<sha256(client_id)[:16]>`.
-- **Names** — slash-separated paths such as `github/prod`; each segment must
+- **Names** — slash-separated paths such as `github/prod`, each segment must
   match `[A-Za-z0-9._-]+`. `.` and `..` are rejected, and the full name is
   capped at 256 characters.
 - **Tenant isolation** — enforced by the authenticated `client_id`, validated
@@ -179,7 +182,7 @@ without numeric precision loss. It is separate from operational KMS metadata:
 
 Authorization is enforced in the KMS plugin with Cedar. The compose stacks mount
 the default owner policy file into the KMS container at
-`/etc/orbitport/kms/key_store_default.cedar`; Kubernetes deployments should
+`/etc/orbitport/kms/key_store_default.cedar`, Kubernetes deployments should
 provide the same file through a ConfigMap. Configure
 `ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH` to point at that file or a custom
 policy file. If the path is unset, key-store requests are denied by the empty
@@ -198,7 +201,7 @@ over stdio and calls the gateway's `/api/v1/rpc` endpoint using a PAT. It does
 not connect directly to this plugin. Manual API calls remain available using
 PATs, with tenant isolation and Cedar enforcement unchanged. Legacy Auth0
 customer credentials are rejected. Secret-returning tools
-and key-store Delete require user opt-in; key-store Put remains available by
+and key-store Delete require user opt-in, key-store Put remains available by
 default and is annotated destructive because it can overwrite an entry.
 See [installation and configuration](../../../../mcp/README.md).
 
@@ -214,7 +217,7 @@ See [installation and configuration](../../../../mcp/README.md).
 
 Clients should call this once at startup to discover what they can ask for. PQC
 scheme and signing capability entries are tagged `experimental` in the
-response. ML-KEM key specs and key agreement capabilities are not advertised;
+response. ML-KEM key specs and key agreement capabilities are not advertised,
 `SupportsEncapsulate` and `SupportsDecapsulate` are both `false`.
 
 ## Dependencies
@@ -227,7 +230,7 @@ tokens), `openbao-proxy` (handles auth headers in front of OpenBao), and
 this plugin as `plugin-kms`. The compose stacks build the Ethereum plugin and
 the PQC plugin from sibling repos, then the bootstrap registers both plugin
 mounts when their binaries are available in the OpenBao plugin directory. The
-PQC builder uses the OpenSSL backend by default; set
+PQC builder uses the OpenSSL backend by default, set
 `ORBITPORT_OPENBAO_PQC_BACKEND=wolfssl` to switch the OpenBao PQC plugin
 binary. The KMS plugin waits for `openbao-bootstrap` to complete and
 `openbao-proxy` to report healthy before it starts.
