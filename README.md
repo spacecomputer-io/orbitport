@@ -1,8 +1,5 @@
 # SpaceComputer | Orbitport
 
-KMS key listing and Transit lifecycle operations are documented in
-[Key Lifecycle and Listing](plugins/pkg/plugin/kms/LIFECYCLE.md).
-
 ![spacecomputer logo](https://raw.githubusercontent.com/spacecomputer-io/media-kit/refs/heads/main/SpaceComputer/logo/SpaceComputer_banner.png)
 
 ![Plugins](https://github.com/spacecomputer-io/orbitport/actions/workflows/plugins.yml/badge.svg?branch=main)

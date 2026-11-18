@@ -23,7 +23,7 @@ the executable and a POSIX file-based PAT launcher, `kms-mcp-from-file.sh`.
 The Windows archive (`kms-mcp-x86_64-pc-windows-msvc.zip`) contains only
 `kms-mcp.exe`.
 Download your platform archive and `SHA256SUMS` from the same GitHub Release.
-On Linux, verify with `sha256sum --check --ignore-missing SHA256SUMS`; on macOS,
+On Linux, verify with `sha256sum --check --ignore-missing SHA256SUMS`, on macOS,
 compare `shasum -a 256 <archive>` with its entry. Verify provenance with:
 
 ```sh
@@ -32,9 +32,9 @@ gh attestation verify <archive> --repo spacecomputer-io/orbitport
 
 Extract the executable to a user-owned location and configure its absolute
 path in your harness. The macOS binaries are not signed or notarized. If the
-archive was downloaded with a browser, macOS may block the executable; after
+archive was downloaded with a browser, macOS may block the executable, after
 verifying it, clear the flag with `xattr -d com.apple.quarantine kms-mcp`.
-Downloads with `gh release download` or `curl` are not flagged. Releases are built by CI; the executable is not an
+Downloads with `gh release download` or `curl` are not flagged. Releases are built by CI, the executable is not an
 OpenBao server or a replacement for the gateway.
 
 ## Configure
@@ -45,7 +45,7 @@ CLI and Codex CLI. It also covers manual terminal initialization,
 `notifications/initialized`, `tools/list` and a live tool call.
 
 The executable advertises the MCP server name `spacecomputer-kms`. The
-optional file-based launcher loads `ORBITPORT_PAT` before starting `kms-mcp`;
+optional file-based launcher loads `ORBITPORT_PAT` before starting `kms-mcp`,
 the binary itself still reads credentials only from that environment variable.
 
 The URL defaults to production, `https://op.spacecomputer.io`. HTTP is accepted
@@ -90,22 +90,22 @@ protocol query. Current ML-KEM operations remain disabled.
 
 Hidden tools are neither listed nor executable, even if an agent guesses
 their names. The allowlist is fixed at startup and cannot be changed through
-tool arguments. This protects against prompt injection; it is not a PAT scope.
+tool arguments. This protects against prompt injection, it is not a PAT scope.
 Someone holding the PAT can still call the gateway directly.
 
 There are ten default tools and ten opt-in tools. Lifecycle mutations are
-Transit-only; listing includes all tenant engines. Schedule disables immediately
+Transit-only, listing includes all tenant engines. Schedule disables immediately
 and becomes eligible for irreversible deletion after 7-30 days (default 30).
 Cancel works only before the deadline/worker claim and leaves the key disabled.
 See [lifecycle behavior and rollout](../plugins/pkg/plugin/kms/LIFECYCLE.md).
 
 Read-only lookups carry MCP annotations. Put and Delete are marked destructive:
-Put overwrites the latest entry; Delete removes all versions. Annotations
+Put overwrites the latest entry, Delete removes all versions. Annotations
 are hints, and confirmation behavior depends on the harness.
 
 Key-store secrets must be JSON objects and remain opaque JSON end to end,
 preserving large integers and long decimals. Identity fields such as
-`ClientId` and `kms_tenant` are refused; tenancy comes from the gateway.
+`ClientId` and `kms_tenant` are refused, tenancy comes from the gateway.
 
 ## Protocol And Errors
 
@@ -116,7 +116,7 @@ without credits or gateway calls. Notifications produce no response.
 Each successful tool invocation uses the same operation tag and price as a
 manual call. The process keeps no persistent state or token cache.
 
-Only JSON protocol messages are written to stdout. Diagnostics go to stderr;
+Only JSON protocol messages are written to stdout. Diagnostics go to stderr,
 raw arguments, responses and credentials are never logged. Input messages,
 including the newline, are limited to 65 KiB: the default 64 KiB gateway
 body limit plus 1 KiB for MCP framing and metadata. Oversized lines are
@@ -124,7 +124,7 @@ discarded through the next newline, reported as a protocol error, and do not
 close the session. The gateway's own body limit still applies to forwarded
 requests. Gateway responses are limited to 2 MiB.
 The HTTP deadline is 30 seconds with a five-second connect timeout.
-EOF exits after the active request finishes or times out; Ctrl-C interrupts.
+EOF exits after the active request finishes or times out, Ctrl-C interrupts.
 
 | Failure | Action |
 | --- | --- |
@@ -147,10 +147,10 @@ does not establish whether the operation completed. The MCP displays safe,
 bounded gateway validation messages and uses fixed messages for known execution
 failure reasons, without forwarding raw backend details. Older gateways that
 omit a failure reason still get the generic error. Successful tool results
-include text and raw structured content; KMS failures use `isError: true`.
+include text and raw structured content, KMS failures use `isError: true`.
 
 Invalid arguments to an available tool also return `isError: true`, with a
 field name or path where possible and without echoing submitted values. The
-agent can correct the arguments and try again; the rejected call makes no
+agent can correct the arguments and try again, the rejected call makes no
 gateway request. Unknown or hidden tools and malformed MCP requests remain
 JSON-RPC protocol errors.

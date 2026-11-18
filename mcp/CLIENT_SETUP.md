@@ -22,7 +22,7 @@ install -m 700 mcp/scripts/kms-mcp-from-file.sh "$HOME/.config/spacecomputer-kms
 ```
 
 macOS and Linux release archives contain `kms-mcp` and
-`kms-mcp-from-file.sh`; the Windows zip contains only `kms-mcp.exe`.
+`kms-mcp-from-file.sh`, the Windows zip contains only `kms-mcp.exe`.
 As an alternative to building, after verifying and
 extracting a macOS/Linux archive, run these commands in its extracted directory:
 
@@ -274,9 +274,9 @@ connection or harness after changing the arguments.
 | `disable-key` | Disables a Transit key without removing its material. |
 | `enable-key` | Re-enables a disabled Transit key. |
 | `schedule-key-deletion` | Disables a Transit key and schedules irreversible deletion after 7-30 days. |
-| `cancel-key-deletion` | Cancels before the deadline/worker claim; the key stays disabled. |
-| `encapsulate` | Exposes the key-agreement tool; execution is currently disabled. |
-| `decapsulate` | Exposes the shared-key recovery tool; execution is currently disabled. |
+| `cancel-key-deletion` | Cancels before the deadline/worker claim, the key stays disabled. |
+| `encapsulate` | Exposes the key-agreement tool, execution is currently disabled. |
+| `decapsulate` | Exposes the shared-key recovery tool, execution is currently disabled. |
 
 These are **local tool exposure controls, not PAT scopes**. A holder of the
 PAT can still call the gateway directly. The default tool set is restricted,
