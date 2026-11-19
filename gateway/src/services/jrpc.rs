@@ -1,20 +1,20 @@
-use crate::{plugins::PluginCatalog, proto::services::ctrng::CTrngResponse};
+use crate::plugins::PluginCatalog;
 use serde::de::{self, DeserializeOwned};
 use serde::{Deserialize, Serialize};
 
-use crate::proto::services::ctrng::CTrngRequest;
 use crate::proto::services::kms::{
     CreateKeyRequest, DecapsulateRequest, DecryptRequest, EncapsulateRequest, EncryptRequest,
     GenerateDataKeyRequest, GetCapabilitiesRequest, GetKeyMetadataRequest, GetPublicKeyRequest,
     RotateKeyRequest, SignRequest,
 };
+#[cfg(feature = "kms_threshold")]
 use crate::proto::services::threshold::DkgRequest;
 
-use crate::services::ctrng::{CTrngService, MAX_CHUNKS};
 use crate::services::kms::{
     KeyStoreDeleteRequest, KeyStoreGetRequest, KeyStoreListRequest, KeyStorePutRequest, KmsRpcCall,
     KmsService,
 };
+#[cfg(feature = "kms_threshold")]
 use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
 type JsonRpcRawResponse = Box<serde_json::value::RawValue>;
@@ -129,7 +129,6 @@ impl<T> JsonRpcResponse<T> {
 /// This allows for easy routing of RPC calls to the appropriate service handlers.
 #[derive(Debug)]
 pub enum RpcCall {
-    GetCTRNG(CTrngRequest),
     GetCapabilities(GetCapabilitiesRequest),
     CreateKey(CreateKeyRequest),
     Decrypt(DecryptRequest),
@@ -143,6 +142,7 @@ pub enum RpcCall {
     Sign(SignRequest),
     Encapsulate(EncapsulateRequest),
     Decapsulate(DecapsulateRequest),
+    #[cfg(feature = "kms_threshold")]
     CoordinateDKG(DkgRequest),
     GetKeyMetadata(GetKeyMetadataRequest),
     GetPublicKey(GetPublicKeyRequest),
@@ -151,7 +151,6 @@ pub enum RpcCall {
 impl RpcCall {
     fn from_method_and_params(method: &str, params_json: &str) -> Result<Self, String> {
         match method {
-            "ctrng.Get" => Ok(Self::GetCTRNG(Self::parse_params(method, params_json)?)),
             "kms.GetCapabilities" => Ok(Self::GetCapabilities(Self::parse_params(
                 method,
                 params_json,
@@ -179,6 +178,7 @@ impl RpcCall {
             "kms.Sign" => Ok(Self::Sign(Self::parse_params(method, params_json)?)),
             "kms.Encapsulate" => Ok(Self::Encapsulate(Self::parse_params(method, params_json)?)),
             "kms.Decapsulate" => Ok(Self::Decapsulate(Self::parse_params(method, params_json)?)),
+            #[cfg(feature = "kms_threshold")]
             "kms_threshold.CoordinateDKG" => Ok(Self::CoordinateDKG(Self::parse_params(
                 method,
                 params_json,
@@ -197,16 +197,6 @@ impl RpcCall {
     /// Validates the parameters of the RPC call.
     pub fn validate(&self) -> Result<(), String> {
         match self {
-            RpcCall::GetCTRNG(req) => {
-                if let Some(chunks) = req.chunks {
-                    if chunks > MAX_CHUNKS {
-                        return Err("Max chunks exceeded".to_string());
-                    }
-                    if chunks < 1 {
-                        return Err("Chunks must be at least 1".to_string());
-                    }
-                }
-            }
             RpcCall::GetCapabilities(_) => {}
             RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
             RpcCall::Decrypt(req) => KmsService::validate_decrypt(req)?,
@@ -222,6 +212,7 @@ impl RpcCall {
             RpcCall::KeyStoreGet(req) => KmsService::validate_key_store_get(req)?,
             RpcCall::KeyStoreList(req) => KmsService::validate_key_store_list(req)?,
             RpcCall::KeyStoreDelete(req) => KmsService::validate_key_store_delete(req)?,
+            #[cfg(feature = "kms_threshold")]
             RpcCall::CoordinateDKG(req) => {
                 ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
             }
@@ -233,7 +224,6 @@ impl RpcCall {
     /// `validate()` passes, which pins the variant to an exact known value.
     pub fn operation(&self) -> String {
         match self {
-            RpcCall::GetCTRNG(_) => "ctrng.Get".to_string(),
             RpcCall::GetCapabilities(_) => "kms.GetCapabilities".to_string(),
             RpcCall::CreateKey(req) => format!("kms.CreateKey:{}", req.key_spec),
             RpcCall::GetKeyMetadata(_) => "kms.GetKeyMetadata".to_string(),
@@ -249,6 +239,7 @@ impl RpcCall {
             RpcCall::Sign(req) => format!("kms.Sign:{}", req.signing_algorithm),
             RpcCall::Encapsulate(_) => "kms.Encapsulate".to_string(),
             RpcCall::Decapsulate(_) => "kms.Decapsulate".to_string(),
+            #[cfg(feature = "kms_threshold")]
             RpcCall::CoordinateDKG(_) => "kms_threshold.CoordinateDKG".to_string(),
         }
     }
@@ -261,22 +252,6 @@ impl RpcCall {
         plugin_catalog: &PluginCatalog,
     ) -> Result<JsonRpcRawResponse, tonic::Status> {
         match self {
-            RpcCall::GetCTRNG(req) => {
-                let grpc_client = plugin_catalog.get_masterseed_client().await.map_err(|_| {
-                    if plugin_catalog.ctrng_enabled() {
-                        tonic::Status::unavailable("Masterseed plugin unavailable")
-                    } else {
-                        tonic::Status::unavailable("cTRNG feature disabled")
-                    }
-                })?;
-                let mut svc = CTrngService::new(grpc_client);
-                let results: CTrngResponse = svc.get_values(req).await.map_err(|e| {
-                    // We can log _e here for debugging, but we don't want to expose internal errors to the client
-                    tracing::warn!("Failed to get mixed cTRNG: {:?}", e);
-                    tonic::Status::internal("Failed to get mixed cTRNG")
-                })?;
-                serialize_success_response(req_id, results)
-            }
             RpcCall::GetCapabilities(_) => {
                 serialize_success_response(req_id, KmsService::get_capabilities())
             }
@@ -388,6 +363,7 @@ impl RpcCall {
                 )
                 .await
             }
+            #[cfg(feature = "kms_threshold")]
             RpcCall::CoordinateDKG(req) => {
                 execute_threshold(
                     req_id,
@@ -425,16 +401,13 @@ async fn execute_kms(
     serialize_success_response(req_id, results)
 }
 
+#[cfg(feature = "kms_threshold")]
 async fn execute_threshold(
     req_id: u64,
     client_id: &str,
     plugin_catalog: &PluginCatalog,
     call: ThresholdRpcCall,
 ) -> Result<JsonRpcRawResponse, tonic::Status> {
-    if !plugin_catalog.threshold_enabled() {
-        return Err(tonic::Status::unavailable("Threshold feature disabled"));
-    }
-
     let grpc_client = plugin_catalog
         .get_threshold_client()
         .await
@@ -848,6 +821,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "kms_threshold")]
     #[test]
     fn test_deserialize_threshold_coordinate_dkg_pascal_case() {
         let raw = serde_json::json!({
@@ -934,10 +908,6 @@ mod test {
             "kms.GetPublicKey"
         );
         assert_eq!(
-            operation_of("ctrng.Get", serde_json::json!({})),
-            "ctrng.Get"
-        );
-        assert_eq!(
             operation_of(
                 "kms_keystore.Put",
                 serde_json::json!({"Name": "github/prod", "Secret": {"api_key": "secret"}})
@@ -964,33 +934,16 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    async fn test_threshold_coordinate_dkg_disabled() {
-        let plugin_catalog = PluginCatalog::new(
-            "http://auth:50000",
-            Some("http://masterseed:50003"),
-            "http://kms:50004",
-            None,
-            None,
-            false,
-            "",
-            crate::services::threshold::ThresholdGroupRegistry::default(),
-        );
-
-        let err = execute_threshold(
-            9,
-            "client-1",
-            &plugin_catalog,
-            ThresholdRpcCall::CoordinateDkg(DkgRequest {
-                alias: "key-1".to_string(),
-                group_name: "team-a".to_string(),
-                session_id: "dkg-1".to_string(),
-            }),
-        )
-        .await
-        .expect_err("threshold feature should be disabled");
-
-        assert_eq!(err.code(), tonic::Code::Unavailable);
-        assert_eq!(err.message(), "Threshold feature disabled");
+    #[cfg(not(feature = "kms_threshold"))]
+    #[test]
+    fn test_threshold_coordinate_dkg_rejected_without_feature() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "kms_threshold.CoordinateDKG",
+            "params": {"Alias": "key-1", "GroupName": "team-a", "SessionId": "dkg-1"}
+        });
+        let err = serde_json::from_value::<JsonRpcRequest>(raw).unwrap_err();
+        assert!(err.to_string().contains("Unsupported method"));
     }
 }

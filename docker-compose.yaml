@@ -119,52 +119,9 @@ services:
       retries: 12
       start_period: 2s
 
-  plugin-ipfs:
-    <<: *plugin-base
-    container_name: plugin-ipfs
-    environment:
-      - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=ipfs
-      - ORBITPORT_GRPC_PORT=50002
-      - ORBITPORT_IPFS_ADDRESS=http://ipfs-node:5001
-
-  plugin-aptos-orbital:
-    <<: *plugin-base
-    container_name: plugin-aptos-orbital
-    environment:
-      - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=aptosorbital
-      - ORBITPORT_GRPC_PORT=50001
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_ID=${ORBITPORT_APTOS_ORBITAL_CLIENT_ID}
-      - ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET=${ORBITPORT_APTOS_ORBITAL_CLIENT_SECRET}
-    ports:
-    - 9001:9000
-
-  plugin-masterseed:
-    <<: *plugin-base
-    container_name: plugin-masterseed
-    environment:
-      - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=masterseed
-      - ORBITPORT_GRPC_PORT=50003
-      - ORBITPORT_APTOS_PLUGIN=plugin-aptos-orbital:50001
-      # Configurable defaults for seed management
-      - ORBITPORT_DEFAULT_MASTER_SEEDS=${ORBITPORT_DEFAULT_MASTER_SEEDS}
-      - ORBITPORT_MASTERSEED_TRNG_SIZE=32
-      - ORBITPORT_MASTERSEED_MAX_SEEDS=100
-      - ORBITPORT_MASTERSEED_PERIOD=3600
-      - ORBITPORT_MASTER_SEED_MAX_COUNT_PER_REQUEST=1000
-    ports:
-      - 9003:9000
-    depends_on:
-      - plugin-aptos-orbital
-
   plugin-kms:
     <<: *plugin-base
     container_name: plugin-kms
-    build:
-      context: ./plugins
-    image: op-plugin:latest
     environment:
       - GOLOG_LOG_LEVEL=debug
       - ORBITPORT_PLUGIN=kms
@@ -194,6 +151,42 @@ services:
       - ORBITPORT_AUTH0_DOMAIN=${ORBITPORT_AUTH0_DOMAIN}
       - ORBITPORT_AUTH0_AUDIENCE=${ORBITPORT_AUTH0_AUDIENCE}
       - ORBITPORT_AUTH_SERVICE_CLIENT_IDS=${ORBITPORT_AUTH_SERVICE_CLIENT_IDS:-}
+      - ORBITPORT_AUTH_PAT_ISS=${ORBITPORT_PATISSUER_ISS:-https://auth.orbitport.local}
+      - ORBITPORT_AUTH_PAT_AUDIENCE=${ORBITPORT_PATISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      - ORBITPORT_AUTH_PATISSUER_PLUGIN=plugin-patissuer:50006
+    depends_on:
+      - plugin-patissuer
+
+  plugin-patissuer:
+    <<: *plugin-base
+    container_name: plugin-patissuer
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=patissuer
+      - ORBITPORT_GRPC_PORT=50006
+      - ORBITPORT_PATISSUER_ISS=${ORBITPORT_PATISSUER_ISS:-https://auth.orbitport.local}
+      - ORBITPORT_PATISSUER_AUD=${ORBITPORT_PATISSUER_AUD:-https://op-dev.spacecomputer.io/api}
+      - ORBITPORT_PATISSUER_SIGNER=transit
+      - ORBITPORT_PATISSUER_OPENBAO_PROXY_URL=http://openbao-proxy:8200
+    depends_on:
+      openbao-bootstrap:
+        condition: service_completed_successfully
+      openbao-proxy:
+        condition: service_healthy
+
+  plugin-jwks:
+    <<: *plugin-base
+    container_name: plugin-jwks
+    environment:
+      - GOLOG_LOG_LEVEL=debug
+      - ORBITPORT_PLUGIN=jwks
+      - ORBITPORT_GRPC_PORT=50008
+      - ORBITPORT_JWKS_PATISSUER_PLUGIN=plugin-patissuer:50006
+      - ORBITPORT_JWKS_HTTP_PORT=8080
+    ports:
+      - 8091:8080
+    depends_on:
+      - plugin-patissuer
 
   plugin-account:
     <<: *plugin-base
@@ -203,26 +196,18 @@ services:
       - ORBITPORT_PLUGIN=account
       - ORBITPORT_GRPC_PORT=50005
       - ORBITPORT_ACCOUNT_DASHBOARD_URL=${ORBITPORT_ACCOUNT_DASHBOARD_URL}
+      - ORBITPORT_ACCOUNT_ALLOW_INSECURE=${ORBITPORT_ACCOUNT_ALLOW_INSECURE:-false}
       - ORBITPORT_ACCOUNT_AUTH0_DOMAIN=${ORBITPORT_ACCOUNT_AUTH0_DOMAIN}
       - ORBITPORT_ACCOUNT_AUTH0_AUDIENCE=${ORBITPORT_ACCOUNT_AUTH0_AUDIENCE}
       - ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_ID}
       - ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET=${ORBITPORT_ACCOUNT_AUTH0_CLIENT_SECRET}
       - ORBITPORT_ACCOUNT_CREDITS_PER_UNIT=${ORBITPORT_ACCOUNT_CREDITS_PER_UNIT:-1}
       - ORBITPORT_ACCOUNT_HTTP_TIMEOUT_SECS=${ORBITPORT_ACCOUNT_HTTP_TIMEOUT_SECS:-5}
-
-  ipfs-node:
-    image: ipfs/kubo:release
-    container_name: ipfs-node
-    ports:
-      - "4001:4001"  # IPFS Swarm Port
-      - "5001:5001"  # IPFS API Port
-      - "8081:8080"  # IPFS Gateway Port
-    volumes:
-      - ${ORBITPORT_IPFS_DATA_DIR}:/data/ipfs
-    command: ["daemon", "--migrate=true"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   gateway:
-    container_name: gateway 
+    container_name: gateway
     image: op-gateway:latest
     build:
       context: .
@@ -233,46 +218,28 @@ services:
         max-size: "10m"
         max-file: "3"
     environment:
-      - RUST_LOG=warn,orbitport=debug
+      - RUST_LOG=warn,gateway=debug
       - ORBITPORT_HTTP_PORT=8080
       - ORBITPORT_AUTH_PLUGIN=http://plugin-auth:50000
       - ORBITPORT_KMS_PLUGIN=http://plugin-kms:50004
-      - ORBITPORT_RPC_BODY_MAX_BYTES=65536
-      # This stack runs the cTRNG plugins
-      - ORBITPORT_CTRNG_ENABLED=${ORBITPORT_CTRNG_ENABLED:-true}
-      - ORBITPORT_TRNG_PLUGIN=http://plugin-aptos-orbital:50001
-      - ORBITPORT_MASTERSEED_PLUGIN=http://plugin-masterseed:50003
       - ORBITPORT_ACCOUNT_PLUGIN=http://plugin-account:50005
+      - ORBITPORT_PATISSUER_PLUGIN=http://plugin-patissuer:50006
+      - ORBITPORT_INTERNAL_PORT=8081
+      - ORBITPORT_RPC_BODY_MAX_BYTES=65536
     depends_on:
-      - plugin-aptos-orbital
       - plugin-auth
       - plugin-kms
       - plugin-account
+      - plugin-patissuer
     ports:
       - 8080:8080
+      - 127.0.0.1:8090:8081
     healthcheck:
       test: ["CMD", "/bin/gateway", "healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 5s
-
-  plugin-beacon:
-    <<: *plugin-base
-    container_name: plugin-beacon
-    build:
-      context: ./plugins
-    image: op-plugin:latest
-    environment:
-      - GOLOG_LOG_LEVEL=debug
-      - ORBITPORT_PLUGIN=beacon
-      - ORBITPORT_IPFS_PLUGIN=plugin-ipfs:50002
-      - ORBITPORT_CTRNG_PLUGIN=plugin-aptos-orbital:50001
-      - ORBITPORT_MASTERSEED_PLUGIN=plugin-masterseed:50003
-      - ORBITPORT_BEACON_UPDATE_INTERVAL=60
-      - ORBITPORT_REGISTRY_RETRIEVAL_TIMEOUT=90
-    ports:
-      - 9000:9000
 
 volumes:
   openbao-eth-go-pkg:

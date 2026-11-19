@@ -1,3 +1,5 @@
+#![cfg(feature = "kms_threshold")]
+
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 

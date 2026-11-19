@@ -1,4 +1,5 @@
-pub mod ctrng;
-pub mod jrpc;
 pub mod kms;
+#[cfg(feature = "kms_threshold")]
 pub mod threshold;
+
+pub mod jrpc;

@@ -12,22 +12,19 @@ thiserror = "2.0.18"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-rand = "0.9.0"
 tokio = { version = "1.51.1", features = ["full"] }
 
 hex = "0.4.3"
-futures = "0.3.31"
 clap = { version = "4.6.0", features = ["derive", "env"] }
 warp = { version = "0.4.2", features = ["server"] }
 prost = "0.14.3"
 tonic = "0.14.5"
 tonic-prost = "0.14.5"
 tonic-health = "0.14.5"
-sha2 = "0.10.8"
 lazy_static = "1.5.0"
 prometheus = "0.14.0"
+sha2 = "0.10.8"
 
-threshold = { git = "https://www.github.com/spacecomputer-io/threshold", tag = "v0.0.1" }
 dotenvy = "0.15.7"
 
 [build-dependencies]
@@ -43,3 +40,6 @@ warp = { version = "0.4.2", features = ["server", "test"] }
 
 [features]
 localtest = []
+kms_threshold = []
+
+default = ["kms_threshold"]

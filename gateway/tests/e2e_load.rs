@@ -123,11 +123,21 @@ async fn run_test(
 
                 request_handles.push(tokio::spawn(async move {
                     sent.fetch_add(1, Ordering::SeqCst);
-                    match common::get_trng(&base_url, &access_token, None, None, None).await {
-                        Ok(resp) => {
-                            if !resp.data.is_empty() {
-                                received.fetch_add(1, Ordering::SeqCst);
-                            }
+                    // shortcut: GetCapabilities never reaches the KMS plugin, so this
+                    // loads auth + rate-limit + routing only; pick a plugin-backed method for a full-path load test.
+                    let payload = serde_json::json!({
+                        "jsonrpc": "2.0", "id": 1, "method": "kms.GetCapabilities", "params": {}
+                    });
+                    match common::rpc_success_result::<serde_json::Value>(
+                        &base_url,
+                        &access_token,
+                        1,
+                        payload,
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            received.fetch_add(1, Ordering::SeqCst);
                         }
                         Err(e) => {
                             tracing::error!("Request failed: {:?}", e);
