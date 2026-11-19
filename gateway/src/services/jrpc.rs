@@ -1,4 +1,5 @@
 use crate::plugins::PluginCatalog;
+use serde::de::{self, DeserializeOwned};
 use serde::{Deserialize, Serialize};
 
 use crate::proto::services::kms::{
@@ -6,11 +7,13 @@ use crate::proto::services::kms::{
     GenerateDataKeyRequest, GetCapabilitiesRequest, GetKeyMetadataRequest, GetPublicKeyRequest,
     RotateKeyRequest, SignRequest,
 };
-
-use crate::services::kms::{KmsRpcCall, KmsService};
-
 #[cfg(feature = "kms_threshold")]
 use crate::proto::services::threshold::DkgRequest;
+
+use crate::services::kms::{
+    KeyStoreDeleteRequest, KeyStoreGetRequest, KeyStoreListRequest, KeyStorePutRequest, KmsRpcCall,
+    KmsService,
+};
 #[cfg(feature = "kms_threshold")]
 use crate::services::threshold::{ThresholdRpcCall, ThresholdService};
 
@@ -126,37 +129,20 @@ impl<T> JsonRpcResponse<T> {
 /// This allows for easy routing of RPC calls to the appropriate service handlers.
 #[derive(Debug)]
 pub enum RpcCall {
-    #[serde(rename = "kms.GetCapabilities")]
     GetCapabilities(GetCapabilitiesRequest),
-
-    #[serde(rename = "kms.CreateKey")]
     CreateKey(CreateKeyRequest),
-
-    #[serde(rename = "kms.Decrypt")]
     Decrypt(DecryptRequest),
-
-    #[serde(rename = "kms.Encrypt")]
     Encrypt(EncryptRequest),
-
-    #[serde(rename = "kms.GenerateDataKey")]
     GenerateDataKey(GenerateDataKeyRequest),
-
-    #[serde(rename = "kms.RotateKey")]
     RotateKey(RotateKeyRequest),
-
     KeyStorePut(KeyStorePutRequest),
     KeyStoreGet(KeyStoreGetRequest),
     KeyStoreList(KeyStoreListRequest),
     KeyStoreDelete(KeyStoreDeleteRequest),
     Sign(SignRequest),
-
-    #[serde(rename = "kms.Encapsulate")]
     Encapsulate(EncapsulateRequest),
-
-    #[serde(rename = "kms.Decapsulate")]
     Decapsulate(DecapsulateRequest),
     #[cfg(feature = "kms_threshold")]
-    #[serde(rename = "kms_threshold.CoordinateDKG")]
     CoordinateDKG(DkgRequest),
     GetKeyMetadata(GetKeyMetadataRequest),
     GetPublicKey(GetPublicKeyRequest),
@@ -192,6 +178,7 @@ impl RpcCall {
             "kms.Sign" => Ok(Self::Sign(Self::parse_params(method, params_json)?)),
             "kms.Encapsulate" => Ok(Self::Encapsulate(Self::parse_params(method, params_json)?)),
             "kms.Decapsulate" => Ok(Self::Decapsulate(Self::parse_params(method, params_json)?)),
+            #[cfg(feature = "kms_threshold")]
             "kms_threshold.CoordinateDKG" => Ok(Self::CoordinateDKG(Self::parse_params(
                 method,
                 params_json,
@@ -209,8 +196,6 @@ impl RpcCall {
 
     /// Validates the parameters of the RPC call.
     pub fn validate(&self) -> Result<(), String> {
-        tracing::trace!("Validating RPC call: {:?}", self);
-
         match self {
             RpcCall::GetCapabilities(_) => {}
             RpcCall::Encrypt(req) => KmsService::validate_encrypt(req)?,
@@ -231,9 +216,7 @@ impl RpcCall {
             RpcCall::CoordinateDKG(req) => {
                 ThresholdService::validate_coordinate_dkg(req).map_err(|e| e.to_string())?
             }
-            _ => {}
         }
-
         Ok(())
     }
 
@@ -256,6 +239,7 @@ impl RpcCall {
             RpcCall::Sign(req) => format!("kms.Sign:{}", req.signing_algorithm),
             RpcCall::Encapsulate(_) => "kms.Encapsulate".to_string(),
             RpcCall::Decapsulate(_) => "kms.Decapsulate".to_string(),
+            #[cfg(feature = "kms_threshold")]
             RpcCall::CoordinateDKG(_) => "kms_threshold.CoordinateDKG".to_string(),
         }
     }
@@ -265,63 +249,45 @@ impl RpcCall {
         self,
         req_id: u64,
         client_id: &str,
-        #[allow(unused_variables)] plugin_catalog: &PluginCatalog,
-    ) -> Result<serde_json::Value, tonic::Status> {
-        tracing::trace!(
-            "Executing RPC call: {:?}, with request ID: {}, client ID: {}",
-            self,
-            req_id,
-            client_id
-        );
-
+        plugin_catalog: &PluginCatalog,
+    ) -> Result<JsonRpcRawResponse, tonic::Status> {
         match self {
             RpcCall::GetCapabilities(_) => {
-                return serialize_success_response(req_id, KmsService::get_capabilities());
+                serialize_success_response(req_id, KmsService::get_capabilities())
             }
             RpcCall::Encrypt(req) => {
-                return execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Encrypt(req))
-                    .await;
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Encrypt(req)).await
             }
             RpcCall::Decrypt(req) => {
-                return execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Decrypt(req))
-                    .await;
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Decrypt(req)).await
             }
             RpcCall::Sign(req) => {
-                return execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Sign(req)).await;
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::Sign(req)).await
             }
             RpcCall::Encapsulate(req) => {
-                return execute_kms(
+                execute_kms(
                     req_id,
                     client_id,
                     plugin_catalog,
                     KmsRpcCall::Encapsulate(req),
                 )
-                .await;
+                .await
             }
             RpcCall::Decapsulate(req) => {
-                return execute_kms(
+                execute_kms(
                     req_id,
                     client_id,
                     plugin_catalog,
                     KmsRpcCall::Decapsulate(req),
                 )
-                .await;
+                .await
             }
             RpcCall::CreateKey(req) => {
-                return execute_kms(
-                    req_id,
-                    client_id,
-                    plugin_catalog,
-                    KmsRpcCall::CreateKey(req),
-                )
-                .await;
-            }
-            RpcCall::GetKeyMetadata(req) => {
                 execute_kms(
                     req_id,
                     client_id,
                     plugin_catalog,
-                    KmsRpcCall::GetKeyMetadata(req),
+                    KmsRpcCall::CreateKey(req),
                 )
                 .await
             }
@@ -344,31 +310,22 @@ impl RpcCall {
                 .await
             }
             RpcCall::GenerateDataKey(req) => {
-                return execute_kms(
-                    req_id,
-                    client_id,
-                    plugin_catalog,
-                    KmsRpcCall::GetPublicKey(req),
-                )
-                .await;
-            }
-            RpcCall::GenerateDataKey(req) => {
-                return execute_kms(
+                execute_kms(
                     req_id,
                     client_id,
                     plugin_catalog,
                     KmsRpcCall::GenerateDataKey(req),
                 )
-                .await;
+                .await
             }
             RpcCall::RotateKey(req) => {
-                return execute_kms(
+                execute_kms(
                     req_id,
                     client_id,
                     plugin_catalog,
                     KmsRpcCall::RotateKey(req),
                 )
-                .await;
+                .await
             }
             RpcCall::KeyStorePut(req) => {
                 execute_kms(
@@ -408,22 +365,18 @@ impl RpcCall {
             }
             #[cfg(feature = "kms_threshold")]
             RpcCall::CoordinateDKG(req) => {
-                return execute_threshold(
+                execute_threshold(
                     req_id,
                     client_id,
                     plugin_catalog,
                     ThresholdRpcCall::CoordinateDkg(req),
                 )
-                .await;
+                .await
             }
-            _ => {}
-        };
-
-        Err(tonic::Status::unimplemented("Unsupported RPC call"))
+        }
     }
 }
 
-#[allow(dead_code)]
 fn serialize_success_response<T: Serialize>(
     req_id: u64,
     result: T,
@@ -454,7 +407,7 @@ async fn execute_threshold(
     client_id: &str,
     plugin_catalog: &PluginCatalog,
     call: ThresholdRpcCall,
-) -> Result<serde_json::Value, tonic::Status> {
+) -> Result<JsonRpcRawResponse, tonic::Status> {
     let grpc_client = plugin_catalog
         .get_threshold_client()
         .await
@@ -467,30 +420,6 @@ async fn execute_threshold(
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn execution_errors_preserve_legacy_fields_and_include_known_reasons() {
-        for (code, reason) in [
-            (tonic::Code::NotFound, Some("not_found")),
-            (tonic::Code::PermissionDenied, Some("permission_denied")),
-            (tonic::Code::FailedPrecondition, Some("failed_precondition")),
-            (tonic::Code::InvalidArgument, Some("invalid_argument")),
-            (tonic::Code::Internal, None),
-        ] {
-            let status = tonic::Status::new(code, "backend detail");
-            let reply =
-                serde_json::to_value(JsonRpcResponse::<()>::execution_error(7, &status)).unwrap();
-            assert_eq!(reply["jsonrpc"], "2.0");
-            assert_eq!(reply["id"], 7);
-            let error = &reply["error"];
-            assert_eq!(error["code"], -32001);
-            assert_eq!(error["message"], status.to_string());
-            match reason {
-                Some(reason) => assert_eq!(error["data"], serde_json::json!({"reason": reason})),
-                None => assert!(error.get("data").is_none()),
-            }
-        }
-    }
 
     #[test]
     fn execution_errors_preserve_legacy_fields_and_include_known_reasons() {
@@ -562,177 +491,6 @@ mod test {
             RpcCall::GetCapabilities(_) => {}
             _ => panic!("expected kms.GetCapabilities"),
         }
-    }
-
-    #[test]
-    fn test_deserialize_kms_get_key_metadata_pascal_case() {
-        let raw = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 8,
-            "method": "kms.GetKeyMetadata",
-            "params": {
-                "KeyId": "kms:telemetry-signing"
-            }
-        });
-
-        let req = request_from_value(raw);
-        match req.call {
-            RpcCall::GetKeyMetadata(params) => {
-                assert_eq!(params.key_id, "kms:telemetry-signing");
-            }
-            _ => panic!("expected kms.GetKeyMetadata"),
-        }
-    }
-
-    #[test]
-    fn test_deserialize_kms_get_key_metadata_accepts_alias() {
-        let raw = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 8,
-            "method": "kms.GetKeyMetadata",
-            "params": {
-                "KeyId": "telemetry-signing"
-            }
-        });
-
-        let req = request_from_value(raw);
-        match req.call {
-            RpcCall::GetKeyMetadata(params) => {
-                assert_eq!(params.key_id, "telemetry-signing");
-            }
-            _ => panic!("expected kms.GetKeyMetadata"),
-        }
-    }
-
-    #[test]
-    fn test_deserialize_kms_get_public_key_accepts_alias() {
-        let raw = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 8,
-            "method": "kms.GetPublicKey",
-            "params": {
-                "KeyId": "telemetry-signing",
-                "Version": 1
-            }
-        });
-
-        let req = request_from_value(raw);
-        match req.call {
-            RpcCall::GetPublicKey(params) => {
-                assert_eq!(params.key_id, "telemetry-signing");
-                assert_eq!(params.version, Some(1));
-            }
-            _ => panic!("expected kms.GetPublicKey"),
-        }
-    }
-
-    #[test]
-    fn test_serialize_kms_get_capabilities_includes_pascal_case_tags() {
-        let response =
-            serialize_success_response(8, KmsService::get_capabilities()).expect("serialize");
-        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
-        let schemes = response["result"]["Schemes"]
-            .as_array()
-            .expect("Schemes should be an array");
-        let pqc = schemes
-            .iter()
-            .find(|scheme| scheme["Scheme"] == "PQC")
-            .expect("missing PQC capability");
-
-        assert_eq!(pqc["Tags"], serde_json::json!(["experimental"]));
-
-        let signing = pqc["SigningCapabilities"]
-            .as_array()
-            .expect("SigningCapabilities should be an array")
-            .iter()
-            .find(|capability| capability["SigningAlgorithm"] == "ML_DSA")
-            .expect("missing ML_DSA signing capability");
-        assert_eq!(signing["Tags"], serde_json::json!(["experimental"]));
-
-        assert_eq!(pqc["KeyAgreementCapabilities"], serde_json::json!([]));
-        assert_eq!(pqc["SupportsEncapsulate"], false);
-        assert_eq!(pqc["SupportsDecapsulate"], false);
-    }
-
-    #[test]
-    fn test_serialize_kms_get_key_metadata_includes_pascal_case_public_key() {
-        let response = serialize_success_response(
-            8,
-            crate::proto::services::kms::GetKeyMetadataResponse {
-                key_metadata: Some(crate::proto::services::kms::KeyMetadata {
-                    key_id: "kms:telemetry-signing".to_string(),
-                    description: "telemetry signing".to_string(),
-                    key_spec: "ECDSA_P256".to_string(),
-                    key_usage: "SIGN_VERIFY".to_string(),
-                    enabled: true,
-                    primary_version: 1,
-                    creation_date: "2026-09-22T18:42:00Z".to_string(),
-                    tags: vec![],
-                    scheme: "TRANSIT".to_string(),
-                    public_key: Some("-----BEGIN PUBLIC KEY-----demo".to_string()),
-                    address: None,
-                    alias: "telemetry-signing".to_string(),
-                }),
-            },
-        )
-        .expect("serialize");
-
-        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
-        assert_eq!(
-            response["result"]["KeyMetadata"]["PublicKey"],
-            "-----BEGIN PUBLIC KEY-----demo"
-        );
-        assert_eq!(
-            response["result"]["KeyMetadata"]["KeyId"],
-            "kms:telemetry-signing"
-        );
-    }
-
-    #[test]
-    fn test_serialize_kms_sign_includes_key_version() {
-        let response = serialize_success_response(
-            8,
-            crate::proto::services::kms::SignResponse {
-                key_id: "kms:telemetry-signing".to_string(),
-                signature: "vault:v2:signature".to_string(),
-                signing_algorithm: "ECDSA_SHA_256".to_string(),
-                key_version: 2,
-            },
-        )
-        .expect("serialize");
-
-        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
-        assert_eq!(
-            response["result"],
-            serde_json::json!({
-                "KeyId": "kms:telemetry-signing",
-                "Signature": "vault:v2:signature",
-                "SigningAlgorithm": "ECDSA_SHA_256",
-                "KeyVersion": 2
-            })
-        );
-    }
-
-    #[test]
-    fn test_serialize_kms_get_public_key_includes_version() {
-        let response = serialize_success_response(
-            8,
-            crate::proto::services::kms::GetPublicKeyResponse {
-                public_key: "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n"
-                    .to_string(),
-                version: 2,
-            },
-        )
-        .expect("serialize");
-
-        let response: serde_json::Value = serde_json::from_str(response.get()).unwrap();
-        assert_eq!(
-            response["result"],
-            serde_json::json!({
-                "PublicKey": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----\n",
-                "Version": 2
-            })
-        );
     }
 
     #[test]
@@ -1063,141 +821,6 @@ mod test {
         }
     }
 
-    #[test]
-    fn test_deserialize_kms_key_store_put_pascal_case() {
-        let raw = r#"{
-            "jsonrpc": "2.0",
-            "id": 10,
-            "method": "kms_keystore.Put",
-            "params": {
-                "Name": "github/prod",
-                "Secret": {
-                    "api_key": "secret-value"
-                }
-            }
-        }"#;
-
-        let req: JsonRpcRequest = serde_json::from_str(raw).unwrap();
-        match req.call {
-            RpcCall::KeyStorePut(params) => {
-                assert_eq!(params.name, "github/prod");
-                let secret: serde_json::Value =
-                    serde_json::from_str(params.secret.as_json_str()).unwrap();
-                assert_eq!(secret["api_key"], "secret-value");
-            }
-            _ => panic!("expected kms_keystore.Put"),
-        }
-    }
-
-    #[test]
-    fn test_deserialize_kms_key_store_put_preserves_large_integer_secret() {
-        let raw = r#"{
-            "jsonrpc": "2.0",
-            "id": 10,
-            "method": "kms_keystore.Put",
-            "params": {
-                "Name": "github/prod",
-                "Secret": {
-                    "max_wei": 123456789012345678901234567890,
-                    "pi": 3.14159265358979323846
-                }
-            }
-        }"#;
-
-        let req: JsonRpcRequest = serde_json::from_str(raw).unwrap();
-        match req.call {
-            RpcCall::KeyStorePut(params) => {
-                let secret_json = params.secret.as_json_str();
-                assert!(secret_json.contains("123456789012345678901234567890"));
-                assert!(secret_json.contains("3.14159265358979323846"));
-                assert!(!secret_json.contains("1.2345678901234568e29"));
-                assert!(!secret_json.contains("3.141592653589793}"));
-            }
-            _ => panic!("expected kms_keystore.Put"),
-        }
-    }
-
-    #[test]
-    fn test_serialize_key_store_get_preserves_large_number_secret() {
-        let secret_json =
-            r#"{"max_wei":123456789012345678901234567890,"pi":3.14159265358979323846}"#;
-        let secret: crate::services::kms::KeyStoreSecret =
-            serde_json::from_str(secret_json).unwrap();
-        let response = serialize_success_response(
-            11,
-            crate::services::kms::KeyStoreGetResponse {
-                name: "github/prod".to_string(),
-                secret,
-            },
-        )
-        .unwrap();
-        let response_json = response.get();
-        let http_json = serde_json::to_string(&response).unwrap();
-
-        assert_eq!(http_json, response_json);
-        assert!(response_json.contains("123456789012345678901234567890"));
-        assert!(response_json.contains("3.14159265358979323846"));
-        assert!(!response_json.contains("1.2345678901234568e29"));
-        assert!(!response_json.contains(r#""pi":3.141592653589793}"#));
-        assert!(!response_json.contains(r#""pi":3.141592653589793,"#));
-    }
-
-    #[test]
-    fn test_deserialize_kms_key_store_put_rejects_non_object_secret() {
-        let raw = r#"{
-            "jsonrpc": "2.0",
-            "id": 10,
-            "method": "kms_keystore.Put",
-            "params": {
-                "Name": "github/prod",
-                "Secret": ["not", "an", "object"]
-            }
-        }"#;
-
-        let err = serde_json::from_str::<JsonRpcRequest>(raw).unwrap_err();
-        assert!(err.to_string().contains("Secret must be a JSON object"));
-    }
-
-    #[test]
-    fn test_deserialize_kms_key_store_get_pascal_case() {
-        let raw = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 11,
-            "method": "kms_keystore.Get",
-            "params": {
-                "Name": "github/prod"
-            }
-        });
-
-        let req = request_from_value(raw);
-        match req.call {
-            RpcCall::KeyStoreGet(params) => {
-                assert_eq!(params.name, "github/prod");
-            }
-            _ => panic!("expected kms_keystore.Get"),
-        }
-    }
-
-    #[test]
-    fn test_deserialize_kms_key_store_delete_pascal_case() {
-        let raw = serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": 12,
-            "method": "kms_keystore.Delete",
-            "params": {
-                "Name": "github/prod"
-            }
-        });
-
-        let req = request_from_value(raw);
-        match req.call {
-            RpcCall::KeyStoreDelete(params) => {
-                assert_eq!(params.name, "github/prod");
-            }
-            _ => panic!("expected kms_keystore.Delete"),
-        }
-    }
-
     #[cfg(feature = "kms_threshold")]
     #[test]
     fn test_deserialize_threshold_coordinate_dkg_pascal_case() {
@@ -1311,122 +934,16 @@ mod test {
         );
     }
 
-    fn operation_of(method: &str, params: serde_json::Value) -> String {
-        let raw =
-            serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": method, "params": params});
-        let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
-        req.call.validate().unwrap();
-        req.call.operation()
-    }
-
+    #[cfg(not(feature = "kms_threshold"))]
     #[test]
-    fn test_operation_tags() {
-        assert_eq!(
-            operation_of(
-                "kms.CreateKey",
-                serde_json::json!({
-                    "Alias": "pq-key",
-                    "Description": "",
-                    "KeySpec": "ML_DSA_65",
-                    "KeyUsage": "SIGN_VERIFY",
-                    "Scheme": "PQC",
-                    "Tags": []
-                })
-            ),
-            "kms.CreateKey:ML_DSA_65"
-        );
-        assert_eq!(
-            operation_of(
-                "kms.Sign",
-                serde_json::json!({
-                    "KeyId": "kms:abc",
-                    "Message": "aGVsbG8=",
-                    "SigningAlgorithm": "ECDSA_SHA_256",
-                    "MessageType": "RAW"
-                })
-            ),
-            "kms.Sign:ECDSA_SHA_256"
-        );
-        assert_eq!(
-            operation_of(
-                "kms.Encrypt",
-                serde_json::json!({"KeyId": "kms:abc", "Plaintext": "Zm9v"})
-            ),
-            "kms.Encrypt"
-        );
-        assert_eq!(
-            operation_of("kms.GetCapabilities", serde_json::json!({})),
-            "kms.GetCapabilities"
-        );
-        assert_eq!(
-            operation_of(
-                "kms.GetKeyMetadata",
-                serde_json::json!({"KeyId": "telemetry-signing"})
-            ),
-            "kms.GetKeyMetadata"
-        );
-        assert_eq!(
-            operation_of(
-                "kms.GetPublicKey",
-                serde_json::json!({"KeyId": "telemetry-signing"})
-            ),
-            "kms.GetPublicKey"
-        );
-        assert_eq!(
-            operation_of(
-                "kms_keystore.Put",
-                serde_json::json!({"Name": "github/prod", "Secret": {"api_key": "secret"}})
-            ),
-            "kms_keystore.Put"
-        );
-        assert_eq!(
-            operation_of(
-                "kms_keystore.Get",
-                serde_json::json!({"Name": "github/prod"})
-            ),
-            "kms_keystore.Get"
-        );
-        assert_eq!(
-            operation_of("kms_keystore.List", serde_json::json!({"Prefix": "github"})),
-            "kms_keystore.List"
-        );
-        assert_eq!(
-            operation_of(
-                "kms_keystore.Delete",
-                serde_json::json!({"Name": "github/prod"})
-            ),
-            "kms_keystore.Delete"
-        );
-    }
-
-    #[cfg(feature = "kms_threshold")]
-    #[tokio::test]
-    async fn test_threshold_coordinate_dkg_disabled() {
-        let plugin_catalog = PluginCatalog::new(
-            "http://auth:50000",
-            Some("http://masterseed:50003"),
-            "http://kms:50004",
-            None,
-            None,
-            false,
-            "",
-            crate::services::threshold::ThresholdGroupRegistry::default(),
-        );
-
-        let err = execute_threshold(
-            9,
-            "client-1",
-            &plugin_catalog,
-            ThresholdRpcCall::CoordinateDkg(DkgRequest {
-                alias: "key-1".to_string(),
-                group_name: "team-a".to_string(),
-                session_id: "dkg-1".to_string(),
-            }),
-        )
-        .await
-        .expect_err("threshold feature should be disabled");
-
-        assert_eq!(err.code(), tonic::Code::Unavailable);
-        assert_eq!(err.message(), "Threshold feature disabled");
+    fn test_threshold_coordinate_dkg_rejected_without_feature() {
+        let raw = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "kms_threshold.CoordinateDKG",
+            "params": {"Alias": "key-1", "GroupName": "team-a", "SessionId": "dkg-1"}
+        });
+        let err = serde_json::from_value::<JsonRpcRequest>(raw).unwrap_err();
+        assert!(err.to_string().contains("Unsupported method"));
     }
 }

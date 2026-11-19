@@ -7,8 +7,8 @@ use crate::types::GatewayError;
 
 use crate::auth::pat_issue_route;
 use crate::filters::{
-    AuthContext, AuthContextWithHold, RateLimiter, account_hold, account_release, account_settle,
-    with_account_hold, with_auth, with_rate_limiter,
+    AuthContext, RateLimiter, account_hold, account_release, account_settle, with_auth,
+    with_rate_limiter,
 };
 use crate::plugins::PluginCatalog;
 use crate::proto::plugins::account::account_plugin_client::AccountPluginClient;
@@ -46,21 +46,17 @@ pub async fn start(
             return;
         }
     };
-    let auth_client_cloned = auth_client.clone();
     let account_client_rpc = account_client.clone();
 
-    // MVP: account-plugin `operation` is a coarse HTTP-method tag, not the
-    // semantic op (e.g. "trng", "kms_sign"). Path-derived tagging requires
-    // pushing the matched path into `with_account_hold`, which the warp
-    // filter signature doesn't carry today.
-    // TODO(account-plugin): derive semantic operation tag from path.
-    let rpc_route = warp::post()
-        .and(warp::path("api").and(warp::path("v1").and(warp::path("rpc"))))
-        .and(with_account_hold(
-            with_rate_limiter(with_auth(auth_client_cloned), rate_limiter.clone()),
-            account_client_rpc.clone(),
-            1,
-            "rpc",
+    // The hold is placed inside handle_rpc: its operation tag comes from the
+    // validated body, which a filter ahead of body parsing cannot see.
+    // Path before method, so an unknown path is 404 rather than the 405 warp
+    // returns when the method filter rejects first
+    let rpc_route = warp::path!("api" / "v1" / "rpc")
+        .and(warp::post())
+        .and(with_rate_limiter(
+            with_auth(auth_client.clone()),
+            rate_limiter.clone(),
         ))
         .and(warp::body::content_length_limit(rpc_body_max_bytes))
         .and(warp::body::json())
@@ -68,7 +64,7 @@ pub async fn start(
         .and(warp::any().map(move || account_client_rpc.clone()))
         .and_then(handle_rpc);
 
-    // Allowlist: `/healthz` is the only route that bypasses `with_account_hold`.
+    // Allowlist: `/healthz` is the only route that skips the account hold.
     // It runs without auth or rate-limiting so probes from k8s / load balancers
     // never spend credits. There is no `/version` route today.
     let health_route = warp::path("healthz").map(|| {

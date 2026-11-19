@@ -37,7 +37,7 @@ RUN --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
     <<EOF
 set -e
-cargo build --locked --release -p gateway --bin gateway--no-default-features --features "${RUST_FEATURES}"
+cargo build --locked --release -p gateway --bin gateway --no-default-features --features "${RUST_FEATURES}"
 cp ./target/release/gateway /bin/gateway
 EOF
 
