@@ -39,7 +39,7 @@
 
 ## Compose stacks
 
-- [docker-compose.yaml](docker-compose.yaml): Stack against real Aptos Orbital and Auth0; requires credentials in `.env`.
+- [docker-compose.yaml](docker-compose.yaml): KMS-only stack with the real auth (PAT) and account plugins; needs Auth0 and dashboard settings in `.env`.
 - [dev.docker-compose.yaml](dev.docker-compose.yaml): Dev stack with `authnoop` and the Aptos Orbital mocker; no external credentials needed.
 - [beacons.yaml](beacons.yaml): Public beacon registry consumed by the beacon plugin.
 
