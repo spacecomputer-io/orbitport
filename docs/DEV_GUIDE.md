@@ -134,9 +134,9 @@ Run `make mcp-test` for protocol, subprocess and HTTP fixture tests, which
 need no real credentials. To test against a local gateway, set
 `ORBITPORT_URL=http://127.0.0.1:8080` and supply the credential appropriate to
 that stack through `ORBITPORT_PAT`. A noop-auth stack is useful for functional
-tests only, keep `accountnoop` configured because an absent account plugin
+tests only; keep `accountnoop` configured because an absent account plugin
 fails requests closed. Use real dev PATs for authentication, revocation and
-tenant checks. Production customer authentication is PAT-only, Auth0 service
+tenant checks. Production customer authentication is PAT-only; Auth0 service
 tokens remain restricted to internal routes such as PAT issuance.
 This implementation adds no gateway `/mcp` route.
 
@@ -157,7 +157,7 @@ Store an arbitrary JSON secret in the KMS key-store:
 
 Key-store names are slash-separated, capped at 256 characters, and each segment
 must use `[A-Za-z0-9._-]+`. `List` returns only immediate entries and folders
-for the requested prefix, folder results end with `/` so callers can walk deeper
+for the requested prefix; folder results end with `/` so callers can walk deeper
 by sending that value as the next `Prefix`. Secrets are treated as opaque JSON
 objects and are returned without numeric precision loss.
 
@@ -198,6 +198,5 @@ curl -X POST http://localhost:8080/api/v1/rpc \
 ## Transit Key Lifecycle
 
 See [lifecycle APIs, worker configuration and the isolated OpenBao test](../plugins/pkg/plugin/kms/LIFECYCLE.md).
-The worker defaults to 1h in code but must stay at 0 in deployments until the
-reviewed OpenBao permissions for Transit and KV metadata are applied. Public scheduling retains
-the seven-day minimum, tests advance an injected clock, not a production setting.
+The deletion worker runs every 1h by default, `0` disables it. Scheduling keeps
+the seven-day minimum, tests advance an injected clock instead.

@@ -84,10 +84,7 @@ erase backups immediately. Metrics orbitport_kms_deleted_keys_total and
 orbitport_kms_failed_deletions_total have no tenant/key labels, lost claims and
 stale entries are normal cleanup.
 
-## Rollout
+## OpenBao Permissions
 
-Apply the OpenBao permissions for Transit and KV metadata through openbao-kms-module
-before enabling sweeps. Charts deliberately default the interval to 0. Deploy plugin, gateway,
-then MCP, enable with 1h only after verification. The prepared global-infra v1.0.8
-pin must not be applied before that policy-module release exists. No release,
-deployment, commit or push is performed as part of preparing these changes.
+The deletion worker needs `delete` on Transit `keys/*` and on KV `metadata/kms/*`.
+Without it, due keys stay in PENDING_DELETION and each sweep records a failure.
