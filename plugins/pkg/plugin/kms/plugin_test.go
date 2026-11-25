@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,6 +40,8 @@ func TestCreateKey_ValidRequest_StoresMetadata(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/data/kms/deleted/"):
+			w.WriteHeader(http.StatusNotFound)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitKeyID):
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
@@ -119,6 +122,162 @@ func TestCreateKey_DuplicateAlias_ReturnsAlreadyExists(t *testing.T) {
 	})
 	require.Error(t, err, "expected CreateKey to reject duplicate alias")
 	assert.Equal(t, codes.AlreadyExists, status.Code(err))
+	assert.Equal(t, "Alias already exists for this tenant", status.Convert(err).Message())
+}
+
+func TestCreateKey_ConcurrentAlias_ReturnsAlreadyExists(t *testing.T) {
+	const clientID, alias = "client-a", "billing"
+	providerKey, err := scopedBackendKey(clientID, alias)
+	require.NoError(t, err)
+	metadataPath := "/v1/secret/data/kms/metadata/" + tenantNamespace(clientID) + "/kms:" + alias
+	transitPath := "/v1/transit/keys/" + providerKey
+	bothChecked := make(chan struct{})
+	var mu sync.Mutex
+	var checks, creates, writes int
+	var stored json.RawMessage
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == metadataPath:
+			mu.Lock()
+			checks++
+			if checks == 2 {
+				close(bothChecked)
+			}
+			mu.Unlock()
+			// Hold both lookups until each caller has observed the alias as absent.
+			select {
+			case <-bothChecked:
+				w.WriteHeader(http.StatusNotFound)
+			case <-r.Context().Done():
+				return
+			}
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/data/kms/deleted/"):
+			w.WriteHeader(http.StatusNotFound)
+		case r.Method == http.MethodPost && r.URL.Path == transitPath:
+			mu.Lock()
+			creates++
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		case r.Method == http.MethodGet && r.URL.Path == transitPath:
+			_, _ = w.Write([]byte(`{"data":{"latest_version":1,"type":"aes256-gcm96"}}`))
+		case r.Method == http.MethodPost && r.URL.Path == metadataPath:
+			var body struct {
+				Data    json.RawMessage `json:"data"`
+				Options struct {
+					CAS *uint64 `json:"cas"`
+				} `json:"options"`
+			}
+			if json.NewDecoder(r.Body).Decode(&body) != nil || body.Options.CAS == nil || *body.Options.CAS != 0 {
+				http.Error(w, "expected create-only CAS", http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			writes++
+			if stored != nil {
+				http.Error(w, "check-and-set parameter did not match the current version", http.StatusBadRequest)
+				return
+			}
+			stored = body.Data
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+			http.Error(w, "unexpected request", http.StatusInternalServerError)
+		}
+	}))
+	t.Cleanup(server.Close)
+	cfg := &kmsConfig{OpenBaoProxyURL: server.URL, DeletionSweepInterval: "0"}
+	p := newPlugin(cfg, newOpenBaoClient(cfg))
+	t.Cleanup(p.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	type result struct {
+		response *proto.CreateKeyResponse
+		err      error
+	}
+	results := make(chan result, 2)
+	for _, description := range []string{"first caller", "second caller"} {
+		go func() {
+			response, err := p.CreateKey(ctx, &proto.CreateKeyRequest{
+				ClientId: clientID, Alias: alias, Description: description,
+				KeySpec: keySpecAES256GCM96, KeyUsage: encryptDecryptUsage,
+			})
+			results <- result{response: response, err: err}
+		}()
+	}
+	var winner *proto.KeyMetadata
+	successes, duplicates := 0, 0
+	for range 2 {
+		outcome := <-results
+		if outcome.err == nil {
+			require.NotNil(t, outcome.response)
+			winner = outcome.response.KeyMetadata
+			successes++
+		} else {
+			require.Equal(t, codes.AlreadyExists, status.Code(outcome.err))
+			require.Equal(t, "Alias already exists for this tenant", status.Convert(outcome.err).Message())
+			duplicates++
+		}
+	}
+	require.Equal(t, 1, successes)
+	require.Equal(t, 1, duplicates)
+	require.NotNil(t, winner)
+	mu.Lock()
+	defer mu.Unlock()
+	require.Equal(t, 2, checks)
+	require.Equal(t, 2, creates)
+	require.Equal(t, 2, writes)
+	var metadata keyMetadataRecord
+	require.NoError(t, json.Unmarshal(stored, &metadata))
+	require.Equal(t, winner.KeyId, metadata.KeyID)
+	require.Equal(t, winner.Description, metadata.Description)
+	require.Equal(t, clientID, metadata.ClientID)
+	require.Equal(t, uint32(1), metadata.PrimaryVersion)
+}
+
+func TestCreateKey_MetadataBackendErrorsRemainInternal(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"bad request", http.StatusBadRequest, "private-host/internal/path: invalid payload"},
+		{"forbidden", http.StatusForbidden, "private-host/internal/path: check-and-set grant missing"},
+		{"not found", http.StatusNotFound, "private-host/internal/path: missing mount"},
+		{"server error", http.StatusInternalServerError, "private-host/internal/path: unavailable"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			const clientID = "client-a"
+			providerKey, err := scopedBackendKey(clientID, testTransitAlias)
+			require.NoError(t, err)
+			metadataPath := "/v1/secret/data/kms/metadata/" + tenantNamespace(clientID) + "/" + testTransitKeyID
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch {
+				case r.Method == http.MethodGet && (r.URL.Path == metadataPath || strings.Contains(r.URL.Path, "/data/kms/deleted/")):
+					w.WriteHeader(http.StatusNotFound)
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/transit/keys/"+providerKey:
+					w.WriteHeader(http.StatusNoContent)
+				case r.Method == http.MethodGet && r.URL.Path == "/v1/transit/keys/"+providerKey:
+					_, _ = w.Write([]byte(`{"data":{"latest_version":1,"type":"aes256-gcm96"}}`))
+				case r.Method == http.MethodPost && r.URL.Path == metadataPath:
+					http.Error(w, tc.body, tc.status)
+				default:
+					assert.Failf(t, "unexpected request", "%s %s", r.Method, r.URL.Path)
+					http.Error(w, "unexpected request", http.StatusInternalServerError)
+				}
+			}))
+			t.Cleanup(server.Close)
+			cfg := &kmsConfig{OpenBaoProxyURL: server.URL, DeletionSweepInterval: "0"}
+			p := newPlugin(cfg, newOpenBaoClient(cfg))
+			t.Cleanup(p.Close)
+			_, err = p.CreateKey(context.Background(), &proto.CreateKeyRequest{
+				ClientId: clientID, Alias: testTransitAlias,
+				KeySpec: keySpecAES256GCM96, KeyUsage: encryptDecryptUsage,
+			})
+			require.Equal(t, codes.Internal, status.Code(err))
+			require.Equal(t, "KMS backend error", status.Convert(err).Message())
+		})
+	}
 }
 
 func TestCreateKey_TransitAsymmetricKey_ReturnsPublicKey(t *testing.T) {
@@ -132,6 +291,8 @@ func TestCreateKey_TransitAsymmetricKey_ReturnsPublicKey(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/data/kms/deleted/"):
+			w.WriteHeader(http.StatusNotFound)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testTransitSignKeyID):
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/transit/keys/"+providerKey):
@@ -511,6 +672,8 @@ func TestCreateKey_EthereumKey_StoresSchemeMetadata(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/data/kms/deleted/"):
+			w.WriteHeader(http.StatusNotFound)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testEthereumKeyID):
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/ethereum/keys/"+providerKey):

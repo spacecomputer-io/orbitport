@@ -84,7 +84,7 @@ configuration entries. Replace `/Users/YOU` in the examples with your actual
 absolute home path, JSON and TOML commands do not automatically expand `~`.
 For a custom `CODEX_HOME`, the user config is `$CODEX_HOME/config.toml`.
 
-The setup examples expose the nine default tools without any opt-ins. See
+The setup examples expose the ten default tools without any opt-ins. See
 [Optional Tool Opt-Ins](#optional-tool-opt-ins) if your harness needs a
 tool outside the default set.
 
@@ -189,7 +189,7 @@ the PAT. See the [official OpenAI MCP CLI instructions](https://learn.chatgpt.co
 
 All four clients launch the local process themselves, do not also start a
 terminal instance for them. Initialization and `tools/list` are handled by
-the client. First confirm that discovery shows the nine default tools.
+the client. First confirm that discovery shows the ten default tools.
 
 A non-mutating live check is:
 
@@ -237,7 +237,7 @@ user authentication. See the [MCP initialization lifecycle](https://modelcontext
 {"jsonrpc":"2.0","id":2,"method":"tools/list"}
 ```
 
-The response contains the nine default tools, descriptions, input/output schemas and
+The response contains the ten default tools, descriptions, input/output schemas and
 annotations. Hidden tools remain uncallable even if their names are guessed.
 Initialization and listing make no gateway requests and consume no credits.
 
@@ -271,6 +271,10 @@ connection or harness after changing the arguments.
 | `generate-data-key` | Returns both a plaintext data key and its encrypted copy. |
 | `keystore-get` | Returns the stored JSON secret to the harness. |
 | `keystore-delete` | Permanently deletes a key-store entry and all its versions. |
+| `disable-key` | Disables a Transit key without removing its material. |
+| `enable-key` | Re-enables a disabled Transit key. |
+| `schedule-key-deletion` | Disables a Transit key and schedules irreversible deletion after 7-30 days. |
+| `cancel-key-deletion` | Cancels before the deadline/worker claim, the key stays disabled. |
 | `encapsulate` | Exposes the key-agreement tool; execution is currently disabled. |
 | `decapsulate` | Exposes the shared-key recovery tool; execution is currently disabled. |
 

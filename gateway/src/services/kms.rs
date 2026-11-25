@@ -3,10 +3,14 @@ use serde::Serialize;
 use tonic::transport::Channel;
 
 use crate::proto::plugins::kms::{
+    CancelKeyDeletionRequest as PluginCancelKeyDeletionRequest,
+    CancelKeyDeletionResponse as PluginCancelKeyDeletionResponse,
     CreateKeyRequest as PluginCreateKeyRequest, CreateKeyResponse as PluginCreateKeyResponse,
     DecapsulateRequest as PluginDecapsulateRequest,
     DecapsulateResponse as PluginDecapsulateResponse, DecryptRequest as PluginDecryptRequest,
-    DecryptResponse as PluginDecryptResponse, EncapsulateRequest as PluginEncapsulateRequest,
+    DecryptResponse as PluginDecryptResponse, DisableKeyRequest as PluginDisableKeyRequest,
+    DisableKeyResponse as PluginDisableKeyResponse, EnableKeyRequest as PluginEnableKeyRequest,
+    EnableKeyResponse as PluginEnableKeyResponse, EncapsulateRequest as PluginEncapsulateRequest,
     EncapsulateResponse as PluginEncapsulateResponse, EncryptRequest as PluginEncryptRequest,
     EncryptResponse as PluginEncryptResponse,
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
@@ -22,16 +26,23 @@ use crate::proto::plugins::kms::{
     KeyStoreListRequest as PluginKeyStoreListRequest,
     KeyStoreListResponse as PluginKeyStoreListResponse,
     KeyStorePutRequest as PluginKeyStorePutRequest,
-    KeyStorePutResponse as PluginKeyStorePutResponse, RotateKeyRequest as PluginRotateKeyRequest,
-    RotateKeyResponse as PluginRotateKeyResponse, SignRequest as PluginSignRequest,
-    SignResponse as PluginSignResponse, Tag as PluginTag, kms_plugin_client::KmsPluginClient,
+    KeyStorePutResponse as PluginKeyStorePutResponse, ListKeysRequest as PluginListKeysRequest,
+    ListKeysResponse as PluginListKeysResponse, RotateKeyRequest as PluginRotateKeyRequest,
+    RotateKeyResponse as PluginRotateKeyResponse,
+    ScheduleKeyDeletionRequest as PluginScheduleKeyDeletionRequest,
+    ScheduleKeyDeletionResponse as PluginScheduleKeyDeletionResponse,
+    SignRequest as PluginSignRequest, SignResponse as PluginSignResponse, Tag as PluginTag,
+    kms_plugin_client::KmsPluginClient,
 };
 use crate::proto::services::kms::{
-    CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
-    DecryptResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest, EncryptResponse,
-    GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
-    GetKeyMetadataRequest, GetKeyMetadataResponse, GetPublicKeyRequest, GetPublicKeyResponse,
-    RotateKeyRequest, RotateKeyResponse, SignRequest, SignResponse, Tag,
+    CancelKeyDeletionRequest, CancelKeyDeletionResponse, CreateKeyRequest, CreateKeyResponse,
+    DecapsulateRequest, DecapsulateResponse, DecryptRequest, DecryptResponse, DisableKeyRequest,
+    DisableKeyResponse, EnableKeyRequest, EnableKeyResponse, EncapsulateRequest,
+    EncapsulateResponse, EncryptRequest, EncryptResponse, GenerateDataKeyRequest,
+    GenerateDataKeyResponse, GetCapabilitiesResponse, GetKeyMetadataRequest,
+    GetKeyMetadataResponse, GetPublicKeyRequest, GetPublicKeyResponse, ListKeysRequest,
+    ListKeysResponse, RotateKeyRequest, RotateKeyResponse, ScheduleKeyDeletionRequest,
+    ScheduleKeyDeletionResponse, SignRequest, SignResponse, Tag,
 };
 
 pub use orbitport_kms_api::{
@@ -52,6 +63,11 @@ pub enum KmsRpcCall {
     GetPublicKey(GetPublicKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
+    ListKeys(ListKeysRequest),
+    DisableKey(DisableKeyRequest),
+    EnableKey(EnableKeyRequest),
+    ScheduleKeyDeletion(ScheduleKeyDeletionRequest),
+    CancelKeyDeletion(CancelKeyDeletionRequest),
     KeyStorePut(KeyStorePutRequest),
     KeyStoreGet(KeyStoreGetRequest),
     KeyStoreList(KeyStoreListRequest),
@@ -71,6 +87,11 @@ impl KmsRpcCall {
             Self::GetPublicKey(req) => KmsService::validate_get_public_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
+            Self::ListKeys(req) => KmsService::validate_list_keys(req),
+            Self::DisableKey(req) => KmsService::validate_disable_key(req),
+            Self::EnableKey(req) => KmsService::validate_enable_key(req),
+            Self::ScheduleKeyDeletion(req) => KmsService::validate_schedule_key_deletion(req),
+            Self::CancelKeyDeletion(req) => KmsService::validate_cancel_key_deletion(req),
             Self::KeyStorePut(req) => KmsService::validate_key_store_put(req),
             Self::KeyStoreGet(req) => KmsService::validate_key_store_get(req),
             Self::KeyStoreList(req) => KmsService::validate_key_store_list(req),
@@ -80,6 +101,15 @@ impl KmsRpcCall {
 
     fn log_start(&self, req_id: u64) {
         match self {
+            Self::ListKeys(_) => tracing::debug!("Executing KMS ListKeys RPC [id={}]", req_id),
+            Self::DisableKey(_) => tracing::debug!("Executing KMS DisableKey RPC [id={}]", req_id),
+            Self::EnableKey(_) => tracing::debug!("Executing KMS EnableKey RPC [id={}]", req_id),
+            Self::ScheduleKeyDeletion(_) => {
+                tracing::debug!("Executing KMS ScheduleKeyDeletion RPC [id={}]", req_id)
+            }
+            Self::CancelKeyDeletion(_) => {
+                tracing::debug!("Executing KMS CancelKeyDeletion RPC [id={}]", req_id)
+            }
             Self::Encrypt(req) => tracing::debug!(
                 "Executing KMS Encrypt RPC [id={} key_id={}]",
                 req_id,
@@ -176,6 +206,11 @@ pub enum KmsRpcResult {
     GetPublicKey(GetPublicKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
+    ListKeys(ListKeysResponse),
+    DisableKey(DisableKeyResponse),
+    EnableKey(EnableKeyResponse),
+    ScheduleKeyDeletion(ScheduleKeyDeletionResponse),
+    CancelKeyDeletion(CancelKeyDeletionResponse),
     KeyStorePut(KeyStorePutResponse),
     KeyStoreGet(KeyStoreGetResponse),
     KeyStoreList(KeyStoreListResponse),
@@ -185,6 +220,15 @@ pub enum KmsRpcResult {
 impl KmsRpcResult {
     fn log_success(&self, req_id: u64) {
         match self {
+            Self::ListKeys(_) => tracing::debug!("KMS ListKeys RPC succeeded [id={}]", req_id),
+            Self::DisableKey(_) => tracing::debug!("KMS DisableKey RPC succeeded [id={}]", req_id),
+            Self::EnableKey(_) => tracing::debug!("KMS EnableKey RPC succeeded [id={}]", req_id),
+            Self::ScheduleKeyDeletion(_) => {
+                tracing::debug!("KMS ScheduleKeyDeletion RPC succeeded [id={}]", req_id)
+            }
+            Self::CancelKeyDeletion(_) => {
+                tracing::debug!("KMS CancelKeyDeletion RPC succeeded [id={}]", req_id)
+            }
             Self::Encrypt(result) => tracing::debug!(
                 "KMS Encrypt RPC succeeded [id={} key_id={}]",
                 req_id,
@@ -322,6 +366,26 @@ impl KmsService {
         KmsValidation::validate_get_public_key(req)
     }
 
+    pub fn validate_list_keys(req: &ListKeysRequest) -> Result<(), String> {
+        KmsValidation::validate_list_keys(req)
+    }
+
+    pub fn validate_disable_key(req: &DisableKeyRequest) -> Result<(), String> {
+        KmsValidation::validate_disable_key(req)
+    }
+
+    pub fn validate_enable_key(req: &EnableKeyRequest) -> Result<(), String> {
+        KmsValidation::validate_enable_key(req)
+    }
+
+    pub fn validate_schedule_key_deletion(req: &ScheduleKeyDeletionRequest) -> Result<(), String> {
+        KmsValidation::validate_schedule_key_deletion(req)
+    }
+
+    pub fn validate_cancel_key_deletion(req: &CancelKeyDeletionRequest) -> Result<(), String> {
+        KmsValidation::validate_cancel_key_deletion(req)
+    }
+
     pub fn validate_rotate_key(req: &RotateKeyRequest) -> Result<(), String> {
         KmsValidation::validate_rotate_key(req)
     }
@@ -355,6 +419,21 @@ impl KmsService {
         call.log_start(req_id);
 
         let result = match call {
+            KmsRpcCall::ListKeys(req) => {
+                KmsRpcResult::ListKeys(self.list_keys(client_id, req).await?)
+            }
+            KmsRpcCall::DisableKey(req) => {
+                KmsRpcResult::DisableKey(self.disable_key(client_id, req).await?)
+            }
+            KmsRpcCall::EnableKey(req) => {
+                KmsRpcResult::EnableKey(self.enable_key(client_id, req).await?)
+            }
+            KmsRpcCall::ScheduleKeyDeletion(req) => {
+                KmsRpcResult::ScheduleKeyDeletion(self.schedule_key_deletion(client_id, req).await?)
+            }
+            KmsRpcCall::CancelKeyDeletion(req) => {
+                KmsRpcResult::CancelKeyDeletion(self.cancel_key_deletion(client_id, req).await?)
+            }
             KmsRpcCall::Encrypt(req) => KmsRpcResult::Encrypt(self.encrypt(client_id, req).await?),
             KmsRpcCall::Decrypt(req) => KmsRpcResult::Decrypt(self.decrypt(client_id, req).await?),
             KmsRpcCall::Sign(req) => KmsRpcResult::Sign(self.sign(client_id, req).await?),
@@ -606,6 +685,100 @@ impl KmsService {
         })
     }
 
+    pub async fn list_keys(
+        &mut self,
+        client_id: &str,
+        req: ListKeysRequest,
+    ) -> Result<ListKeysResponse, tonic::Status> {
+        let response: PluginListKeysResponse = self
+            .client
+            .list_keys(tonic::Request::new(PluginListKeysRequest {
+                limit: req.limit,
+                next_token: req.next_token,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(ListKeysResponse {
+            key_ids: response.key_ids,
+            next_token: response.next_token,
+        })
+    }
+
+    pub async fn disable_key(
+        &mut self,
+        client_id: &str,
+        req: DisableKeyRequest,
+    ) -> Result<DisableKeyResponse, tonic::Status> {
+        let response: PluginDisableKeyResponse = self
+            .client
+            .disable_key(tonic::Request::new(PluginDisableKeyRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(DisableKeyResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn enable_key(
+        &mut self,
+        client_id: &str,
+        req: EnableKeyRequest,
+    ) -> Result<EnableKeyResponse, tonic::Status> {
+        let response: PluginEnableKeyResponse = self
+            .client
+            .enable_key(tonic::Request::new(PluginEnableKeyRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(EnableKeyResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn schedule_key_deletion(
+        &mut self,
+        client_id: &str,
+        req: ScheduleKeyDeletionRequest,
+    ) -> Result<ScheduleKeyDeletionResponse, tonic::Status> {
+        let response: PluginScheduleKeyDeletionResponse = self
+            .client
+            .schedule_key_deletion(tonic::Request::new(PluginScheduleKeyDeletionRequest {
+                key_id: req.key_id,
+                pending_window_in_days: req.pending_window_in_days,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(ScheduleKeyDeletionResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+            pending_window_in_days: response.pending_window_in_days,
+        })
+    }
+
+    pub async fn cancel_key_deletion(
+        &mut self,
+        client_id: &str,
+        req: CancelKeyDeletionRequest,
+    ) -> Result<CancelKeyDeletionResponse, tonic::Status> {
+        let response: PluginCancelKeyDeletionResponse = self
+            .client
+            .cancel_key_deletion(tonic::Request::new(PluginCancelKeyDeletionRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(CancelKeyDeletionResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
     pub async fn rotate_key(
         &mut self,
         client_id: &str,
@@ -717,6 +890,8 @@ fn map_key_metadata(
         key_spec: metadata.key_spec,
         key_usage: metadata.key_usage,
         enabled: metadata.enabled,
+        key_state: metadata.key_state,
+        deletion_date: metadata.deletion_date,
         primary_version: metadata.primary_version,
         creation_date: metadata.creation_date,
         scheme: metadata.scheme,

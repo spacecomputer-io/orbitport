@@ -41,3 +41,7 @@ type dataKeyProvider interface {
 type rotateKeyProvider interface {
 	RotateKey(context.Context, *keyMetadataRecord) (*keyMetadataRecord, error)
 }
+
+type deleteKeyProvider interface {
+	DeleteKey(context.Context, *keyMetadataRecord) error
+}

@@ -42,6 +42,8 @@ pub enum McpError {
     KmsPermissionDenied,
     #[error("The resource is not in a state that allows this KMS operation.")]
     FailedPrecondition,
+    #[error("The key changed concurrently. Check its current state before retrying.")]
+    ConcurrentChange,
     #[error("KMS rejected the operation arguments.")]
     InvalidOperationArguments,
     #[error("KMS operation failed; check the resource, permissions and parameters")]

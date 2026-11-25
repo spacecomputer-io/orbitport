@@ -195,3 +195,8 @@ curl -X POST http://localhost:8080/api/v1/rpc \
     }
   }'
 ```
+## Transit Key Lifecycle
+
+See [lifecycle APIs, worker configuration and the isolated OpenBao test](../plugins/pkg/plugin/kms/LIFECYCLE.md).
+The deletion worker runs every 1h by default, `0` disables it. Scheduling keeps
+the seven-day minimum, tests advance an injected clock instead.

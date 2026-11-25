@@ -35,6 +35,8 @@ func TestCreateMLDSAKey_StoresPQCMetadata(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/data/kms/deleted/"):
+			w.WriteHeader(http.StatusNotFound)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testPQCKeyID):
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/pqc/mldsa/keys/"+providerKey):
@@ -225,6 +227,8 @@ func TestCreateMLKEMKey_StoresPQCMetadata(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/data/kms/deleted/"):
+			w.WriteHeader(http.StatusNotFound)
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/v1/secret/data/kms/metadata/"+tenantNamespace(clientID)+"/"+testPQCKeyID):
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/v1/pqc/mlkem/keys/"+providerKey):

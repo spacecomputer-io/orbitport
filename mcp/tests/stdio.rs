@@ -156,7 +156,7 @@ fn stdio_protocol_calls_hidden_calls_and_bad_arguments_make_no_network_requests(
     assert_eq!(replies.len(), 9);
     assert_eq!(replies[0]["id"], "init");
     assert_eq!(replies[0]["result"]["protocolVersion"], "2025-06-18");
-    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 9);
+    assert_eq!(replies[1]["result"]["tools"].as_array().unwrap().len(), 10);
     assert_eq!(replies[4]["error"]["code"], -32602);
     assert_eq!(replies[5]["result"]["isError"], true);
     assert_eq!(
@@ -364,6 +364,10 @@ fn gateway_rpc_errors_have_safe_actionable_stdio_messages() {
             "The resource is not in a state that allows this KMS operation.",
         ),
         ("invalid_argument", "KMS rejected the operation arguments."),
+        (
+            "aborted",
+            "The key changed concurrently. Check its current state before retrying.",
+        ),
     ] {
         verify(
             json!({
@@ -422,6 +426,41 @@ fn startup_rejects_insecure_urls_tokens_in_arguments_and_unknown_opt_ins() {
 fn transit_and_keystore_tools_forward_their_existing_public_contracts() {
     let metadata = json_metadata();
     let cases = [
+        (
+            "kms_list_keys",
+            "kms.ListKeys",
+            r#"{"Limit":2}"#,
+            r#"{"KeyIds":["kms:a"],"NextToken":null}"#,
+            "",
+        ),
+        (
+            "kms_disable_key",
+            "kms.DisableKey",
+            r#"{"KeyId":"demo"}"#,
+            metadata.as_str(),
+            "disable-key",
+        ),
+        (
+            "kms_enable_key",
+            "kms.EnableKey",
+            r#"{"KeyId":"demo"}"#,
+            metadata.as_str(),
+            "enable-key",
+        ),
+        (
+            "kms_schedule_key_deletion",
+            "kms.ScheduleKeyDeletion",
+            r#"{"KeyId":"demo","PendingWindowInDays":7}"#,
+            metadata.as_str(),
+            "schedule-key-deletion",
+        ),
+        (
+            "kms_cancel_key_deletion",
+            "kms.CancelKeyDeletion",
+            r#"{"KeyId":"demo"}"#,
+            metadata.as_str(),
+            "cancel-key-deletion",
+        ),
         (
             "kms_create_key",
             "kms.CreateKey",

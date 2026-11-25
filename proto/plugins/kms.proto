@@ -19,6 +19,11 @@ service KmsPlugin {
   rpc GetPublicKey(GetPublicKeyRequest) returns (GetPublicKeyResponse);
   rpc GenerateDataKey(GenerateDataKeyRequest) returns (GenerateDataKeyResponse);
   rpc RotateKey(RotateKeyRequest) returns (RotateKeyResponse);
+  rpc ListKeys(ListKeysRequest) returns (ListKeysResponse);
+  rpc DisableKey(DisableKeyRequest) returns (DisableKeyResponse);
+  rpc EnableKey(EnableKeyRequest) returns (EnableKeyResponse);
+  rpc ScheduleKeyDeletion(ScheduleKeyDeletionRequest) returns (ScheduleKeyDeletionResponse);
+  rpc CancelKeyDeletion(CancelKeyDeletionRequest) returns (CancelKeyDeletionResponse);
   rpc KeyStorePut(KeyStorePutRequest) returns (KeyStorePutResponse);
   rpc KeyStoreGet(KeyStoreGetRequest) returns (KeyStoreGetResponse);
   rpc KeyStoreList(KeyStoreListRequest) returns (KeyStoreListResponse);
@@ -43,6 +48,8 @@ message KeyMetadata {
   optional string public_key = 10;
   optional string address = 11;
   string alias = 12;
+  optional string key_state = 13;
+  optional string deletion_date = 14;
 }
 
 message EncryptRequest {
@@ -163,6 +170,55 @@ message RotateKeyRequest {
 }
 
 message RotateKeyResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message ListKeysRequest {
+  optional uint32 limit = 1;
+  optional string next_token = 2;
+  string client_id = 3;
+}
+
+message ListKeysResponse {
+  repeated string key_ids = 1;
+  optional string next_token = 2;
+}
+
+message DisableKeyRequest {
+  string key_id = 1;
+  string client_id = 2;
+}
+
+message DisableKeyResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message EnableKeyRequest {
+  string key_id = 1;
+  string client_id = 2;
+}
+
+message EnableKeyResponse {
+  KeyMetadata key_metadata = 1;
+}
+
+message ScheduleKeyDeletionRequest {
+  string key_id = 1;
+  optional uint32 pending_window_in_days = 2;
+  string client_id = 3;
+}
+
+message ScheduleKeyDeletionResponse {
+  KeyMetadata key_metadata = 1;
+  uint32 pending_window_in_days = 2;
+}
+
+message CancelKeyDeletionRequest {
+  string key_id = 1;
+  string client_id = 2;
+}
+
+message CancelKeyDeletionResponse {
   KeyMetadata key_metadata = 1;
 }
 

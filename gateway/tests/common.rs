@@ -287,6 +287,41 @@ pub async fn rpc_success_result<T: DeserializeOwned>(
     serde_json::from_value::<T>(result.clone()).map_err(|e| E2EError::ParseError(e.to_string()))
 }
 
+/// Send an RPC that must fail and return its `error` object.
+#[allow(dead_code)]
+pub async fn rpc_error_result(
+    base_url: &str,
+    access_token: &str,
+    req_id: u64,
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, E2EError> {
+    let response = rpc_request(base_url, access_token, payload).await?;
+    if response.status() != reqwest::StatusCode::OK {
+        return Err(E2EError::AssertionFailed(format!(
+            "Expected a JSON-RPC error with HTTP 200, got {}",
+            response.status()
+        )));
+    }
+    let raw = response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| E2EError::ParseError(e.to_string()))?;
+    if raw.get("id").and_then(|v| v.as_u64()) != Some(req_id) {
+        return Err(E2EError::AssertionFailed(format!(
+            "Expected response id {req_id}, got {:?}",
+            raw.get("id")
+        )));
+    }
+    if raw.get("result").is_some() {
+        return Err(E2EError::AssertionFailed(format!(
+            "Expected an error response, got result: {raw}"
+        )));
+    }
+    raw.get("error")
+        .cloned()
+        .ok_or_else(|| E2EError::ParseError("Missing error field".to_string()))
+}
+
 /// Prepare the test environment by starting the orbitport Docker containers.
 /// This function is called before the tests are executed.
 /// It checks if the containers are already running, and if not, it starts them.

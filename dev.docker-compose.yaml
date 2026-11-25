@@ -369,6 +369,9 @@ services:
       - ORBITPORT_KMS_KEY_STORE_CEDAR_POLICY_PATH=/etc/orbitport/kms/key_store_default.cedar
       - ORBITPORT_KMS_ETHEREUM_MOUNT=ethereum
       - ORBITPORT_KMS_PQC_MOUNT=pqc
+      - ORBITPORT_KMS_LIST_KEYS_DEFAULT_LIMIT=${ORBITPORT_KMS_LIST_KEYS_DEFAULT_LIMIT:-100}
+      - ORBITPORT_KMS_LIST_KEYS_MAX_LIMIT=${ORBITPORT_KMS_LIST_KEYS_MAX_LIMIT:-1000}
+      - ORBITPORT_KMS_DEFAULT_DELETION_WINDOW_DAYS=${ORBITPORT_KMS_DEFAULT_DELETION_WINDOW_DAYS:-30}
     volumes:
       - ./plugins/pkg/plugin/kms/cedar/key_store_default.cedar:/etc/orbitport/kms/key_store_default.cedar:ro
     ports:
