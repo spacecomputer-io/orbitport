@@ -3,6 +3,7 @@ package kms
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spacecomputer-io/orbitport/plugins/internal/openbao"
 	proto "github.com/spacecomputer-io/orbitport/plugins/proto/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -559,4 +561,15 @@ func writeTempKeyStorePolicy(t *testing.T, policy string) string {
 	_, err = file.WriteString(policy)
 	require.NoError(t, err)
 	return file.Name()
+}
+
+func TestIsKeyStoreMiss_OnlyEmptyNotFound(t *testing.T) {
+	miss := &openbao.StatusError{StatusCode: http.StatusNotFound, Status: "404 Not Found", Body: `{"errors":[]}`}
+	assert.True(t, isKeyStoreMiss(miss))
+	assert.True(t, isKeyStoreMiss(fmt.Errorf("get key-store secret: %w", miss)))
+
+	assert.False(t, isKeyStoreMiss(&openbao.StatusError{StatusCode: http.StatusNotFound, Body: `{"errors":["no handler for route"]}`}))
+	assert.False(t, isKeyStoreMiss(&openbao.StatusError{StatusCode: http.StatusForbidden, Body: `{"errors":["permission denied"]}`}))
+	assert.False(t, isKeyStoreMiss(&openbao.StatusError{StatusCode: http.StatusInternalServerError, Body: `{"errors":[]}`}))
+	assert.False(t, isKeyStoreMiss(context.DeadlineExceeded))
 }

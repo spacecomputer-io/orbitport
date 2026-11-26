@@ -25,6 +25,21 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("openbao returned %s: %s", e.Status, e.Body)
 }
 
+// IsEmptyNotFound reports a 404 with an empty error list, which OpenBao sends
+// for a missing entry or an empty list; routing errors carry messages
+func (e *StatusError) IsEmptyNotFound() bool {
+	if e.StatusCode != http.StatusNotFound {
+		return false
+	}
+	var body struct {
+		Errors *[]string `json:"errors"`
+	}
+	if err := json.Unmarshal([]byte(e.Body), &body); err != nil || body.Errors == nil {
+		return false
+	}
+	return len(*body.Errors) == 0
+}
+
 // Logger is the subset of *utils.Logger used by the client. A nil logger
 // disables request logging.
 type Logger interface {
@@ -102,14 +117,19 @@ func (c *Client) do(req *http.Request, into any) error {
 		return fmt.Errorf("read openbao response: %w", err)
 	}
 	if resp.StatusCode >= http.StatusBadRequest {
-		if c.logger != nil {
-			c.logger.Warnf("OpenBao returned %s for %s %s", resp.Status, req.Method, req.URL.Path)
-		}
-		return &StatusError{
+		statusErr := &StatusError{
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
 			Body:       strings.TrimSpace(string(body)),
 		}
+		if c.logger != nil {
+			if statusErr.IsEmptyNotFound() {
+				c.logger.Debugf("OpenBao returned %s for %s %s", resp.Status, req.Method, req.URL.Path)
+			} else {
+				c.logger.Warnf("OpenBao returned %s for %s %s", resp.Status, req.Method, req.URL.Path)
+			}
+		}
+		return statusErr
 	}
 	if into == nil {
 		return nil
