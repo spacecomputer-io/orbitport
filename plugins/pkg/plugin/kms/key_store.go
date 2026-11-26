@@ -238,10 +238,20 @@ func isOpenBaoStatus(err error, statusCode int) bool {
 	return errors.As(err, &statusErr) && statusErr.StatusCode == statusCode
 }
 
+// a missing entry or an empty list is a normal answer, not a backend fault
+func isKeyStoreMiss(err error) bool {
+	var statusErr *openbao.StatusError
+	return errors.As(err, &statusErr) && statusErr.IsEmptyNotFound()
+}
+
 func logKeyStoreOpenBaoError(operation string, err error) {
 	var statusErr *openbao.StatusError
 	if errors.As(err, &statusErr) {
-		logger.Warnf(
+		logf := logger.Warnf
+		if isKeyStoreMiss(err) {
+			logf = logger.Debugf
+		}
+		logf(
 			"key-store %s OpenBao backend error status_code=%d status=%q body=%q",
 			operation,
 			statusErr.StatusCode,
