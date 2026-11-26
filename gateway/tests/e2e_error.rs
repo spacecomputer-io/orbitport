@@ -6,17 +6,22 @@ async fn assert_rpc_validation_error(
     base_url: &str,
     access_token: &str,
     req_id: u64,
-    chunks: u32,
+    key_usage: &str,
     expected_msg: &str,
 ) -> Result<(), common::E2EError> {
     let payload = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": req_id,
-        "method": "ctrng.Get", // TODO (cleanup): change to existing method after removing ctrng feature
-        "params": {
-            "chunks": chunks
-        }
-    });
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": "kms.CreateKey",
+            "params": {
+        "Scheme": "TRANSIT",
+        "KeySpec": "AES_256_GCM96",
+        "KeyUsage": key_usage,
+        "Alias": "e2e-invalid-usage",
+        "Description": "",
+        "Tags": []
+    }
+        });
 
     let response = common::rpc_request(base_url, access_token, payload).await?;
     assert_eq!(
@@ -54,7 +59,7 @@ async fn assert_rpc_validation_error(
 }
 
 #[tokio::test]
-async fn test_e2e_error_rpc_invalid_chunks() {
+async fn test_e2e_error_rpc_invalid_key_usage() {
     _ = tracing_subscriber::fmt::try_init();
 
     let access_token = env::var("OPTEST_TOKEN").unwrap_or("test_access_token".to_string());
@@ -64,10 +69,14 @@ async fn test_e2e_error_rpc_invalid_chunks() {
     let started = common::pre_test("happy").await.unwrap();
 
     let result = async {
-        assert_rpc_validation_error(&base_url, &access_token, 11, 0, "Chunks must be at least 1")
-            .await?;
-        assert_rpc_validation_error(&base_url, &access_token, 12, 11, "Max chunks exceeded")
-            .await?;
+        assert_rpc_validation_error(
+            &base_url,
+            &access_token,
+            11,
+            "SIGN_VERIFY",
+            "AES_256_GCM96 keys must use ENCRYPT_DECRYPT",
+        )
+        .await?;
         Ok::<(), common::E2EError>(())
     }
     .await;
@@ -96,9 +105,8 @@ async fn test_e2e_error_rpc_bad_method() {
         let payload = serde_json::json!({
             "jsonrpc": "2.0",
             "id": 21,
-            "method": "ctrng.Missing", // TODO (cleanup): change to existing method after removing ctrng feature
+            "method": "missing",
             "params": {
-                "chunks": 1
             }
         });
         let response = common::rpc_request(&base_url, &access_token, payload).await?;
