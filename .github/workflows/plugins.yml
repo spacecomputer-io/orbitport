@@ -3,8 +3,10 @@ name: Test & Build Plugins
 on:
   push:
     branches: [ "main" ]
+    paths-ignore: [ "examples/**" ]
   pull_request:
     branches: [ "*" ]
+    paths-ignore: [ "examples/**" ]
 
 jobs:
 

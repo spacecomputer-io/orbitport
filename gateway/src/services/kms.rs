@@ -1,14 +1,16 @@
-use serde::de;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::value::RawValue;
-use std::fmt;
+use orbitport_kms_api::KmsValidation;
+use serde::Serialize;
 use tonic::transport::Channel;
 
 use crate::proto::plugins::kms::{
+    CancelKeyDeletionRequest as PluginCancelKeyDeletionRequest,
+    CancelKeyDeletionResponse as PluginCancelKeyDeletionResponse,
     CreateKeyRequest as PluginCreateKeyRequest, CreateKeyResponse as PluginCreateKeyResponse,
     DecapsulateRequest as PluginDecapsulateRequest,
     DecapsulateResponse as PluginDecapsulateResponse, DecryptRequest as PluginDecryptRequest,
-    DecryptResponse as PluginDecryptResponse, EncapsulateRequest as PluginEncapsulateRequest,
+    DecryptResponse as PluginDecryptResponse, DisableKeyRequest as PluginDisableKeyRequest,
+    DisableKeyResponse as PluginDisableKeyResponse, EnableKeyRequest as PluginEnableKeyRequest,
+    EnableKeyResponse as PluginEnableKeyResponse, EncapsulateRequest as PluginEncapsulateRequest,
     EncapsulateResponse as PluginEncapsulateResponse, EncryptRequest as PluginEncryptRequest,
     EncryptResponse as PluginEncryptResponse,
     GenerateDataKeyRequest as PluginGenerateDataKeyRequest,
@@ -24,401 +26,30 @@ use crate::proto::plugins::kms::{
     KeyStoreListRequest as PluginKeyStoreListRequest,
     KeyStoreListResponse as PluginKeyStoreListResponse,
     KeyStorePutRequest as PluginKeyStorePutRequest,
-    KeyStorePutResponse as PluginKeyStorePutResponse, RotateKeyRequest as PluginRotateKeyRequest,
-    RotateKeyResponse as PluginRotateKeyResponse, SignRequest as PluginSignRequest,
-    SignResponse as PluginSignResponse, Tag as PluginTag, kms_plugin_client::KmsPluginClient,
+    KeyStorePutResponse as PluginKeyStorePutResponse, ListKeysRequest as PluginListKeysRequest,
+    ListKeysResponse as PluginListKeysResponse, RotateKeyRequest as PluginRotateKeyRequest,
+    RotateKeyResponse as PluginRotateKeyResponse,
+    ScheduleKeyDeletionRequest as PluginScheduleKeyDeletionRequest,
+    ScheduleKeyDeletionResponse as PluginScheduleKeyDeletionResponse,
+    SignRequest as PluginSignRequest, SignResponse as PluginSignResponse, Tag as PluginTag,
+    kms_plugin_client::KmsPluginClient,
 };
 use crate::proto::services::kms::{
-    CreateKeyRequest, CreateKeyResponse, DecapsulateRequest, DecapsulateResponse, DecryptRequest,
-    DecryptResponse, EncapsulateRequest, EncapsulateResponse, EncryptRequest, EncryptResponse,
-    GenerateDataKeyRequest, GenerateDataKeyResponse, GetCapabilitiesResponse,
-    GetKeyMetadataRequest, GetKeyMetadataResponse, GetPublicKeyRequest, GetPublicKeyResponse,
-    KeyAgreementCapability, RotateKeyRequest, RotateKeyResponse, SchemeCapability, SignRequest,
-    SignResponse, SigningCapability, Tag,
+    CancelKeyDeletionRequest, CancelKeyDeletionResponse, CreateKeyRequest, CreateKeyResponse,
+    DecapsulateRequest, DecapsulateResponse, DecryptRequest, DecryptResponse, DisableKeyRequest,
+    DisableKeyResponse, EnableKeyRequest, EnableKeyResponse, EncapsulateRequest,
+    EncapsulateResponse, EncryptRequest, EncryptResponse, GenerateDataKeyRequest,
+    GenerateDataKeyResponse, GetCapabilitiesResponse, GetKeyMetadataRequest,
+    GetKeyMetadataResponse, GetPublicKeyRequest, GetPublicKeyResponse, ListKeysRequest,
+    ListKeysResponse, RotateKeyRequest, RotateKeyResponse, ScheduleKeyDeletionRequest,
+    ScheduleKeyDeletionResponse, SignRequest, SignResponse, Tag,
 };
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Scheme {
-    Transit,
-    Ethereum,
-    Pqc,
-}
-
-impl Scheme {
-    fn parse_optional(value: Option<&str>) -> Result<Self, String> {
-        match value.map(str::trim).filter(|v| !v.is_empty()) {
-            None | Some("TRANSIT") => Ok(Self::Transit),
-            Some("ETHEREUM") => Ok(Self::Ethereum),
-            Some("PQC") => Ok(Self::Pqc),
-            Some(_) => Err("Scheme is not supported".to_string()),
-        }
-    }
-
-    fn supports_key_spec(self, key_spec: KeySpec) -> bool {
-        key_spec.requires_scheme() == self
-    }
-
-    fn supports_signing_algorithm(self, signing_algorithm: SigningAlgorithm) -> bool {
-        matches!(
-            (self, signing_algorithm),
-            (Self::Transit, SigningAlgorithm::EcdsaSha256)
-                | (Self::Transit, SigningAlgorithm::EcdsaSha384)
-                | (Self::Transit, SigningAlgorithm::Ed25519)
-                | (Self::Transit, SigningAlgorithm::RsassaPkcs1V15Sha256)
-                | (Self::Transit, SigningAlgorithm::RsassaPssSha256)
-                | (Self::Ethereum, SigningAlgorithm::EthereumSecp256k1)
-                | (Self::Pqc, SigningAlgorithm::MlDsa)
-        )
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Transit => "TRANSIT",
-            Self::Ethereum => "ETHEREUM",
-            Self::Pqc => "PQC",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum KeySpec {
-    Aes256Gcm96,
-    EcdsaP256,
-    EcdsaP384,
-    Ed25519,
-    Rsa4096,
-    EccSecgP256k1,
-    MlKem768,
-    MlKem1024,
-    MlDsa44,
-    MlDsa65,
-    MlDsa87,
-}
-
-impl KeySpec {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "AES_256_GCM96" => Ok(Self::Aes256Gcm96),
-            "ECDSA_P256" => Ok(Self::EcdsaP256),
-            "ECDSA_P384" => Ok(Self::EcdsaP384),
-            "ED25519" => Ok(Self::Ed25519),
-            "RSA_4096" => Ok(Self::Rsa4096),
-            "ECC_SECG_P256K1" => Ok(Self::EccSecgP256k1),
-            "ML_KEM_768" => Ok(Self::MlKem768),
-            "ML_KEM_1024" => Ok(Self::MlKem1024),
-            "ML_DSA_44" => Ok(Self::MlDsa44),
-            "ML_DSA_65" => Ok(Self::MlDsa65),
-            "ML_DSA_87" => Ok(Self::MlDsa87),
-            _ => Err("KeySpec is not supported".to_string()),
-        }
-    }
-
-    fn allowed_usage(self) -> KeyUsage {
-        match self {
-            Self::Aes256Gcm96 => KeyUsage::EncryptDecrypt,
-            Self::MlKem768 | Self::MlKem1024 => KeyUsage::KeyAgreement,
-            Self::EcdsaP256
-            | Self::EcdsaP384
-            | Self::Ed25519
-            | Self::Rsa4096
-            | Self::EccSecgP256k1
-            | Self::MlDsa44
-            | Self::MlDsa65
-            | Self::MlDsa87 => KeyUsage::SignVerify,
-        }
-    }
-
-    fn requires_scheme(self) -> Scheme {
-        match self {
-            Self::EccSecgP256k1 => Scheme::Ethereum,
-            Self::MlKem768 | Self::MlKem1024 | Self::MlDsa44 | Self::MlDsa65 | Self::MlDsa87 => {
-                Scheme::Pqc
-            }
-            Self::Aes256Gcm96
-            | Self::EcdsaP256
-            | Self::EcdsaP384
-            | Self::Ed25519
-            | Self::Rsa4096 => Scheme::Transit,
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Aes256Gcm96 => "AES_256_GCM96",
-            Self::EcdsaP256 => "ECDSA_P256",
-            Self::EcdsaP384 => "ECDSA_P384",
-            Self::Ed25519 => "ED25519",
-            Self::Rsa4096 => "RSA_4096",
-            Self::EccSecgP256k1 => "ECC_SECG_P256K1",
-            Self::MlKem768 => "ML_KEM_768",
-            Self::MlKem1024 => "ML_KEM_1024",
-            Self::MlDsa44 => "ML_DSA_44",
-            Self::MlDsa65 => "ML_DSA_65",
-            Self::MlDsa87 => "ML_DSA_87",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum KeyUsage {
-    EncryptDecrypt,
-    KeyAgreement,
-    SignVerify,
-}
-
-impl KeyUsage {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "ENCRYPT_DECRYPT" => Ok(Self::EncryptDecrypt),
-            "KEY_AGREEMENT" => Ok(Self::KeyAgreement),
-            "SIGN_VERIFY" => Ok(Self::SignVerify),
-            _ => Err("KeyUsage must be ENCRYPT_DECRYPT, KEY_AGREEMENT, or SIGN_VERIFY".to_string()),
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::EncryptDecrypt => "ENCRYPT_DECRYPT",
-            Self::KeyAgreement => "KEY_AGREEMENT",
-            Self::SignVerify => "SIGN_VERIFY",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum EncryptionAlgorithm {
-    Aes256Gcm96,
-}
-
-impl EncryptionAlgorithm {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "AES_256_GCM96" => Ok(Self::Aes256Gcm96),
-            _ => Err("EncryptionAlgorithm must be AES_256_GCM96".to_string()),
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Aes256Gcm96 => "AES_256_GCM96",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SigningAlgorithm {
-    EcdsaSha256,
-    EcdsaSha384,
-    Ed25519,
-    EthereumSecp256k1,
-    MlDsa,
-    RsassaPkcs1V15Sha256,
-    RsassaPssSha256,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum KeyAgreementAlgorithm {
-    MlKem,
-}
-
-impl KeyAgreementAlgorithm {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::MlKem => "ML_KEM",
-        }
-    }
-}
-
-impl SigningAlgorithm {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "ECDSA_SHA_256" => Ok(Self::EcdsaSha256),
-            "ECDSA_SHA_384" => Ok(Self::EcdsaSha384),
-            "ED25519" => Ok(Self::Ed25519),
-            "ETHEREUM_SECP256K1" => Ok(Self::EthereumSecp256k1),
-            "ML_DSA" => Ok(Self::MlDsa),
-            "RSASSA_PKCS1_V1_5_SHA_256" => Ok(Self::RsassaPkcs1V15Sha256),
-            "RSASSA_PSS_SHA_256" => Ok(Self::RsassaPssSha256),
-            _ => Err("SigningAlgorithm is not supported".to_string()),
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::EcdsaSha256 => "ECDSA_SHA_256",
-            Self::EcdsaSha384 => "ECDSA_SHA_384",
-            Self::Ed25519 => "ED25519",
-            Self::EthereumSecp256k1 => "ETHEREUM_SECP256K1",
-            Self::MlDsa => "ML_DSA",
-            Self::RsassaPkcs1V15Sha256 => "RSASSA_PKCS1_V1_5_SHA_256",
-            Self::RsassaPssSha256 => "RSASSA_PSS_SHA_256",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum MessageType {
-    Raw,
-    Digest,
-    Eip191,
-}
-
-impl MessageType {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "RAW" => Ok(Self::Raw),
-            "DIGEST" => Ok(Self::Digest),
-            "EIP191" => Ok(Self::Eip191),
-            _ => Err("MessageType must be RAW, DIGEST, or EIP191".to_string()),
-        }
-    }
-
-    fn allowed_for(self, signing_algorithm: SigningAlgorithm) -> bool {
-        match (self, signing_algorithm) {
-            (Self::Raw, _) => true,
-            (Self::Digest, SigningAlgorithm::MlDsa) => false,
-            (Self::Digest, _) => true,
-            (Self::Eip191, _) => Scheme::Ethereum.supports_signing_algorithm(signing_algorithm),
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Raw => "RAW",
-            Self::Digest => "DIGEST",
-            Self::Eip191 => "EIP191",
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DataKeySpec {
-    Aes128,
-    Aes256,
-}
-
-impl DataKeySpec {
-    fn parse(value: &str) -> Result<Self, String> {
-        match value {
-            "AES_128" => Ok(Self::Aes128),
-            "AES_256" => Ok(Self::Aes256),
-            _ => Err("DataKeySpec must be AES_128 or AES_256".to_string()),
-        }
-    }
-
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Aes128 => "AES_128",
-            Self::Aes256 => "AES_256",
-        }
-    }
-}
-
-const MAX_ALIAS_LEN: usize = 128;
-const KEY_ID_PREFIX: &str = "kms:";
-const EXPERIMENTAL_TAG: &str = "experimental";
-const MAX_KEY_STORE_NAME_LEN: usize = 256;
-
-#[derive(Clone)]
-pub struct KeyStoreSecret(Box<RawValue>);
-
-impl KeyStoreSecret {
-    pub(crate) fn as_json_str(&self) -> &str {
-        self.0.get()
-    }
-
-    fn from_json_string(value: String) -> Result<Self, String> {
-        let raw = RawValue::from_string(value).map_err(|_| "Secret must be valid JSON")?;
-        Self::from_raw(raw)
-    }
-
-    fn from_raw(raw: Box<RawValue>) -> Result<Self, String> {
-        if !raw.get().trim_start().starts_with('{') {
-            return Err("Secret must be a JSON object".to_string());
-        }
-        Ok(Self(raw))
-    }
-}
-
-impl<'de> Deserialize<'de> for KeyStoreSecret {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let raw = Box::<RawValue>::deserialize(deserializer)?;
-        Self::from_raw(raw).map_err(de::Error::custom)
-    }
-}
-
-impl Serialize for KeyStoreSecret {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        self.0.serialize(serializer)
-    }
-}
-
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStorePutRequest {
-    pub name: String,
-    pub secret: KeyStoreSecret,
-}
-
-impl fmt::Debug for KeyStorePutRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("KeyStorePutRequest")
-            .field("name", &self.name)
-            .field("secret", &"<redacted>")
-            .finish()
-    }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreGetRequest {
-    pub name: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreListRequest {
-    #[serde(default)]
-    pub prefix: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreDeleteRequest {
-    pub name: String,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStorePutResponse {
-    pub name: String,
-    pub version: u32,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreGetResponse {
-    pub name: String,
-    pub secret: KeyStoreSecret,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreListResponse {
-    pub names: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct KeyStoreDeleteResponse {
-    pub name: String,
-}
+pub use orbitport_kms_api::{
+    KeyStoreDeleteRequest, KeyStoreDeleteResponse, KeyStoreGetRequest, KeyStoreGetResponse,
+    KeyStoreListRequest, KeyStoreListResponse, KeyStorePutRequest, KeyStorePutResponse,
+    KeyStoreSecret,
+};
 
 #[derive(Debug)]
 pub enum KmsRpcCall {
@@ -432,6 +63,11 @@ pub enum KmsRpcCall {
     GetPublicKey(GetPublicKeyRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
+    ListKeys(ListKeysRequest),
+    DisableKey(DisableKeyRequest),
+    EnableKey(EnableKeyRequest),
+    ScheduleKeyDeletion(ScheduleKeyDeletionRequest),
+    CancelKeyDeletion(CancelKeyDeletionRequest),
     KeyStorePut(KeyStorePutRequest),
     KeyStoreGet(KeyStoreGetRequest),
     KeyStoreList(KeyStoreListRequest),
@@ -451,6 +87,11 @@ impl KmsRpcCall {
             Self::GetPublicKey(req) => KmsService::validate_get_public_key(req),
             Self::GenerateDataKey(req) => KmsService::validate_generate_data_key(req),
             Self::RotateKey(req) => KmsService::validate_rotate_key(req),
+            Self::ListKeys(req) => KmsService::validate_list_keys(req),
+            Self::DisableKey(req) => KmsService::validate_disable_key(req),
+            Self::EnableKey(req) => KmsService::validate_enable_key(req),
+            Self::ScheduleKeyDeletion(req) => KmsService::validate_schedule_key_deletion(req),
+            Self::CancelKeyDeletion(req) => KmsService::validate_cancel_key_deletion(req),
             Self::KeyStorePut(req) => KmsService::validate_key_store_put(req),
             Self::KeyStoreGet(req) => KmsService::validate_key_store_get(req),
             Self::KeyStoreList(req) => KmsService::validate_key_store_list(req),
@@ -460,6 +101,15 @@ impl KmsRpcCall {
 
     fn log_start(&self, req_id: u64) {
         match self {
+            Self::ListKeys(_) => tracing::debug!("Executing KMS ListKeys RPC [id={}]", req_id),
+            Self::DisableKey(_) => tracing::debug!("Executing KMS DisableKey RPC [id={}]", req_id),
+            Self::EnableKey(_) => tracing::debug!("Executing KMS EnableKey RPC [id={}]", req_id),
+            Self::ScheduleKeyDeletion(_) => {
+                tracing::debug!("Executing KMS ScheduleKeyDeletion RPC [id={}]", req_id)
+            }
+            Self::CancelKeyDeletion(_) => {
+                tracing::debug!("Executing KMS CancelKeyDeletion RPC [id={}]", req_id)
+            }
             Self::Encrypt(req) => tracing::debug!(
                 "Executing KMS Encrypt RPC [id={} key_id={}]",
                 req_id,
@@ -556,6 +206,11 @@ pub enum KmsRpcResult {
     GetPublicKey(GetPublicKeyResponse),
     GenerateDataKey(GenerateDataKeyResponse),
     RotateKey(RotateKeyResponse),
+    ListKeys(ListKeysResponse),
+    DisableKey(DisableKeyResponse),
+    EnableKey(EnableKeyResponse),
+    ScheduleKeyDeletion(ScheduleKeyDeletionResponse),
+    CancelKeyDeletion(CancelKeyDeletionResponse),
     KeyStorePut(KeyStorePutResponse),
     KeyStoreGet(KeyStoreGetResponse),
     KeyStoreList(KeyStoreListResponse),
@@ -565,6 +220,15 @@ pub enum KmsRpcResult {
 impl KmsRpcResult {
     fn log_success(&self, req_id: u64) {
         match self {
+            Self::ListKeys(_) => tracing::debug!("KMS ListKeys RPC succeeded [id={}]", req_id),
+            Self::DisableKey(_) => tracing::debug!("KMS DisableKey RPC succeeded [id={}]", req_id),
+            Self::EnableKey(_) => tracing::debug!("KMS EnableKey RPC succeeded [id={}]", req_id),
+            Self::ScheduleKeyDeletion(_) => {
+                tracing::debug!("KMS ScheduleKeyDeletion RPC succeeded [id={}]", req_id)
+            }
+            Self::CancelKeyDeletion(_) => {
+                tracing::debug!("KMS CancelKeyDeletion RPC succeeded [id={}]", req_id)
+            }
             Self::Encrypt(result) => tracing::debug!(
                 "KMS Encrypt RPC succeeded [id={} key_id={}]",
                 req_id,
@@ -667,148 +331,83 @@ impl KmsService {
     }
 
     pub fn validate_encrypt(req: &EncryptRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)?;
-        validate_required("Plaintext", &req.plaintext)?;
-
-        if let Some(algorithm) = req.encryption_algorithm.as_ref() {
-            validate_encryption_algorithm(algorithm)?;
-        }
-        Ok(())
+        KmsValidation::validate_encrypt(req)
     }
 
     pub fn validate_decrypt(req: &DecryptRequest) -> Result<(), String> {
-        validate_required("CiphertextBlob", &req.ciphertext_blob)?;
-        if let Some(key_id) = req.key_id.as_ref() {
-            validate_key_reference("KeyId", key_id)?;
-        }
-        if let Some(algorithm) = req.encryption_algorithm.as_ref() {
-            validate_encryption_algorithm(algorithm)?;
-        }
-        Ok(())
+        KmsValidation::validate_decrypt(req)
     }
 
     pub fn validate_sign(req: &SignRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)?;
-        validate_required("Message", &req.message)?;
-        let signing_algorithm = validate_signing_algorithm(&req.signing_algorithm)?;
-        if let Some(message_type) = req.message_type.as_ref() {
-            let message_type = MessageType::parse(message_type)?;
-            if !message_type.allowed_for(signing_algorithm) {
-                return Err(format!(
-                    "MessageType {} is not supported for SigningAlgorithm {}",
-                    message_type.as_str(),
-                    signing_algorithm.as_str()
-                ));
-            }
-        }
-        Ok(())
+        KmsValidation::validate_sign(req)
     }
 
     pub fn validate_encapsulate(req: &EncapsulateRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)
+        KmsValidation::validate_encapsulate(req)
     }
 
     pub fn validate_decapsulate(req: &DecapsulateRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)?;
-        validate_required("Ciphertext", &req.ciphertext)?;
-        Ok(())
+        KmsValidation::validate_decapsulate(req)
     }
 
     pub fn validate_create_key(req: &CreateKeyRequest) -> Result<(), String> {
-        let scheme = Scheme::parse_optional(req.scheme.as_deref())?;
-        let key_spec = validate_key_spec(&req.key_spec, scheme)?;
-        let key_usage = validate_key_usage(&req.key_usage)?;
-
-        validate_required("Alias", &req.alias)?;
-        validate_alias(&req.alias)?;
-
-        if key_usage != key_spec.allowed_usage() {
-            return Err(match (scheme, key_spec) {
-                (_, KeySpec::Aes256Gcm96) => {
-                    "AES_256_GCM96 keys must use ENCRYPT_DECRYPT".to_string()
-                }
-                (_, KeySpec::MlKem768 | KeySpec::MlKem1024) => {
-                    "PQC ML-KEM keys must use KEY_AGREEMENT".to_string()
-                }
-                (Scheme::Ethereum, _) => "ETHEREUM keys must use SIGN_VERIFY".to_string(),
-                (Scheme::Pqc, _) => "PQC keys must use SIGN_VERIFY".to_string(),
-                (Scheme::Transit, _) => "Asymmetric KMS keys must use SIGN_VERIFY".to_string(),
-            });
-        }
-
-        for tag in &req.tags {
-            validate_required("TagKey", &tag.tag_key)?;
-        }
-        Ok(())
+        KmsValidation::validate_create_key(req)
     }
 
     pub fn validate_generate_data_key(req: &GenerateDataKeyRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)?;
-        let has_spec = req
-            .data_key_spec
-            .as_ref()
-            .map(|s| !s.trim().is_empty())
-            .unwrap_or(false);
-        let has_size = req.number_of_bytes.is_some();
-        if has_spec == has_size {
-            return Err("Exactly one of DataKeySpec or NumberOfBytes must be provided".to_string());
-        }
-        if let Some(spec) = req.data_key_spec.as_ref() {
-            DataKeySpec::parse(spec)?;
-        }
-        if let Some(bytes) = req.number_of_bytes
-            && bytes == 0
-        {
-            return Err("NumberOfBytes must be greater than 0".to_string());
-        }
-        Ok(())
+        KmsValidation::validate_generate_data_key(req)
     }
 
     pub fn validate_get_key_metadata(req: &GetKeyMetadataRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)
+        KmsValidation::validate_get_key_metadata(req)
     }
 
     pub fn validate_get_public_key(req: &GetPublicKeyRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)?;
-        if let Some(version) = req.version
-            && version == 0
-        {
-            return Err("Version must be greater than 0".to_string());
-        }
-        Ok(())
+        KmsValidation::validate_get_public_key(req)
+    }
+
+    pub fn validate_list_keys(req: &ListKeysRequest) -> Result<(), String> {
+        KmsValidation::validate_list_keys(req)
+    }
+
+    pub fn validate_disable_key(req: &DisableKeyRequest) -> Result<(), String> {
+        KmsValidation::validate_disable_key(req)
+    }
+
+    pub fn validate_enable_key(req: &EnableKeyRequest) -> Result<(), String> {
+        KmsValidation::validate_enable_key(req)
+    }
+
+    pub fn validate_schedule_key_deletion(req: &ScheduleKeyDeletionRequest) -> Result<(), String> {
+        KmsValidation::validate_schedule_key_deletion(req)
+    }
+
+    pub fn validate_cancel_key_deletion(req: &CancelKeyDeletionRequest) -> Result<(), String> {
+        KmsValidation::validate_cancel_key_deletion(req)
     }
 
     pub fn validate_rotate_key(req: &RotateKeyRequest) -> Result<(), String> {
-        validate_key_reference("KeyId", &req.key_id)
+        KmsValidation::validate_rotate_key(req)
     }
 
     pub fn validate_key_store_put(req: &KeyStorePutRequest) -> Result<(), String> {
-        validate_key_store_name("Name", &req.name)
+        KmsValidation::validate_key_store_put(req)
     }
 
     pub fn validate_key_store_get(req: &KeyStoreGetRequest) -> Result<(), String> {
-        validate_key_store_name("Name", &req.name)
+        KmsValidation::validate_key_store_get(req)
     }
 
     pub fn validate_key_store_list(req: &KeyStoreListRequest) -> Result<(), String> {
-        if let Some(prefix) = req.prefix.as_ref() {
-            validate_key_store_prefix("Prefix", prefix)?;
-        }
-        Ok(())
+        KmsValidation::validate_key_store_list(req)
     }
 
     pub fn validate_key_store_delete(req: &KeyStoreDeleteRequest) -> Result<(), String> {
-        validate_key_store_name("Name", &req.name)
+        KmsValidation::validate_key_store_delete(req)
     }
 
     pub fn get_capabilities() -> GetCapabilitiesResponse {
-        GetCapabilitiesResponse {
-            schemes: vec![
-                transit_capability(),
-                ethereum_capability(),
-                pqc_capability(),
-            ],
-        }
+        KmsValidation::get_capabilities()
     }
 
     pub async fn execute(
@@ -820,6 +419,21 @@ impl KmsService {
         call.log_start(req_id);
 
         let result = match call {
+            KmsRpcCall::ListKeys(req) => {
+                KmsRpcResult::ListKeys(self.list_keys(client_id, req).await?)
+            }
+            KmsRpcCall::DisableKey(req) => {
+                KmsRpcResult::DisableKey(self.disable_key(client_id, req).await?)
+            }
+            KmsRpcCall::EnableKey(req) => {
+                KmsRpcResult::EnableKey(self.enable_key(client_id, req).await?)
+            }
+            KmsRpcCall::ScheduleKeyDeletion(req) => {
+                KmsRpcResult::ScheduleKeyDeletion(self.schedule_key_deletion(client_id, req).await?)
+            }
+            KmsRpcCall::CancelKeyDeletion(req) => {
+                KmsRpcResult::CancelKeyDeletion(self.cancel_key_deletion(client_id, req).await?)
+            }
             KmsRpcCall::Encrypt(req) => KmsRpcResult::Encrypt(self.encrypt(client_id, req).await?),
             KmsRpcCall::Decrypt(req) => KmsRpcResult::Decrypt(self.decrypt(client_id, req).await?),
             KmsRpcCall::Sign(req) => KmsRpcResult::Sign(self.sign(client_id, req).await?),
@@ -1071,6 +685,100 @@ impl KmsService {
         })
     }
 
+    pub async fn list_keys(
+        &mut self,
+        client_id: &str,
+        req: ListKeysRequest,
+    ) -> Result<ListKeysResponse, tonic::Status> {
+        let response: PluginListKeysResponse = self
+            .client
+            .list_keys(tonic::Request::new(PluginListKeysRequest {
+                limit: req.limit,
+                next_token: req.next_token,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(ListKeysResponse {
+            key_ids: response.key_ids,
+            next_token: response.next_token,
+        })
+    }
+
+    pub async fn disable_key(
+        &mut self,
+        client_id: &str,
+        req: DisableKeyRequest,
+    ) -> Result<DisableKeyResponse, tonic::Status> {
+        let response: PluginDisableKeyResponse = self
+            .client
+            .disable_key(tonic::Request::new(PluginDisableKeyRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(DisableKeyResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn enable_key(
+        &mut self,
+        client_id: &str,
+        req: EnableKeyRequest,
+    ) -> Result<EnableKeyResponse, tonic::Status> {
+        let response: PluginEnableKeyResponse = self
+            .client
+            .enable_key(tonic::Request::new(PluginEnableKeyRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(EnableKeyResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
+    pub async fn schedule_key_deletion(
+        &mut self,
+        client_id: &str,
+        req: ScheduleKeyDeletionRequest,
+    ) -> Result<ScheduleKeyDeletionResponse, tonic::Status> {
+        let response: PluginScheduleKeyDeletionResponse = self
+            .client
+            .schedule_key_deletion(tonic::Request::new(PluginScheduleKeyDeletionRequest {
+                key_id: req.key_id,
+                pending_window_in_days: req.pending_window_in_days,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(ScheduleKeyDeletionResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+            pending_window_in_days: response.pending_window_in_days,
+        })
+    }
+
+    pub async fn cancel_key_deletion(
+        &mut self,
+        client_id: &str,
+        req: CancelKeyDeletionRequest,
+    ) -> Result<CancelKeyDeletionResponse, tonic::Status> {
+        let response: PluginCancelKeyDeletionResponse = self
+            .client
+            .cancel_key_deletion(tonic::Request::new(PluginCancelKeyDeletionRequest {
+                key_id: req.key_id,
+                client_id: client_id.to_string(),
+            }))
+            .await?
+            .into_inner();
+        Ok(CancelKeyDeletionResponse {
+            key_metadata: response.key_metadata.map(map_key_metadata),
+        })
+    }
+
     pub async fn rotate_key(
         &mut self,
         client_id: &str,
@@ -1173,272 +881,6 @@ impl KmsService {
     }
 }
 
-fn transit_capability() -> SchemeCapability {
-    SchemeCapability {
-        scheme: Scheme::Transit.as_str().to_string(),
-        key_specs: vec![
-            KeySpec::Aes256Gcm96,
-            KeySpec::EcdsaP256,
-            KeySpec::EcdsaP384,
-            KeySpec::Ed25519,
-            KeySpec::Rsa4096,
-        ]
-        .into_iter()
-        .map(|spec| spec.as_str().to_string())
-        .collect(),
-        key_usages: vec![KeyUsage::EncryptDecrypt, KeyUsage::SignVerify]
-            .into_iter()
-            .map(|usage| usage.as_str().to_string())
-            .collect(),
-        encryption_algorithms: vec![EncryptionAlgorithm::Aes256Gcm96.as_str().to_string()],
-        data_key_specs: vec![DataKeySpec::Aes128, DataKeySpec::Aes256]
-            .into_iter()
-            .map(|spec| spec.as_str().to_string())
-            .collect(),
-        signing_capabilities: vec![
-            signing_capability(
-                SigningAlgorithm::EcdsaSha256,
-                &[MessageType::Raw, MessageType::Digest],
-                &[],
-            ),
-            signing_capability(
-                SigningAlgorithm::EcdsaSha384,
-                &[MessageType::Raw, MessageType::Digest],
-                &[],
-            ),
-            signing_capability(
-                SigningAlgorithm::Ed25519,
-                &[MessageType::Raw, MessageType::Digest],
-                &[],
-            ),
-            signing_capability(
-                SigningAlgorithm::RsassaPkcs1V15Sha256,
-                &[MessageType::Raw, MessageType::Digest],
-                &[],
-            ),
-            signing_capability(
-                SigningAlgorithm::RsassaPssSha256,
-                &[MessageType::Raw, MessageType::Digest],
-                &[],
-            ),
-        ],
-        supports_encrypt: true,
-        supports_decrypt: true,
-        supports_generate_data_key: true,
-        supports_rotate_key: true,
-        key_agreement_capabilities: vec![],
-        supports_encapsulate: false,
-        supports_decapsulate: false,
-        tags: vec![],
-    }
-}
-
-fn ethereum_capability() -> SchemeCapability {
-    SchemeCapability {
-        scheme: Scheme::Ethereum.as_str().to_string(),
-        key_specs: vec![KeySpec::EccSecgP256k1.as_str().to_string()],
-        key_usages: vec![KeyUsage::SignVerify.as_str().to_string()],
-        encryption_algorithms: vec![],
-        data_key_specs: vec![],
-        signing_capabilities: vec![signing_capability(
-            SigningAlgorithm::EthereumSecp256k1,
-            &[MessageType::Raw, MessageType::Digest, MessageType::Eip191],
-            &[],
-        )],
-        supports_encrypt: false,
-        supports_decrypt: false,
-        supports_generate_data_key: false,
-        supports_rotate_key: false,
-        key_agreement_capabilities: vec![],
-        supports_encapsulate: false,
-        supports_decapsulate: false,
-        tags: vec![],
-    }
-}
-
-fn pqc_capability() -> SchemeCapability {
-    SchemeCapability {
-        scheme: Scheme::Pqc.as_str().to_string(),
-        key_specs: vec![
-            KeySpec::MlDsa44,
-            KeySpec::MlDsa65,
-            KeySpec::MlDsa87,
-            KeySpec::MlKem768,
-            KeySpec::MlKem1024,
-        ]
-        .into_iter()
-        .map(|spec| spec.as_str().to_string())
-        .collect(),
-        key_usages: vec![KeyUsage::SignVerify, KeyUsage::KeyAgreement]
-            .into_iter()
-            .map(|usage| usage.as_str().to_string())
-            .collect(),
-        encryption_algorithms: vec![],
-        data_key_specs: vec![],
-        signing_capabilities: vec![signing_capability(
-            SigningAlgorithm::MlDsa,
-            &[MessageType::Raw],
-            &[EXPERIMENTAL_TAG],
-        )],
-        supports_encrypt: false,
-        supports_decrypt: false,
-        supports_generate_data_key: false,
-        supports_rotate_key: false,
-        key_agreement_capabilities: vec![key_agreement_capability(
-            KeyAgreementAlgorithm::MlKem,
-            &[EXPERIMENTAL_TAG],
-        )],
-        supports_encapsulate: true,
-        supports_decapsulate: true,
-        tags: capability_tags(&[EXPERIMENTAL_TAG]),
-    }
-}
-
-fn key_agreement_capability(
-    key_agreement_algorithm: KeyAgreementAlgorithm,
-    tags: &[&str],
-) -> KeyAgreementCapability {
-    KeyAgreementCapability {
-        key_agreement_algorithm: key_agreement_algorithm.as_str().to_string(),
-        tags: capability_tags(tags),
-    }
-}
-
-fn signing_capability(
-    signing_algorithm: SigningAlgorithm,
-    message_types: &[MessageType],
-    tags: &[&str],
-) -> SigningCapability {
-    SigningCapability {
-        signing_algorithm: signing_algorithm.as_str().to_string(),
-        message_types: message_types
-            .iter()
-            .map(|message_type| message_type.as_str().to_string())
-            .collect(),
-        tags: capability_tags(tags),
-    }
-}
-
-fn capability_tags(tags: &[&str]) -> Vec<String> {
-    tags.iter().map(|tag| (*tag).to_string()).collect()
-}
-
-fn validate_required(field_name: &str, value: &str) -> Result<(), String> {
-    if value.trim().is_empty() {
-        return Err(format!("{field_name} is required"));
-    }
-    Ok(())
-}
-
-fn validate_key_spec(value: &str, scheme: Scheme) -> Result<KeySpec, String> {
-    let key_spec = KeySpec::parse(value).map_err(|_| match scheme {
-        Scheme::Transit => "KeySpec is not supported".to_string(),
-        Scheme::Ethereum => "ETHEREUM keys must use ECC_SECG_P256K1".to_string(),
-        Scheme::Pqc => {
-            "PQC keys must use ML_DSA_44, ML_DSA_65, ML_DSA_87, ML_KEM_768, or ML_KEM_1024"
-                .to_string()
-        }
-    })?;
-
-    if scheme.supports_key_spec(key_spec) {
-        Ok(key_spec)
-    } else {
-        Err(match scheme {
-            Scheme::Transit => "KeySpec is not supported".to_string(),
-            Scheme::Ethereum => "ETHEREUM keys must use ECC_SECG_P256K1".to_string(),
-            Scheme::Pqc => {
-                "PQC keys must use ML_DSA_44, ML_DSA_65, ML_DSA_87, ML_KEM_768, or ML_KEM_1024"
-                    .to_string()
-            }
-        })
-    }
-}
-
-fn validate_key_usage(value: &str) -> Result<KeyUsage, String> {
-    KeyUsage::parse(value)
-}
-
-fn validate_encryption_algorithm(value: &str) -> Result<EncryptionAlgorithm, String> {
-    EncryptionAlgorithm::parse(value)
-}
-
-fn validate_signing_algorithm(value: &str) -> Result<SigningAlgorithm, String> {
-    SigningAlgorithm::parse(value)
-}
-
-fn validate_alias(value: &str) -> Result<(), String> {
-    let trimmed = value.trim();
-    if trimmed.len() > MAX_ALIAS_LEN {
-        return Err(format!("alias must be at most {MAX_ALIAS_LEN} characters"));
-    }
-    if trimmed.starts_with(KEY_ID_PREFIX) {
-        return Err("alias must not use the reserved kms:<alias> format".to_string());
-    }
-    if !trimmed
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '.'))
-    {
-        return Err("alias contains unsupported characters".to_string());
-    }
-    Ok(())
-}
-
-fn validate_key_store_name(field_name: &str, value: &str) -> Result<(), String> {
-    let trimmed = value.trim();
-    validate_required(field_name, trimmed)?;
-    if trimmed.len() > MAX_KEY_STORE_NAME_LEN {
-        return Err(format!(
-            "{field_name} must be at most {MAX_KEY_STORE_NAME_LEN} characters"
-        ));
-    }
-    if trimmed.starts_with('/') || trimmed.ends_with('/') {
-        return Err(format!("{field_name} must not start or end with /"));
-    }
-    for segment in trimmed.split('/') {
-        validate_key_store_segment(field_name, segment)?;
-    }
-    Ok(())
-}
-
-fn validate_key_store_prefix(field_name: &str, value: &str) -> Result<(), String> {
-    let trimmed = value.trim().trim_matches('/');
-    if trimmed.is_empty() {
-        return Ok(());
-    }
-    if trimmed.len() > MAX_KEY_STORE_NAME_LEN {
-        return Err(format!(
-            "{field_name} must be at most {MAX_KEY_STORE_NAME_LEN} characters"
-        ));
-    }
-    for segment in trimmed.split('/') {
-        validate_key_store_segment(field_name, segment)?;
-    }
-    Ok(())
-}
-
-fn validate_key_store_segment(field_name: &str, segment: &str) -> Result<(), String> {
-    if segment.is_empty() || matches!(segment, "." | "..") {
-        return Err(format!("{field_name} contains an invalid path segment"));
-    }
-    if !segment
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
-    {
-        return Err(format!("{field_name} contains unsupported characters"));
-    }
-    Ok(())
-}
-
-fn validate_key_reference(field_name: &str, value: &str) -> Result<(), String> {
-    validate_required(field_name, value)?;
-    let trimmed = value.trim();
-    let alias = trimmed.strip_prefix(KEY_ID_PREFIX).unwrap_or(trimmed);
-    if alias.is_empty() {
-        return Err(format!("{field_name} is required"));
-    }
-    validate_alias(alias)
-}
-
 fn map_key_metadata(
     metadata: crate::proto::plugins::kms::KeyMetadata,
 ) -> crate::proto::services::kms::KeyMetadata {
@@ -1448,6 +890,8 @@ fn map_key_metadata(
         key_spec: metadata.key_spec,
         key_usage: metadata.key_usage,
         enabled: metadata.enabled,
+        key_state: metadata.key_state,
+        deletion_date: metadata.deletion_date,
         primary_version: metadata.primary_version,
         creation_date: metadata.creation_date,
         scheme: metadata.scheme,
@@ -1502,28 +946,35 @@ mod test {
 
     #[test]
     fn test_validate_create_key_pqc_scheme() {
-        let req = CreateKeyRequest {
-            description: String::new(),
-            key_spec: "ML_DSA_65".to_string(),
-            key_usage: "SIGN_VERIFY".to_string(),
-            scheme: Some("PQC".to_string()),
-            alias: "pqc-main".to_string(),
-            tags: vec![],
-        };
-        KmsService::validate_create_key(&req).unwrap();
+        for key_spec in ["ML_DSA_44", "ML_DSA_65", "ML_DSA_87"] {
+            let req = CreateKeyRequest {
+                description: String::new(),
+                key_spec: key_spec.to_string(),
+                key_usage: "SIGN_VERIFY".to_string(),
+                scheme: Some("PQC".to_string()),
+                alias: "pqc-main".to_string(),
+                tags: vec![],
+            };
+            KmsService::validate_create_key(&req).unwrap();
+        }
     }
 
     #[test]
-    fn test_validate_create_key_pqc_kem_scheme() {
-        let req = CreateKeyRequest {
-            description: String::new(),
-            key_spec: "ML_KEM_768".to_string(),
-            key_usage: "KEY_AGREEMENT".to_string(),
-            scheme: Some("PQC".to_string()),
-            alias: "pqc-kem-main".to_string(),
-            tags: vec![],
-        };
-        KmsService::validate_create_key(&req).unwrap();
+    fn test_validate_create_key_rejects_mlkem() {
+        for key_spec in ["ML_KEM_768", "ML_KEM_1024"] {
+            let req = CreateKeyRequest {
+                description: String::new(),
+                key_spec: key_spec.to_string(),
+                key_usage: "KEY_AGREEMENT".to_string(),
+                scheme: Some("PQC".to_string()),
+                alias: "pqc-kem-main".to_string(),
+                tags: vec![],
+            };
+            assert_eq!(
+                KmsService::validate_create_key(&req).unwrap_err(),
+                "ML-KEM is temporarily disabled"
+            );
+        }
     }
 
     #[test]
@@ -1537,7 +988,7 @@ mod test {
             tags: vec![],
         };
         let err = KmsService::validate_create_key(&req).unwrap_err();
-        assert!(err.contains("KEY_AGREEMENT"));
+        assert_eq!(err, "ML-KEM is temporarily disabled");
     }
 
     #[test]
@@ -1770,29 +1221,22 @@ mod test {
             .iter()
             .find(|scheme| scheme.scheme == "PQC")
             .expect("missing PQC capability");
-        assert!(pqc.key_specs.contains(&"ML_DSA_65".to_string()));
-        assert!(pqc.key_specs.contains(&"ML_KEM_768".to_string()));
-        assert!(pqc.key_usages.contains(&"SIGN_VERIFY".to_string()));
-        assert!(pqc.key_usages.contains(&"KEY_AGREEMENT".to_string()));
-        assert_eq!(pqc.tags, vec![EXPERIMENTAL_TAG.to_string()]);
+        assert_eq!(pqc.key_specs, vec!["ML_DSA_44", "ML_DSA_65", "ML_DSA_87"]);
+        assert_eq!(pqc.key_usages, vec!["SIGN_VERIFY"]);
+        assert_eq!(pqc.tags, vec!["experimental".to_string()]);
         let pqc_signing = pqc
             .signing_capabilities
             .iter()
             .find(|capability| capability.signing_algorithm == "ML_DSA")
             .expect("missing PQC signing capability");
         assert_eq!(pqc_signing.message_types, vec!["RAW".to_string()]);
-        assert_eq!(pqc_signing.tags, vec![EXPERIMENTAL_TAG.to_string()]);
-        let pqc_key_agreement = pqc
-            .key_agreement_capabilities
-            .iter()
-            .find(|capability| capability.key_agreement_algorithm == "ML_KEM")
-            .expect("missing PQC key agreement capability");
-        assert_eq!(pqc_key_agreement.tags, vec![EXPERIMENTAL_TAG.to_string()]);
+        assert_eq!(pqc_signing.tags, vec!["experimental".to_string()]);
+        assert!(pqc.key_agreement_capabilities.is_empty());
         assert!(!pqc.supports_encrypt);
         assert!(!pqc.supports_generate_data_key);
         assert!(!pqc.supports_rotate_key);
-        assert!(pqc.supports_encapsulate);
-        assert!(pqc.supports_decapsulate);
+        assert!(!pqc.supports_encapsulate);
+        assert!(!pqc.supports_decapsulate);
     }
 
     #[test]

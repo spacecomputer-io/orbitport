@@ -1,96 +1,249 @@
 package kms
 
-import "testing"
+import (
+	"github.com/stretchr/testify/assert"
+	"testing"
+)
 
 func TestTransitKeyType(t *testing.T) {
-	tests := map[string]string{
-		keySpecAES256GCM96: "aes256-gcm96",
-		keySpecECDSAP256:   "ecdsa-p256",
-		keySpecECDSAP384:   "ecdsa-p384",
-		keySpecED25519:     "ed25519",
-		keySpecRSA4096:     "rsa-4096",
+	tests := []struct {
+		name        string
+		input       string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:     "AES256GCM96_ReturnsAES256GCM96",
+			input:    keySpecAES256GCM96,
+			expected: "aes256-gcm96",
+		},
+		{
+			name:     "ECDSAP256_ReturnsECDSAP256",
+			input:    keySpecECDSAP256,
+			expected: "ecdsa-p256",
+		},
+		{
+			name:     "ECDSAP384_ReturnsECDSAP384",
+			input:    keySpecECDSAP384,
+			expected: "ecdsa-p384",
+		},
+		{
+			name:     "ED25519_ReturnsED25519",
+			input:    keySpecED25519,
+			expected: "ed25519",
+		},
+		{
+			name:     "RSA4096_ReturnsRSA4096",
+			input:    keySpecRSA4096,
+			expected: "rsa-4096",
+		},
+		{
+			name:        "UnsupportedKeySpec_ReturnsError",
+			input:       "INVALID_KEY_SPEC",
+			expectError: true,
+		},
 	}
 
-	for input, expected := range tests {
-		actual, err := transitKeyType(input)
-		if err != nil {
-			t.Fatalf("transitKeyType(%q): %v", input, err)
-		}
-		if actual != expected {
-			t.Fatalf("transitKeyType(%q) = %q, want %q", input, actual, expected)
-		}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			actual, err := transitKeyType(testCase.input)
+			if testCase.expectError {
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, testCase.expected, actual)
+
+		})
 	}
 }
 
 func TestDataKeyBits(t *testing.T) {
-	bits, err := dataKeyBits(dataKeySpecAES256, 0)
-	if err != nil {
-		t.Fatalf("dataKeyBits: %v", err)
-	}
-	if bits != 256 {
-		t.Fatalf("expected 256 bits, got %d", bits)
+	tests := []struct {
+		name          string
+		dataKeySpec   string
+		numberOfBytes uint32
+		expectedBits  int
+		expectError   bool
+	}{
+		{
+			name:         "AES128Spec_Returns128Bits",
+			dataKeySpec:  dataKeySpecAES128,
+			expectedBits: 128,
+		},
+		{
+			name:         "AES256Spec_Returns256Bits",
+			dataKeySpec:  dataKeySpecAES256,
+			expectedBits: 256,
+		},
+		{
+			name:          "NumberOfBytes32_Returns256Bits",
+			numberOfBytes: 32,
+			expectedBits:  256,
+		},
+		{
+			name:          "SpecAndNumberOfBytesProvided_ReturnsError",
+			dataKeySpec:   dataKeySpecAES256,
+			numberOfBytes: 32,
+			expectError:   true,
+		},
+		{
+			name:        "NoSpecOrNumberOfBytes_ReturnsError",
+			expectError: true,
+		},
+		{
+			name:        "UnsupportedDataKeySpec_ReturnsError",
+			dataKeySpec: "INVALID_DATA_KEY_SPEC",
+			expectError: true,
+		},
 	}
 
-	if _, err := dataKeyBits(dataKeySpecAES256, 32); err == nil {
-		t.Fatal("expected xor validation error")
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+
+			bits, err := dataKeyBits(testCase.dataKeySpec, testCase.numberOfBytes)
+			if testCase.expectError {
+				assert.Error(t, err)
+				assert.Zero(t, bits)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, testCase.expectedBits, bits)
+
+		})
 	}
 }
 
 func TestNormalizeScheme(t *testing.T) {
-	tests := map[string]string{
-		"":             schemeTransit,
-		schemeTransit:  schemeTransit,
-		schemeEthereum: schemeEthereum,
-		schemePQC:      schemePQC,
+	tests := []struct {
+		name        string
+		input       string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:     "Empty_ReturnsSchemeTransit",
+			input:    "",
+			expected: schemeTransit,
+		},
+		{
+			name:     "SchemeTransit_ReturnsSchemeTransit",
+			input:    schemeTransit,
+			expected: schemeTransit,
+		},
+		{
+			name:     "PQC_ReturnsPQC",
+			input:    schemePQC,
+			expected: schemePQC,
+		},
+		{
+			name:     "SchemeEthereum_ReturnsEthereum",
+			input:    schemeEthereum,
+			expected: schemeEthereum,
+		},
+		{
+			name:        "UnsupportedScheme_ReturnsError",
+			input:       "garbage",
+			expectError: true,
+		},
 	}
 
-	for input, expected := range tests {
-		actual, err := normalizeScheme(input)
-		if err != nil {
-			t.Fatalf("normalizeScheme(%q): %v", input, err)
-		}
-		if actual != expected {
-			t.Fatalf("normalizeScheme(%q) = %q, want %q", input, actual, expected)
-		}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+
+			actual, err := normalizeScheme(testCase.input)
+			if testCase.expectError {
+				assert.Error(t, err)
+				assert.Empty(t, actual)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, testCase.expected, actual)
+		})
 	}
 }
 
-func TestPQCVariant(t *testing.T) {
-	dsaTests := map[string]string{
-		keySpecMLDSA44: "ml-dsa-44",
-		keySpecMLDSA65: "ml-dsa-65",
-		keySpecMLDSA87: "ml-dsa-87",
+func TestPQCMLDSAVariant(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:     "MLDSA44_ReturnsMLDSA44",
+			input:    keySpecMLDSA44,
+			expected: "ml-dsa-44",
+		},
+		{
+			name:     "MLDSA65_ReturnsMLDSA65",
+			input:    keySpecMLDSA65,
+			expected: "ml-dsa-65",
+		},
+		{
+			name:     "MLDSA87_ReturnsMLDSA87",
+			input:    keySpecMLDSA87,
+			expected: "ml-dsa-87",
+		},
+		{
+			name:        "UnsupportedKeySpec_ReturnsError",
+			input:       keySpecECDSAP256,
+			expectError: true,
+		},
 	}
 
-	for input, expected := range dsaTests {
-		actual, err := pqcMLDSAVariant(input)
-		if err != nil {
-			t.Fatalf("pqcMLDSAVariant(%q): %v", input, err)
-		}
-		if actual != expected {
-			t.Fatalf("pqcMLDSAVariant(%q) = %q, want %q", input, actual, expected)
-		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			actual, err := pqcMLDSAVariant(test.input)
+
+			if test.expectError {
+				assert.Error(t, err)
+				assert.Empty(t, actual)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, test.expected, actual)
+		})
+	}
+}
+
+func TestPQCMLKEMVariant(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expected    string
+		expectError bool
+	}{
+		{
+			name:     "MLKEM768_ReturnsMLKEM768",
+			input:    keySpecMLKEM768,
+			expected: "ml-kem-768",
+		},
+		{
+			name:     "MLKEM1024_ReturnsMLKEM1024",
+			input:    keySpecMLKEM1024,
+			expected: "ml-kem-1024",
+		},
+		{
+			name:        "UnsupportedKeySpec_ReturnsError",
+			input:       keySpecECDSAP256,
+			expectError: true,
+		},
 	}
 
-	kemTests := map[string]string{
-		keySpecMLKEM768:  "ml-kem-768",
-		keySpecMLKEM1024: "ml-kem-1024",
-	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			actual, err := pqcMLKEMVariant(test.input)
 
-	for input, expected := range kemTests {
-		actual, err := pqcMLKEMVariant(input)
-		if err != nil {
-			t.Fatalf("pqcMLKEMVariant(%q): %v", input, err)
-		}
-		if actual != expected {
-			t.Fatalf("pqcMLKEMVariant(%q) = %q, want %q", input, actual, expected)
-		}
-	}
+			if test.expectError {
+				assert.Error(t, err)
+				assert.Empty(t, actual)
+				return
+			}
 
-	if _, err := pqcMLDSAVariant(keySpecECDSAP256); err == nil {
-		t.Fatal("expected unsupported PQC ML-DSA KeySpec error")
-	}
-	if _, err := pqcMLKEMVariant(keySpecECDSAP256); err == nil {
-		t.Fatal("expected unsupported PQC ML-KEM KeySpec error")
+			assert.NoError(t, err)
+			assert.Equal(t, test.expected, actual)
+		})
 	}
 }

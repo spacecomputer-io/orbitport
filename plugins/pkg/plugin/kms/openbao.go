@@ -25,21 +25,26 @@ type openBaoClient struct {
 }
 
 type keyMetadataRecord struct {
-	KeyID          string       `json:"key_id"`
-	ClientID       string       `json:"client_id"`
-	Alias          string       `json:"alias,omitempty"`
-	Scheme         string       `json:"scheme"`
-	ProviderKey    string       `json:"provider_key,omitempty"`
-	TransitKey     string       `json:"transit_key,omitempty"`
-	Description    string       `json:"description"`
-	KeySpec        string       `json:"key_spec"`
-	KeyUsage       string       `json:"key_usage"`
-	Enabled        bool         `json:"enabled"`
-	PrimaryVersion uint32       `json:"primary_version"`
-	CreatedAt      string       `json:"created_at"`
-	PublicKey      string       `json:"public_key,omitempty"`
-	Address        string       `json:"address,omitempty"`
-	Tags           []*pluginTag `json:"tags"`
+	KeyID             string       `json:"key_id"`
+	ClientID          string       `json:"client_id"`
+	Alias             string       `json:"alias,omitempty"`
+	Scheme            string       `json:"scheme"`
+	ProviderKey       string       `json:"provider_key,omitempty"`
+	TransitKey        string       `json:"transit_key,omitempty"`
+	Description       string       `json:"description"`
+	KeySpec           string       `json:"key_spec"`
+	KeyUsage          string       `json:"key_usage"`
+	Enabled           bool         `json:"enabled"`
+	PrimaryVersion    uint32       `json:"primary_version"`
+	CreatedAt         string       `json:"created_at"`
+	PublicKey         string       `json:"public_key,omitempty"`
+	Address           string       `json:"address,omitempty"`
+	Tags              []*pluginTag `json:"tags"`
+	KeyState          string       `json:"key_state,omitempty"`
+	DeletionDate      string       `json:"deletion_date,omitempty"`
+	DeletionIndex     string       `json:"deletion_index,omitempty"`
+	DeletionStartedAt string       `json:"deletion_started_at,omitempty"`
+	metadataRevision  uint64
 }
 
 type pluginTag struct {
@@ -118,6 +123,12 @@ func newOpenBaoClient(cfg *kmsConfig) *openBaoClient {
 }
 
 func (m *keyMetadataRecord) normalize() {
+	if m.KeyState == "" {
+		m.KeyState = keyStateDisabled
+		if m.Enabled {
+			m.KeyState = keyStateEnabled
+		}
+	}
 	if m.Scheme == "" {
 		m.Scheme = schemeTransit
 	}
@@ -359,7 +370,8 @@ func (c *openBaoClient) putMetadata(ctx context.Context, clientID, keyID string,
 	})
 
 	return c.Post(metricCtx, c.metadataPath(clientID, keyID), map[string]any{
-		"data": metadata,
+		"data":    metadata,
+		"options": map[string]any{"cas": metadata.metadataRevision},
 	}, nil)
 }
 
@@ -369,19 +381,31 @@ func (c *openBaoClient) getMetadata(ctx context.Context, clientID, keyID string)
 		Algorithm: "none",
 	})
 
-	var resp struct {
-		Data struct {
-			Data keyMetadataRecord `json:"data"`
-		} `json:"data"`
-	}
-	if err := c.Get(metricCtx, c.metadataPath(clientID, keyID), &resp); err != nil {
+	record, err := c.getMetadataAt(metricCtx, c.metadataPath(clientID, keyID))
+	if err != nil {
 		return nil, err
 	}
-	record := &resp.Data.Data
-	record.normalize()
 	if record.ClientID != "" && record.ClientID != clientID {
 		return nil, fmt.Errorf("metadata owner does not match request owner")
 	}
+	return record, nil
+}
+
+func (c *openBaoClient) getMetadataAt(ctx context.Context, target string) (*keyMetadataRecord, error) {
+	var resp struct {
+		Data struct {
+			Data     keyMetadataRecord `json:"data"`
+			Metadata struct {
+				Version uint64 `json:"version"`
+			} `json:"metadata"`
+		} `json:"data"`
+	}
+	if err := c.Get(ctx, target, &resp); err != nil {
+		return nil, err
+	}
+	record := &resp.Data.Data
+	record.metadataRevision = resp.Data.Metadata.Version
+	record.normalize()
 	return record, nil
 }
 

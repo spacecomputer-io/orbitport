@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"google.golang.org/grpc"
@@ -149,6 +151,17 @@ func main() {
 			panic(err)
 		}
 		proto.RegisterKmsPluginServer(grpcServer, plugin)
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		plugin.Start(ctx)
+		defer plugin.Close()
+		go func() {
+			<-ctx.Done()
+			plugin.Close()
+			timer := time.AfterFunc(10*time.Second, grpcServer.Stop)
+			defer timer.Stop()
+			grpcServer.GracefulStop()
+		}()
 		logger.Info("KMS plugin ready")
 	case "account":
 		plugin, err := account.NewPlugin()

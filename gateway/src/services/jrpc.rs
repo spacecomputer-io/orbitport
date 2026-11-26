@@ -4,9 +4,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::proto::services::ctrng::CTrngRequest;
 use crate::proto::services::kms::{
-    CreateKeyRequest, DecapsulateRequest, DecryptRequest, EncapsulateRequest, EncryptRequest,
+    CancelKeyDeletionRequest, CreateKeyRequest, DecapsulateRequest, DecryptRequest,
+    DisableKeyRequest, EnableKeyRequest, EncapsulateRequest, EncryptRequest,
     GenerateDataKeyRequest, GetCapabilitiesRequest, GetKeyMetadataRequest, GetPublicKeyRequest,
-    RotateKeyRequest, SignRequest,
+    ListKeysRequest, RotateKeyRequest, ScheduleKeyDeletionRequest, SignRequest,
 };
 use crate::proto::services::threshold::DkgRequest;
 
@@ -85,13 +86,39 @@ impl<T> JsonRpcResponse<T> {
     }
 
     pub fn error(id: u64, code: i32, message: impl Into<String>) -> Self {
+        Self::error_with_data(id, code, message.into(), None)
+    }
+
+    pub fn execution_error(id: u64, status: &tonic::Status) -> Self {
+        let reason = match status.code() {
+            tonic::Code::NotFound => Some("not_found"),
+            tonic::Code::PermissionDenied => Some("permission_denied"),
+            tonic::Code::FailedPrecondition => Some("failed_precondition"),
+            tonic::Code::InvalidArgument => Some("invalid_argument"),
+            tonic::Code::Aborted => Some("aborted"),
+            _ => None,
+        };
+        Self::error_with_data(
+            id,
+            -32001,
+            status.to_string(),
+            reason.map(|reason| serde_json::json!({"reason": reason})),
+        )
+    }
+
+    fn error_with_data(
+        id: u64,
+        code: i32,
+        message: String,
+        data: Option<serde_json::Value>,
+    ) -> Self {
         Self {
             jsonrpc: "2.0",
             result: None,
             error: Some(JsonRpcError {
                 code,
-                message: message.into(),
-                data: None,
+                message,
+                data,
             }),
             id,
         }
@@ -111,6 +138,11 @@ pub enum RpcCall {
     Encrypt(EncryptRequest),
     GenerateDataKey(GenerateDataKeyRequest),
     RotateKey(RotateKeyRequest),
+    ListKeys(ListKeysRequest),
+    DisableKey(DisableKeyRequest),
+    EnableKey(EnableKeyRequest),
+    ScheduleKeyDeletion(ScheduleKeyDeletionRequest),
+    CancelKeyDeletion(CancelKeyDeletionRequest),
     KeyStorePut(KeyStorePutRequest),
     KeyStoreGet(KeyStoreGetRequest),
     KeyStoreList(KeyStoreListRequest),
@@ -140,6 +172,17 @@ impl RpcCall {
             "kms.Decrypt" => Ok(Self::Decrypt(Self::parse_params(method, params_json)?)),
             "kms.Encrypt" => Ok(Self::Encrypt(Self::parse_params(method, params_json)?)),
             "kms.GenerateDataKey" => Ok(Self::GenerateDataKey(Self::parse_params(
+                method,
+                params_json,
+            )?)),
+            "kms.ListKeys" => Ok(Self::ListKeys(Self::parse_params(method, params_json)?)),
+            "kms.DisableKey" => Ok(Self::DisableKey(Self::parse_params(method, params_json)?)),
+            "kms.EnableKey" => Ok(Self::EnableKey(Self::parse_params(method, params_json)?)),
+            "kms.ScheduleKeyDeletion" => Ok(Self::ScheduleKeyDeletion(Self::parse_params(
+                method,
+                params_json,
+            )?)),
+            "kms.CancelKeyDeletion" => Ok(Self::CancelKeyDeletion(Self::parse_params(
                 method,
                 params_json,
             )?)),
@@ -193,6 +236,11 @@ impl RpcCall {
             RpcCall::GetPublicKey(req) => KmsService::validate_get_public_key(req)?,
             RpcCall::GenerateDataKey(req) => KmsService::validate_generate_data_key(req)?,
             RpcCall::RotateKey(req) => KmsService::validate_rotate_key(req)?,
+            RpcCall::ListKeys(req) => KmsService::validate_list_keys(req)?,
+            RpcCall::DisableKey(req) => KmsService::validate_disable_key(req)?,
+            RpcCall::EnableKey(req) => KmsService::validate_enable_key(req)?,
+            RpcCall::ScheduleKeyDeletion(req) => KmsService::validate_schedule_key_deletion(req)?,
+            RpcCall::CancelKeyDeletion(req) => KmsService::validate_cancel_key_deletion(req)?,
             RpcCall::KeyStorePut(req) => KmsService::validate_key_store_put(req)?,
             RpcCall::KeyStoreGet(req) => KmsService::validate_key_store_get(req)?,
             RpcCall::KeyStoreList(req) => KmsService::validate_key_store_list(req)?,
@@ -217,6 +265,11 @@ impl RpcCall {
             RpcCall::Encrypt(_) => "kms.Encrypt".to_string(),
             RpcCall::GenerateDataKey(_) => "kms.GenerateDataKey".to_string(),
             RpcCall::RotateKey(_) => "kms.RotateKey".to_string(),
+            RpcCall::ListKeys(_) => "kms.ListKeys".to_string(),
+            RpcCall::DisableKey(_) => "kms.DisableKey".to_string(),
+            RpcCall::EnableKey(_) => "kms.EnableKey".to_string(),
+            RpcCall::ScheduleKeyDeletion(_) => "kms.ScheduleKeyDeletion".to_string(),
+            RpcCall::CancelKeyDeletion(_) => "kms.CancelKeyDeletion".to_string(),
             RpcCall::KeyStorePut(_) => "kms_keystore.Put".to_string(),
             RpcCall::KeyStoreGet(_) => "kms_keystore.Get".to_string(),
             RpcCall::KeyStoreList(_) => "kms_keystore.List".to_string(),
@@ -327,6 +380,45 @@ impl RpcCall {
                 )
                 .await
             }
+            RpcCall::ListKeys(req) => {
+                execute_kms(req_id, client_id, plugin_catalog, KmsRpcCall::ListKeys(req)).await
+            }
+            RpcCall::DisableKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::DisableKey(req),
+                )
+                .await
+            }
+            RpcCall::EnableKey(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::EnableKey(req),
+                )
+                .await
+            }
+            RpcCall::ScheduleKeyDeletion(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::ScheduleKeyDeletion(req),
+                )
+                .await
+            }
+            RpcCall::CancelKeyDeletion(req) => {
+                execute_kms(
+                    req_id,
+                    client_id,
+                    plugin_catalog,
+                    KmsRpcCall::CancelKeyDeletion(req),
+                )
+                .await
+            }
             RpcCall::KeyStorePut(req) => {
                 execute_kms(
                     req_id,
@@ -422,6 +514,31 @@ async fn execute_threshold(
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    fn execution_errors_preserve_legacy_fields_and_include_known_reasons() {
+        for (code, reason) in [
+            (tonic::Code::NotFound, Some("not_found")),
+            (tonic::Code::PermissionDenied, Some("permission_denied")),
+            (tonic::Code::FailedPrecondition, Some("failed_precondition")),
+            (tonic::Code::InvalidArgument, Some("invalid_argument")),
+            (tonic::Code::Aborted, Some("aborted")),
+            (tonic::Code::Internal, None),
+        ] {
+            let status = tonic::Status::new(code, "backend detail");
+            let reply =
+                serde_json::to_value(JsonRpcResponse::<()>::execution_error(7, &status)).unwrap();
+            assert_eq!(reply["jsonrpc"], "2.0");
+            assert_eq!(reply["id"], 7);
+            let error = &reply["error"];
+            assert_eq!(error["code"], -32001);
+            assert_eq!(error["message"], status.to_string());
+            match reason {
+                Some(reason) => assert_eq!(error["data"], serde_json::json!({"reason": reason})),
+                None => assert!(error.get("data").is_none()),
+            }
+        }
+    }
 
     fn request_from_value(raw: serde_json::Value) -> JsonRpcRequest {
         let raw_json = serde_json::to_string(&raw).unwrap();
@@ -556,13 +673,9 @@ mod test {
             .expect("missing ML_DSA signing capability");
         assert_eq!(signing["Tags"], serde_json::json!(["experimental"]));
 
-        let key_agreement = pqc["KeyAgreementCapabilities"]
-            .as_array()
-            .expect("KeyAgreementCapabilities should be an array")
-            .iter()
-            .find(|capability| capability["KeyAgreementAlgorithm"] == "ML_KEM")
-            .expect("missing ML_KEM key agreement capability");
-        assert_eq!(key_agreement["Tags"], serde_json::json!(["experimental"]));
+        assert_eq!(pqc["KeyAgreementCapabilities"], serde_json::json!([]));
+        assert_eq!(pqc["SupportsEncapsulate"], false);
+        assert_eq!(pqc["SupportsDecapsulate"], false);
     }
 
     #[test]
@@ -571,6 +684,8 @@ mod test {
             8,
             crate::proto::services::kms::GetKeyMetadataResponse {
                 key_metadata: Some(crate::proto::services::kms::KeyMetadata {
+                    key_state: Some("ENABLED".to_string()),
+                    deletion_date: None,
                     key_id: "kms:telemetry-signing".to_string(),
                     description: "telemetry signing".to_string(),
                     key_spec: "ECDSA_P256".to_string(),
@@ -833,6 +948,45 @@ mod test {
         let req: JsonRpcRequest = serde_json::from_value(raw).unwrap();
         req.call.validate().unwrap();
         req.call.operation()
+    }
+
+    #[test]
+    fn lifecycle_methods_use_public_shapes_validation_and_canonical_tags() {
+        for (method, params) in [
+            ("kms.ListKeys", serde_json::json!({})),
+            ("kms.DisableKey", serde_json::json!({"KeyId":"kms:a"})),
+            ("kms.EnableKey", serde_json::json!({"KeyId":"a"})),
+            (
+                "kms.ScheduleKeyDeletion",
+                serde_json::json!({"KeyId":"a","PendingWindowInDays":7}),
+            ),
+            ("kms.CancelKeyDeletion", serde_json::json!({"KeyId":"a"})),
+        ] {
+            let request = request_from_value(serde_json::json!({
+                "jsonrpc":"2.0","id":1,"method":method,"params":params
+            }));
+            assert!(request.call.validate().is_ok(), "{method}");
+            assert_eq!(request.call.operation(), method);
+        }
+        for (method, params) in [
+            ("kms.ListKeys", serde_json::json!({"Limit":0})),
+            ("kms.ListKeys", serde_json::json!({"Limit":1001})),
+            ("kms.ListKeys", serde_json::json!({"NextToken":""})),
+            ("kms.DisableKey", serde_json::json!({"KeyId":"../foreign"})),
+            (
+                "kms.ScheduleKeyDeletion",
+                serde_json::json!({"KeyId":"a","PendingWindowInDays":6}),
+            ),
+            (
+                "kms.ScheduleKeyDeletion",
+                serde_json::json!({"KeyId":"a","PendingWindowInDays":31}),
+            ),
+        ] {
+            let request = request_from_value(serde_json::json!({
+                "jsonrpc":"2.0","id":1,"method":method,"params":params
+            }));
+            assert!(request.call.validate().is_err(), "{method}");
+        }
     }
 
     #[test]

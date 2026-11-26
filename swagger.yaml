@@ -90,6 +90,10 @@ paths:
         authenticated `client_id`, validated names, and OpenBao path
         construction under the caller's tenant namespace; Cedar adds policy
         control on top of that isolation boundary.
+        The local stdio MCP executable calls this same endpoint using a PAT.
+        no hosted MCP route is added. Manual calls remain available with PATs.
+        Customer authentication accepts PATs only. Auth0 service tokens cannot
+        authenticate on this endpoint.
       security:
         - BearerAuth: []
       requestBody:
@@ -142,6 +146,32 @@ paths:
                       Name: github/prod
                       Secret:
                         api_key: replace-me
+        '403':
+          description: The account is inactive and cannot place a credit hold.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+                    enum: [account_inactive]
+              example:
+                error: account_inactive
+        '413':
+          description: The HTTP request body exceeds ORBITPORT_RPC_BODY_MAX_BYTES (64 KiB by default).
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+                    enum: [payload_too_large]
+              example:
+                error: payload_too_large
 components:
   securitySchemes:
     BearerAuth:
@@ -175,6 +205,13 @@ components:
             - kms.Decapsulate
             - kms.GenerateDataKey
             - kms.RotateKey
+            - kms.GetKeyMetadata
+            - kms.GetPublicKey
+            - kms.ListKeys
+            - kms.DisableKey
+            - kms.EnableKey
+            - kms.ScheduleKeyDeletion
+            - kms.CancelKeyDeletion
             - kms_keystore.Put
             - kms_keystore.Get
             - kms_keystore.List
@@ -214,6 +251,86 @@ components:
           type: string
         data:
           nullable: true
+          description: >-
+            Optional error details. For execution errors (-32001), reason may
+            be not_found, permission_denied, failed_precondition, invalid_argument, or aborted.
+          example:
+            reason: not_found
+    KmsListKeysParams:
+      type: object
+      description: Lists IDs across all engines in the authenticated tenant, with one OpenBao LIST per page and local sorting/pagination.
+      properties:
+        Limit:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 1000
+          description: Uses the server's configured default when omitted (100 unless changed). The server can enforce a maximum below the API ceiling of 1000.
+        NextToken:
+          type: string
+          nullable: true
+          minLength: 1
+          maxLength: 512
+          description: Opaque continuation cursor. does not select or change the tenant.
+    KmsListKeysResult:
+      type: object
+      required: [KeyIds, NextToken]
+      properties:
+        KeyIds:
+          type: array
+          items:
+            type: string
+          description: Sorted canonical key IDs, including disabled and pending-deletion keys.
+        NextToken:
+          type: string
+          nullable: true
+          description: Null at the end of the list. listing is not a snapshot across pages.
+    KmsLifecycleParams:
+      type: object
+      required: [KeyId]
+      description: Params for kms.DisableKey, kms.EnableKey and kms.CancelKeyDeletion. These lifecycle mutations support TRANSIT only.
+      properties:
+        KeyId:
+          type: string
+          description: Canonical kms:alias key ID or raw alias, scoped by authentication.
+    KmsScheduleKeyDeletionParams:
+      allOf:
+        - $ref: '#/components/schemas/KmsLifecycleParams'
+        - type: object
+          properties:
+            PendingWindowInDays:
+              type: integer
+              nullable: true
+              minimum: 7
+              maximum: 30
+              description: Uses the server's configured default when omitted (30 unless changed). Disables the key immediately. Permanent deletion becomes eligible after this window. it is processed by the background worker, not an OpenBao TTL.
+    KmsLifecycleResult:
+      type: object
+      properties:
+        KeyMetadata:
+          type: object
+          additionalProperties: true
+          properties:
+            Enabled:
+              type: boolean
+            KeyState:
+              type: string
+              nullable: true
+              enum: [ENABLED, DISABLED, PENDING_DELETION, null]
+            DeletionDate:
+              type: string
+              format: date-time
+              nullable: true
+          description: Existing metadata plus lifecycle fields. Cancellation returns DISABLED. enabled and pending metadata/public keys remain readable while material exists.
+    KmsScheduleKeyDeletionResult:
+      allOf:
+        - $ref: '#/components/schemas/KmsLifecycleResult'
+        - type: object
+          properties:
+            PendingWindowInDays:
+              type: integer
+              minimum: 7
+              maximum: 30
     KmsKeyStorePutParams:
       type: object
       required:

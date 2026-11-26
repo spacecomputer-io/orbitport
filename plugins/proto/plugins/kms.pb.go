@@ -92,6 +92,8 @@ type KeyMetadata struct {
 	PublicKey      *string                `protobuf:"bytes,10,opt,name=public_key,json=publicKey,proto3,oneof" json:"public_key,omitempty"`
 	Address        *string                `protobuf:"bytes,11,opt,name=address,proto3,oneof" json:"address,omitempty"`
 	Alias          string                 `protobuf:"bytes,12,opt,name=alias,proto3" json:"alias,omitempty"`
+	KeyState       *string                `protobuf:"bytes,13,opt,name=key_state,json=keyState,proto3,oneof" json:"key_state,omitempty"`
+	DeletionDate   *string                `protobuf:"bytes,14,opt,name=deletion_date,json=deletionDate,proto3,oneof" json:"deletion_date,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -206,6 +208,20 @@ func (x *KeyMetadata) GetAddress() string {
 func (x *KeyMetadata) GetAlias() string {
 	if x != nil {
 		return x.Alias
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetKeyState() string {
+	if x != nil && x.KeyState != nil {
+		return *x.KeyState
+	}
+	return ""
+}
+
+func (x *KeyMetadata) GetDeletionDate() string {
+	if x != nil && x.DeletionDate != nil {
+		return *x.DeletionDate
 	}
 	return ""
 }
@@ -1418,6 +1434,518 @@ func (x *RotateKeyResponse) GetKeyMetadata() *KeyMetadata {
 	return nil
 }
 
+type ListKeysRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Limit         *uint32                `protobuf:"varint,1,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	NextToken     *string                `protobuf:"bytes,2,opt,name=next_token,json=nextToken,proto3,oneof" json:"next_token,omitempty"`
+	ClientId      string                 `protobuf:"bytes,3,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListKeysRequest) Reset() {
+	*x = ListKeysRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListKeysRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListKeysRequest) ProtoMessage() {}
+
+func (x *ListKeysRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListKeysRequest.ProtoReflect.Descriptor instead.
+func (*ListKeysRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ListKeysRequest) GetLimit() uint32 {
+	if x != nil && x.Limit != nil {
+		return *x.Limit
+	}
+	return 0
+}
+
+func (x *ListKeysRequest) GetNextToken() string {
+	if x != nil && x.NextToken != nil {
+		return *x.NextToken
+	}
+	return ""
+}
+
+func (x *ListKeysRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type ListKeysResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyIds        []string               `protobuf:"bytes,1,rep,name=key_ids,json=keyIds,proto3" json:"key_ids,omitempty"`
+	NextToken     *string                `protobuf:"bytes,2,opt,name=next_token,json=nextToken,proto3,oneof" json:"next_token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListKeysResponse) Reset() {
+	*x = ListKeysResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListKeysResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListKeysResponse) ProtoMessage() {}
+
+func (x *ListKeysResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListKeysResponse.ProtoReflect.Descriptor instead.
+func (*ListKeysResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ListKeysResponse) GetKeyIds() []string {
+	if x != nil {
+		return x.KeyIds
+	}
+	return nil
+}
+
+func (x *ListKeysResponse) GetNextToken() string {
+	if x != nil && x.NextToken != nil {
+		return *x.NextToken
+	}
+	return ""
+}
+
+type DisableKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DisableKeyRequest) Reset() {
+	*x = DisableKeyRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DisableKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DisableKeyRequest) ProtoMessage() {}
+
+func (x *DisableKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DisableKeyRequest.ProtoReflect.Descriptor instead.
+func (*DisableKeyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *DisableKeyRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *DisableKeyRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type DisableKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DisableKeyResponse) Reset() {
+	*x = DisableKeyResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DisableKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DisableKeyResponse) ProtoMessage() {}
+
+func (x *DisableKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DisableKeyResponse.ProtoReflect.Descriptor instead.
+func (*DisableKeyResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *DisableKeyResponse) GetKeyMetadata() *KeyMetadata {
+	if x != nil {
+		return x.KeyMetadata
+	}
+	return nil
+}
+
+type EnableKeyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnableKeyRequest) Reset() {
+	*x = EnableKeyRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnableKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnableKeyRequest) ProtoMessage() {}
+
+func (x *EnableKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnableKeyRequest.ProtoReflect.Descriptor instead.
+func (*EnableKeyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *EnableKeyRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *EnableKeyRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type EnableKeyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnableKeyResponse) Reset() {
+	*x = EnableKeyResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnableKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnableKeyResponse) ProtoMessage() {}
+
+func (x *EnableKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnableKeyResponse.ProtoReflect.Descriptor instead.
+func (*EnableKeyResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *EnableKeyResponse) GetKeyMetadata() *KeyMetadata {
+	if x != nil {
+		return x.KeyMetadata
+	}
+	return nil
+}
+
+type ScheduleKeyDeletionRequest struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	KeyId               string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	PendingWindowInDays *uint32                `protobuf:"varint,2,opt,name=pending_window_in_days,json=pendingWindowInDays,proto3,oneof" json:"pending_window_in_days,omitempty"`
+	ClientId            string                 `protobuf:"bytes,3,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ScheduleKeyDeletionRequest) Reset() {
+	*x = ScheduleKeyDeletionRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScheduleKeyDeletionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScheduleKeyDeletionRequest) ProtoMessage() {}
+
+func (x *ScheduleKeyDeletionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScheduleKeyDeletionRequest.ProtoReflect.Descriptor instead.
+func (*ScheduleKeyDeletionRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *ScheduleKeyDeletionRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *ScheduleKeyDeletionRequest) GetPendingWindowInDays() uint32 {
+	if x != nil && x.PendingWindowInDays != nil {
+		return *x.PendingWindowInDays
+	}
+	return 0
+}
+
+func (x *ScheduleKeyDeletionRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type ScheduleKeyDeletionResponse struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	KeyMetadata         *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
+	PendingWindowInDays uint32                 `protobuf:"varint,2,opt,name=pending_window_in_days,json=pendingWindowInDays,proto3" json:"pending_window_in_days,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *ScheduleKeyDeletionResponse) Reset() {
+	*x = ScheduleKeyDeletionResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ScheduleKeyDeletionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ScheduleKeyDeletionResponse) ProtoMessage() {}
+
+func (x *ScheduleKeyDeletionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ScheduleKeyDeletionResponse.ProtoReflect.Descriptor instead.
+func (*ScheduleKeyDeletionResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *ScheduleKeyDeletionResponse) GetKeyMetadata() *KeyMetadata {
+	if x != nil {
+		return x.KeyMetadata
+	}
+	return nil
+}
+
+func (x *ScheduleKeyDeletionResponse) GetPendingWindowInDays() uint32 {
+	if x != nil {
+		return x.PendingWindowInDays
+	}
+	return 0
+}
+
+type CancelKeyDeletionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyId         string                 `protobuf:"bytes,1,opt,name=key_id,json=keyId,proto3" json:"key_id,omitempty"`
+	ClientId      string                 `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelKeyDeletionRequest) Reset() {
+	*x = CancelKeyDeletionRequest{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelKeyDeletionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelKeyDeletionRequest) ProtoMessage() {}
+
+func (x *CancelKeyDeletionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelKeyDeletionRequest.ProtoReflect.Descriptor instead.
+func (*CancelKeyDeletionRequest) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *CancelKeyDeletionRequest) GetKeyId() string {
+	if x != nil {
+		return x.KeyId
+	}
+	return ""
+}
+
+func (x *CancelKeyDeletionRequest) GetClientId() string {
+	if x != nil {
+		return x.ClientId
+	}
+	return ""
+}
+
+type CancelKeyDeletionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	KeyMetadata   *KeyMetadata           `protobuf:"bytes,1,opt,name=key_metadata,json=keyMetadata,proto3" json:"key_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelKeyDeletionResponse) Reset() {
+	*x = CancelKeyDeletionResponse{}
+	mi := &file_proto_plugins_kms_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelKeyDeletionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelKeyDeletionResponse) ProtoMessage() {}
+
+func (x *CancelKeyDeletionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_plugins_kms_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelKeyDeletionResponse.ProtoReflect.Descriptor instead.
+func (*CancelKeyDeletionResponse) Descriptor() ([]byte, []int) {
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *CancelKeyDeletionResponse) GetKeyMetadata() *KeyMetadata {
+	if x != nil {
+		return x.KeyMetadata
+	}
+	return nil
+}
+
 type KeyStorePutRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1429,7 +1957,7 @@ type KeyStorePutRequest struct {
 
 func (x *KeyStorePutRequest) Reset() {
 	*x = KeyStorePutRequest{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[22]
+	mi := &file_proto_plugins_kms_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1441,7 +1969,7 @@ func (x *KeyStorePutRequest) String() string {
 func (*KeyStorePutRequest) ProtoMessage() {}
 
 func (x *KeyStorePutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[22]
+	mi := &file_proto_plugins_kms_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1454,7 +1982,7 @@ func (x *KeyStorePutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStorePutRequest.ProtoReflect.Descriptor instead.
 func (*KeyStorePutRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{22}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *KeyStorePutRequest) GetName() string {
@@ -1488,7 +2016,7 @@ type KeyStorePutResponse struct {
 
 func (x *KeyStorePutResponse) Reset() {
 	*x = KeyStorePutResponse{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[23]
+	mi := &file_proto_plugins_kms_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1500,7 +2028,7 @@ func (x *KeyStorePutResponse) String() string {
 func (*KeyStorePutResponse) ProtoMessage() {}
 
 func (x *KeyStorePutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[23]
+	mi := &file_proto_plugins_kms_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1513,7 +2041,7 @@ func (x *KeyStorePutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStorePutResponse.ProtoReflect.Descriptor instead.
 func (*KeyStorePutResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{23}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *KeyStorePutResponse) GetName() string {
@@ -1540,7 +2068,7 @@ type KeyStoreGetRequest struct {
 
 func (x *KeyStoreGetRequest) Reset() {
 	*x = KeyStoreGetRequest{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[24]
+	mi := &file_proto_plugins_kms_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1552,7 +2080,7 @@ func (x *KeyStoreGetRequest) String() string {
 func (*KeyStoreGetRequest) ProtoMessage() {}
 
 func (x *KeyStoreGetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[24]
+	mi := &file_proto_plugins_kms_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1565,7 +2093,7 @@ func (x *KeyStoreGetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStoreGetRequest.ProtoReflect.Descriptor instead.
 func (*KeyStoreGetRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{24}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *KeyStoreGetRequest) GetName() string {
@@ -1592,7 +2120,7 @@ type KeyStoreGetResponse struct {
 
 func (x *KeyStoreGetResponse) Reset() {
 	*x = KeyStoreGetResponse{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[25]
+	mi := &file_proto_plugins_kms_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1604,7 +2132,7 @@ func (x *KeyStoreGetResponse) String() string {
 func (*KeyStoreGetResponse) ProtoMessage() {}
 
 func (x *KeyStoreGetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[25]
+	mi := &file_proto_plugins_kms_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1617,7 +2145,7 @@ func (x *KeyStoreGetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStoreGetResponse.ProtoReflect.Descriptor instead.
 func (*KeyStoreGetResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{25}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *KeyStoreGetResponse) GetName() string {
@@ -1644,7 +2172,7 @@ type KeyStoreListRequest struct {
 
 func (x *KeyStoreListRequest) Reset() {
 	*x = KeyStoreListRequest{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[26]
+	mi := &file_proto_plugins_kms_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1656,7 +2184,7 @@ func (x *KeyStoreListRequest) String() string {
 func (*KeyStoreListRequest) ProtoMessage() {}
 
 func (x *KeyStoreListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[26]
+	mi := &file_proto_plugins_kms_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1669,7 +2197,7 @@ func (x *KeyStoreListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStoreListRequest.ProtoReflect.Descriptor instead.
 func (*KeyStoreListRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{26}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *KeyStoreListRequest) GetClientId() string {
@@ -1695,7 +2223,7 @@ type KeyStoreListResponse struct {
 
 func (x *KeyStoreListResponse) Reset() {
 	*x = KeyStoreListResponse{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[27]
+	mi := &file_proto_plugins_kms_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1707,7 +2235,7 @@ func (x *KeyStoreListResponse) String() string {
 func (*KeyStoreListResponse) ProtoMessage() {}
 
 func (x *KeyStoreListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[27]
+	mi := &file_proto_plugins_kms_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1720,7 +2248,7 @@ func (x *KeyStoreListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStoreListResponse.ProtoReflect.Descriptor instead.
 func (*KeyStoreListResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{27}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *KeyStoreListResponse) GetNames() []string {
@@ -1740,7 +2268,7 @@ type KeyStoreDeleteRequest struct {
 
 func (x *KeyStoreDeleteRequest) Reset() {
 	*x = KeyStoreDeleteRequest{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[28]
+	mi := &file_proto_plugins_kms_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1752,7 +2280,7 @@ func (x *KeyStoreDeleteRequest) String() string {
 func (*KeyStoreDeleteRequest) ProtoMessage() {}
 
 func (x *KeyStoreDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[28]
+	mi := &file_proto_plugins_kms_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1765,7 +2293,7 @@ func (x *KeyStoreDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStoreDeleteRequest.ProtoReflect.Descriptor instead.
 func (*KeyStoreDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{28}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *KeyStoreDeleteRequest) GetName() string {
@@ -1791,7 +2319,7 @@ type KeyStoreDeleteResponse struct {
 
 func (x *KeyStoreDeleteResponse) Reset() {
 	*x = KeyStoreDeleteResponse{}
-	mi := &file_proto_plugins_kms_proto_msgTypes[29]
+	mi := &file_proto_plugins_kms_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1803,7 +2331,7 @@ func (x *KeyStoreDeleteResponse) String() string {
 func (*KeyStoreDeleteResponse) ProtoMessage() {}
 
 func (x *KeyStoreDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_plugins_kms_proto_msgTypes[29]
+	mi := &file_proto_plugins_kms_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1816,7 +2344,7 @@ func (x *KeyStoreDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyStoreDeleteResponse.ProtoReflect.Descriptor instead.
 func (*KeyStoreDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{29}
+	return file_proto_plugins_kms_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *KeyStoreDeleteResponse) GetName() string {
@@ -1833,7 +2361,7 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x17proto/plugins/kms.proto\x12\x06kmsapi\";\n" +
 	"\x03Tag\x12\x17\n" +
 	"\atag_key\x18\x01 \x01(\tR\x06tagKey\x12\x1b\n" +
-	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\x93\x03\n" +
+	"\ttag_value\x18\x02 \x01(\tR\btagValue\"\xff\x03\n" +
 	"\vKeyMetadata\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x19\n" +
@@ -1848,10 +2376,15 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"public_key\x18\n" +
 	" \x01(\tH\x00R\tpublicKey\x88\x01\x01\x12\x1d\n" +
 	"\aaddress\x18\v \x01(\tH\x01R\aaddress\x88\x01\x01\x12\x14\n" +
-	"\x05alias\x18\f \x01(\tR\x05aliasB\r\n" +
+	"\x05alias\x18\f \x01(\tR\x05alias\x12 \n" +
+	"\tkey_state\x18\r \x01(\tH\x02R\bkeyState\x88\x01\x01\x12(\n" +
+	"\rdeletion_date\x18\x0e \x01(\tH\x03R\fdeletionDate\x88\x01\x01B\r\n" +
 	"\v_public_keyB\n" +
 	"\n" +
-	"\b_address\"\xb3\x01\n" +
+	"\b_addressB\f\n" +
+	"\n" +
+	"_key_stateB\x10\n" +
+	"\x0e_deletion_date\"\xb3\x01\n" +
 	"\x0eEncryptRequest\x12\x15\n" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1c\n" +
 	"\tplaintext\x18\x02 \x01(\tR\tplaintext\x126\n" +
@@ -1949,6 +2482,41 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"K\n" +
 	"\x11RotateKeyResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\x86\x01\n" +
+	"\x0fListKeysRequest\x12\x19\n" +
+	"\x05limit\x18\x01 \x01(\rH\x00R\x05limit\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"next_token\x18\x02 \x01(\tH\x01R\tnextToken\x88\x01\x01\x12\x1b\n" +
+	"\tclient_id\x18\x03 \x01(\tR\bclientIdB\b\n" +
+	"\x06_limitB\r\n" +
+	"\v_next_token\"^\n" +
+	"\x10ListKeysResponse\x12\x17\n" +
+	"\akey_ids\x18\x01 \x03(\tR\x06keyIds\x12\"\n" +
+	"\n" +
+	"next_token\x18\x02 \x01(\tH\x00R\tnextToken\x88\x01\x01B\r\n" +
+	"\v_next_token\"G\n" +
+	"\x11DisableKeyRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"L\n" +
+	"\x12DisableKeyResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"F\n" +
+	"\x10EnableKeyRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"K\n" +
+	"\x11EnableKeyResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"\xa5\x01\n" +
+	"\x1aScheduleKeyDeletionRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x128\n" +
+	"\x16pending_window_in_days\x18\x02 \x01(\rH\x00R\x13pendingWindowInDays\x88\x01\x01\x12\x1b\n" +
+	"\tclient_id\x18\x03 \x01(\tR\bclientIdB\x19\n" +
+	"\x17_pending_window_in_days\"\x8a\x01\n" +
+	"\x1bScheduleKeyDeletionResponse\x126\n" +
+	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\x123\n" +
+	"\x16pending_window_in_days\x18\x02 \x01(\rR\x13pendingWindowInDays\"N\n" +
+	"\x18CancelKeyDeletionRequest\x12\x15\n" +
+	"\x06key_id\x18\x01 \x01(\tR\x05keyId\x12\x1b\n" +
+	"\tclient_id\x18\x02 \x01(\tR\bclientId\"S\n" +
+	"\x19CancelKeyDeletionResponse\x126\n" +
 	"\fkey_metadata\x18\x01 \x01(\v2\x13.kmsapi.KeyMetadataR\vkeyMetadata\"f\n" +
 	"\x12KeyStorePutRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
@@ -1975,7 +2543,8 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"2\n" +
 	"\x16KeyStoreDeleteResponse\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04nameJ\x04\b\x02\x10\x032\xe6\a\n" +
+	"\x04name\x18\x01 \x01(\tR\x04nameJ\x04\b\x02\x10\x032\xe6\n" +
+	"\n" +
 	"\tKmsPlugin\x12:\n" +
 	"\aEncrypt\x12\x16.kmsapi.EncryptRequest\x1a\x17.kmsapi.EncryptResponse\x12:\n" +
 	"\aDecrypt\x12\x16.kmsapi.DecryptRequest\x1a\x17.kmsapi.DecryptResponse\x121\n" +
@@ -1986,7 +2555,13 @@ const file_proto_plugins_kms_proto_rawDesc = "" +
 	"\x0eGetKeyMetadata\x12\x1d.kmsapi.GetKeyMetadataRequest\x1a\x1e.kmsapi.GetKeyMetadataResponse\x12I\n" +
 	"\fGetPublicKey\x12\x1b.kmsapi.GetPublicKeyRequest\x1a\x1c.kmsapi.GetPublicKeyResponse\x12R\n" +
 	"\x0fGenerateDataKey\x12\x1e.kmsapi.GenerateDataKeyRequest\x1a\x1f.kmsapi.GenerateDataKeyResponse\x12@\n" +
-	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponse\x12F\n" +
+	"\tRotateKey\x12\x18.kmsapi.RotateKeyRequest\x1a\x19.kmsapi.RotateKeyResponse\x12=\n" +
+	"\bListKeys\x12\x17.kmsapi.ListKeysRequest\x1a\x18.kmsapi.ListKeysResponse\x12C\n" +
+	"\n" +
+	"DisableKey\x12\x19.kmsapi.DisableKeyRequest\x1a\x1a.kmsapi.DisableKeyResponse\x12@\n" +
+	"\tEnableKey\x12\x18.kmsapi.EnableKeyRequest\x1a\x19.kmsapi.EnableKeyResponse\x12^\n" +
+	"\x13ScheduleKeyDeletion\x12\".kmsapi.ScheduleKeyDeletionRequest\x1a#.kmsapi.ScheduleKeyDeletionResponse\x12X\n" +
+	"\x11CancelKeyDeletion\x12 .kmsapi.CancelKeyDeletionRequest\x1a!.kmsapi.CancelKeyDeletionResponse\x12F\n" +
 	"\vKeyStorePut\x12\x1a.kmsapi.KeyStorePutRequest\x1a\x1b.kmsapi.KeyStorePutResponse\x12F\n" +
 	"\vKeyStoreGet\x12\x1a.kmsapi.KeyStoreGetRequest\x1a\x1b.kmsapi.KeyStoreGetResponse\x12I\n" +
 	"\fKeyStoreList\x12\x1b.kmsapi.KeyStoreListRequest\x1a\x1c.kmsapi.KeyStoreListResponse\x12O\n" +
@@ -2004,38 +2579,48 @@ func file_proto_plugins_kms_proto_rawDescGZIP() []byte {
 	return file_proto_plugins_kms_proto_rawDescData
 }
 
-var file_proto_plugins_kms_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_proto_plugins_kms_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
 var file_proto_plugins_kms_proto_goTypes = []any{
-	(*Tag)(nil),                     // 0: kmsapi.Tag
-	(*KeyMetadata)(nil),             // 1: kmsapi.KeyMetadata
-	(*EncryptRequest)(nil),          // 2: kmsapi.EncryptRequest
-	(*EncryptResponse)(nil),         // 3: kmsapi.EncryptResponse
-	(*DecryptRequest)(nil),          // 4: kmsapi.DecryptRequest
-	(*DecryptResponse)(nil),         // 5: kmsapi.DecryptResponse
-	(*SignRequest)(nil),             // 6: kmsapi.SignRequest
-	(*SignResponse)(nil),            // 7: kmsapi.SignResponse
-	(*EncapsulateRequest)(nil),      // 8: kmsapi.EncapsulateRequest
-	(*EncapsulateResponse)(nil),     // 9: kmsapi.EncapsulateResponse
-	(*DecapsulateRequest)(nil),      // 10: kmsapi.DecapsulateRequest
-	(*DecapsulateResponse)(nil),     // 11: kmsapi.DecapsulateResponse
-	(*CreateKeyRequest)(nil),        // 12: kmsapi.CreateKeyRequest
-	(*CreateKeyResponse)(nil),       // 13: kmsapi.CreateKeyResponse
-	(*GetKeyMetadataRequest)(nil),   // 14: kmsapi.GetKeyMetadataRequest
-	(*GetKeyMetadataResponse)(nil),  // 15: kmsapi.GetKeyMetadataResponse
-	(*GetPublicKeyRequest)(nil),     // 16: kmsapi.GetPublicKeyRequest
-	(*GetPublicKeyResponse)(nil),    // 17: kmsapi.GetPublicKeyResponse
-	(*GenerateDataKeyRequest)(nil),  // 18: kmsapi.GenerateDataKeyRequest
-	(*GenerateDataKeyResponse)(nil), // 19: kmsapi.GenerateDataKeyResponse
-	(*RotateKeyRequest)(nil),        // 20: kmsapi.RotateKeyRequest
-	(*RotateKeyResponse)(nil),       // 21: kmsapi.RotateKeyResponse
-	(*KeyStorePutRequest)(nil),      // 22: kmsapi.KeyStorePutRequest
-	(*KeyStorePutResponse)(nil),     // 23: kmsapi.KeyStorePutResponse
-	(*KeyStoreGetRequest)(nil),      // 24: kmsapi.KeyStoreGetRequest
-	(*KeyStoreGetResponse)(nil),     // 25: kmsapi.KeyStoreGetResponse
-	(*KeyStoreListRequest)(nil),     // 26: kmsapi.KeyStoreListRequest
-	(*KeyStoreListResponse)(nil),    // 27: kmsapi.KeyStoreListResponse
-	(*KeyStoreDeleteRequest)(nil),   // 28: kmsapi.KeyStoreDeleteRequest
-	(*KeyStoreDeleteResponse)(nil),  // 29: kmsapi.KeyStoreDeleteResponse
+	(*Tag)(nil),                         // 0: kmsapi.Tag
+	(*KeyMetadata)(nil),                 // 1: kmsapi.KeyMetadata
+	(*EncryptRequest)(nil),              // 2: kmsapi.EncryptRequest
+	(*EncryptResponse)(nil),             // 3: kmsapi.EncryptResponse
+	(*DecryptRequest)(nil),              // 4: kmsapi.DecryptRequest
+	(*DecryptResponse)(nil),             // 5: kmsapi.DecryptResponse
+	(*SignRequest)(nil),                 // 6: kmsapi.SignRequest
+	(*SignResponse)(nil),                // 7: kmsapi.SignResponse
+	(*EncapsulateRequest)(nil),          // 8: kmsapi.EncapsulateRequest
+	(*EncapsulateResponse)(nil),         // 9: kmsapi.EncapsulateResponse
+	(*DecapsulateRequest)(nil),          // 10: kmsapi.DecapsulateRequest
+	(*DecapsulateResponse)(nil),         // 11: kmsapi.DecapsulateResponse
+	(*CreateKeyRequest)(nil),            // 12: kmsapi.CreateKeyRequest
+	(*CreateKeyResponse)(nil),           // 13: kmsapi.CreateKeyResponse
+	(*GetKeyMetadataRequest)(nil),       // 14: kmsapi.GetKeyMetadataRequest
+	(*GetKeyMetadataResponse)(nil),      // 15: kmsapi.GetKeyMetadataResponse
+	(*GetPublicKeyRequest)(nil),         // 16: kmsapi.GetPublicKeyRequest
+	(*GetPublicKeyResponse)(nil),        // 17: kmsapi.GetPublicKeyResponse
+	(*GenerateDataKeyRequest)(nil),      // 18: kmsapi.GenerateDataKeyRequest
+	(*GenerateDataKeyResponse)(nil),     // 19: kmsapi.GenerateDataKeyResponse
+	(*RotateKeyRequest)(nil),            // 20: kmsapi.RotateKeyRequest
+	(*RotateKeyResponse)(nil),           // 21: kmsapi.RotateKeyResponse
+	(*ListKeysRequest)(nil),             // 22: kmsapi.ListKeysRequest
+	(*ListKeysResponse)(nil),            // 23: kmsapi.ListKeysResponse
+	(*DisableKeyRequest)(nil),           // 24: kmsapi.DisableKeyRequest
+	(*DisableKeyResponse)(nil),          // 25: kmsapi.DisableKeyResponse
+	(*EnableKeyRequest)(nil),            // 26: kmsapi.EnableKeyRequest
+	(*EnableKeyResponse)(nil),           // 27: kmsapi.EnableKeyResponse
+	(*ScheduleKeyDeletionRequest)(nil),  // 28: kmsapi.ScheduleKeyDeletionRequest
+	(*ScheduleKeyDeletionResponse)(nil), // 29: kmsapi.ScheduleKeyDeletionResponse
+	(*CancelKeyDeletionRequest)(nil),    // 30: kmsapi.CancelKeyDeletionRequest
+	(*CancelKeyDeletionResponse)(nil),   // 31: kmsapi.CancelKeyDeletionResponse
+	(*KeyStorePutRequest)(nil),          // 32: kmsapi.KeyStorePutRequest
+	(*KeyStorePutResponse)(nil),         // 33: kmsapi.KeyStorePutResponse
+	(*KeyStoreGetRequest)(nil),          // 34: kmsapi.KeyStoreGetRequest
+	(*KeyStoreGetResponse)(nil),         // 35: kmsapi.KeyStoreGetResponse
+	(*KeyStoreListRequest)(nil),         // 36: kmsapi.KeyStoreListRequest
+	(*KeyStoreListResponse)(nil),        // 37: kmsapi.KeyStoreListResponse
+	(*KeyStoreDeleteRequest)(nil),       // 38: kmsapi.KeyStoreDeleteRequest
+	(*KeyStoreDeleteResponse)(nil),      // 39: kmsapi.KeyStoreDeleteResponse
 }
 var file_proto_plugins_kms_proto_depIdxs = []int32{
 	0,  // 0: kmsapi.KeyMetadata.tags:type_name -> kmsapi.Tag
@@ -2043,39 +2628,53 @@ var file_proto_plugins_kms_proto_depIdxs = []int32{
 	1,  // 2: kmsapi.CreateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
 	1,  // 3: kmsapi.GetKeyMetadataResponse.key_metadata:type_name -> kmsapi.KeyMetadata
 	1,  // 4: kmsapi.RotateKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
-	2,  // 5: kmsapi.KmsPlugin.Encrypt:input_type -> kmsapi.EncryptRequest
-	4,  // 6: kmsapi.KmsPlugin.Decrypt:input_type -> kmsapi.DecryptRequest
-	6,  // 7: kmsapi.KmsPlugin.Sign:input_type -> kmsapi.SignRequest
-	8,  // 8: kmsapi.KmsPlugin.Encapsulate:input_type -> kmsapi.EncapsulateRequest
-	10, // 9: kmsapi.KmsPlugin.Decapsulate:input_type -> kmsapi.DecapsulateRequest
-	12, // 10: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
-	14, // 11: kmsapi.KmsPlugin.GetKeyMetadata:input_type -> kmsapi.GetKeyMetadataRequest
-	16, // 12: kmsapi.KmsPlugin.GetPublicKey:input_type -> kmsapi.GetPublicKeyRequest
-	18, // 13: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
-	20, // 14: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
-	22, // 15: kmsapi.KmsPlugin.KeyStorePut:input_type -> kmsapi.KeyStorePutRequest
-	24, // 16: kmsapi.KmsPlugin.KeyStoreGet:input_type -> kmsapi.KeyStoreGetRequest
-	26, // 17: kmsapi.KmsPlugin.KeyStoreList:input_type -> kmsapi.KeyStoreListRequest
-	28, // 18: kmsapi.KmsPlugin.KeyStoreDelete:input_type -> kmsapi.KeyStoreDeleteRequest
-	3,  // 19: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
-	5,  // 20: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
-	7,  // 21: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
-	9,  // 22: kmsapi.KmsPlugin.Encapsulate:output_type -> kmsapi.EncapsulateResponse
-	11, // 23: kmsapi.KmsPlugin.Decapsulate:output_type -> kmsapi.DecapsulateResponse
-	13, // 24: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
-	15, // 25: kmsapi.KmsPlugin.GetKeyMetadata:output_type -> kmsapi.GetKeyMetadataResponse
-	17, // 26: kmsapi.KmsPlugin.GetPublicKey:output_type -> kmsapi.GetPublicKeyResponse
-	19, // 27: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
-	21, // 28: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
-	23, // 29: kmsapi.KmsPlugin.KeyStorePut:output_type -> kmsapi.KeyStorePutResponse
-	25, // 30: kmsapi.KmsPlugin.KeyStoreGet:output_type -> kmsapi.KeyStoreGetResponse
-	27, // 31: kmsapi.KmsPlugin.KeyStoreList:output_type -> kmsapi.KeyStoreListResponse
-	29, // 32: kmsapi.KmsPlugin.KeyStoreDelete:output_type -> kmsapi.KeyStoreDeleteResponse
-	19, // [19:33] is the sub-list for method output_type
-	5,  // [5:19] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	1,  // 5: kmsapi.DisableKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	1,  // 6: kmsapi.EnableKeyResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	1,  // 7: kmsapi.ScheduleKeyDeletionResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	1,  // 8: kmsapi.CancelKeyDeletionResponse.key_metadata:type_name -> kmsapi.KeyMetadata
+	2,  // 9: kmsapi.KmsPlugin.Encrypt:input_type -> kmsapi.EncryptRequest
+	4,  // 10: kmsapi.KmsPlugin.Decrypt:input_type -> kmsapi.DecryptRequest
+	6,  // 11: kmsapi.KmsPlugin.Sign:input_type -> kmsapi.SignRequest
+	8,  // 12: kmsapi.KmsPlugin.Encapsulate:input_type -> kmsapi.EncapsulateRequest
+	10, // 13: kmsapi.KmsPlugin.Decapsulate:input_type -> kmsapi.DecapsulateRequest
+	12, // 14: kmsapi.KmsPlugin.CreateKey:input_type -> kmsapi.CreateKeyRequest
+	14, // 15: kmsapi.KmsPlugin.GetKeyMetadata:input_type -> kmsapi.GetKeyMetadataRequest
+	16, // 16: kmsapi.KmsPlugin.GetPublicKey:input_type -> kmsapi.GetPublicKeyRequest
+	18, // 17: kmsapi.KmsPlugin.GenerateDataKey:input_type -> kmsapi.GenerateDataKeyRequest
+	20, // 18: kmsapi.KmsPlugin.RotateKey:input_type -> kmsapi.RotateKeyRequest
+	22, // 19: kmsapi.KmsPlugin.ListKeys:input_type -> kmsapi.ListKeysRequest
+	24, // 20: kmsapi.KmsPlugin.DisableKey:input_type -> kmsapi.DisableKeyRequest
+	26, // 21: kmsapi.KmsPlugin.EnableKey:input_type -> kmsapi.EnableKeyRequest
+	28, // 22: kmsapi.KmsPlugin.ScheduleKeyDeletion:input_type -> kmsapi.ScheduleKeyDeletionRequest
+	30, // 23: kmsapi.KmsPlugin.CancelKeyDeletion:input_type -> kmsapi.CancelKeyDeletionRequest
+	32, // 24: kmsapi.KmsPlugin.KeyStorePut:input_type -> kmsapi.KeyStorePutRequest
+	34, // 25: kmsapi.KmsPlugin.KeyStoreGet:input_type -> kmsapi.KeyStoreGetRequest
+	36, // 26: kmsapi.KmsPlugin.KeyStoreList:input_type -> kmsapi.KeyStoreListRequest
+	38, // 27: kmsapi.KmsPlugin.KeyStoreDelete:input_type -> kmsapi.KeyStoreDeleteRequest
+	3,  // 28: kmsapi.KmsPlugin.Encrypt:output_type -> kmsapi.EncryptResponse
+	5,  // 29: kmsapi.KmsPlugin.Decrypt:output_type -> kmsapi.DecryptResponse
+	7,  // 30: kmsapi.KmsPlugin.Sign:output_type -> kmsapi.SignResponse
+	9,  // 31: kmsapi.KmsPlugin.Encapsulate:output_type -> kmsapi.EncapsulateResponse
+	11, // 32: kmsapi.KmsPlugin.Decapsulate:output_type -> kmsapi.DecapsulateResponse
+	13, // 33: kmsapi.KmsPlugin.CreateKey:output_type -> kmsapi.CreateKeyResponse
+	15, // 34: kmsapi.KmsPlugin.GetKeyMetadata:output_type -> kmsapi.GetKeyMetadataResponse
+	17, // 35: kmsapi.KmsPlugin.GetPublicKey:output_type -> kmsapi.GetPublicKeyResponse
+	19, // 36: kmsapi.KmsPlugin.GenerateDataKey:output_type -> kmsapi.GenerateDataKeyResponse
+	21, // 37: kmsapi.KmsPlugin.RotateKey:output_type -> kmsapi.RotateKeyResponse
+	23, // 38: kmsapi.KmsPlugin.ListKeys:output_type -> kmsapi.ListKeysResponse
+	25, // 39: kmsapi.KmsPlugin.DisableKey:output_type -> kmsapi.DisableKeyResponse
+	27, // 40: kmsapi.KmsPlugin.EnableKey:output_type -> kmsapi.EnableKeyResponse
+	29, // 41: kmsapi.KmsPlugin.ScheduleKeyDeletion:output_type -> kmsapi.ScheduleKeyDeletionResponse
+	31, // 42: kmsapi.KmsPlugin.CancelKeyDeletion:output_type -> kmsapi.CancelKeyDeletionResponse
+	33, // 43: kmsapi.KmsPlugin.KeyStorePut:output_type -> kmsapi.KeyStorePutResponse
+	35, // 44: kmsapi.KmsPlugin.KeyStoreGet:output_type -> kmsapi.KeyStoreGetResponse
+	37, // 45: kmsapi.KmsPlugin.KeyStoreList:output_type -> kmsapi.KeyStoreListResponse
+	39, // 46: kmsapi.KmsPlugin.KeyStoreDelete:output_type -> kmsapi.KeyStoreDeleteResponse
+	28, // [28:47] is the sub-list for method output_type
+	9,  // [9:28] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_proto_plugins_kms_proto_init() }
@@ -2090,14 +2689,17 @@ func file_proto_plugins_kms_proto_init() {
 	file_proto_plugins_kms_proto_msgTypes[12].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[16].OneofWrappers = []any{}
 	file_proto_plugins_kms_proto_msgTypes[18].OneofWrappers = []any{}
-	file_proto_plugins_kms_proto_msgTypes[26].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[22].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[23].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[28].OneofWrappers = []any{}
+	file_proto_plugins_kms_proto_msgTypes[36].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_plugins_kms_proto_rawDesc), len(file_proto_plugins_kms_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   30,
+			NumMessages:   40,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

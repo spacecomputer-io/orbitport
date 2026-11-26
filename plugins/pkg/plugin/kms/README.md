@@ -7,6 +7,9 @@ agent-oriented key-store to clients without leaking the underlying engine.
 
 ## Overview
 
+See [Key Lifecycle and Listing](LIFECYCLE.md) for tenant-wide ListKeys and
+Transit-only enable/disable and scheduled-deletion operations.
+
 Implements `KmsPlugin` (`proto/plugins/kms.proto`) with crypto RPCs and
 key-store RPCs:
 
@@ -100,6 +103,11 @@ Wraps a custom OpenBao Ethereum Secrets Engine mounted at
 Wraps the OpenBao PQC Secrets Engine mounted at `ORBITPORT_KMS_PQC_MOUNT`
 (default `pqc`).
 
+ML-KEM is temporarily disabled in the public gateway API: creating
+`ML_KEM_768` or `ML_KEM_1024` keys and calling `Encapsulate` or `Decapsulate`
+returns an error. ML-DSA remains available. The internal KMS plugin and
+OpenBao retain ML-KEM support, described below.
+
 - Key specs: `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87`.
 - Key agreement specs: `ML_KEM_768`, `ML_KEM_1024`.
 - Signing algorithm: `ML_DSA`.
@@ -124,7 +132,7 @@ keys. Tenant isolation is enforced in two places:
   `key_id` against the requesting tenant's metadata, so a leaked ciphertext
   cannot be decrypted by a different client.
 
-Aliases are user-chosen, validated to `[A-Za-z0-9._-]{1,128}`, and may not
+Aliases are user-chosen, validated to `[A-Za-z0-9.-]{1,128}`, and may not
 start with the reserved `kms:` prefix. The canonical external identifier is
 always `kms:<alias>`; both forms resolve to the same backend key.
 
@@ -186,6 +194,17 @@ namespace. Operators can copy the default policy and add Cedar `forbid`
 policies, which override permits, to block operations such as deleting
 production entries.
 
+## Local MCP Access
+
+The local `kms-mcp` executable exposes existing KMS methods as agent tools
+over stdio and calls the gateway's `/api/v1/rpc` endpoint using a PAT. It does
+not connect directly to this plugin. Manual API calls remain available using
+PATs, with tenant isolation and Cedar enforcement unchanged. Legacy Auth0
+customer credentials are rejected. Secret-returning tools
+and key-store Delete require user opt-in; key-store Put remains available by
+default and is annotated destructive because it can overwrite an entry.
+See [installation and configuration](../../../../mcp/README.md).
+
 ## Capabilities
 
 `GetCapabilities` (gateway-side) advertises the supported scheme matrix:
@@ -194,11 +213,12 @@ production entries.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `TRANSIT` | `AES_256_GCM96`, `ECDSA_P256`, `ECDSA_P384`, `ED25519`, `RSA_4096` | ECDSA SHA-256/384, Ed25519, RSASSA PKCS1v15 / PSS SHA-256 (`RAW`, `DIGEST`) | no | yes | `AES_128`, `AES_256` | yes | none |
 | `ETHEREUM` | `ECC_SECG_P256K1` | `ETHEREUM_SECP256K1` (`RAW`, `DIGEST`, `EIP191`) | no | no | no | no | none |
-| `PQC` | `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87`, `ML_KEM_768`, `ML_KEM_1024` | `ML_DSA` (`RAW`) | `ML_KEM` | no | no | no | `experimental` |
+| `PQC` | `ML_DSA_44`, `ML_DSA_65`, `ML_DSA_87` | `ML_DSA` (`RAW`) | no | no | no | no | `experimental` |
 
 Clients should call this once at startup to discover what they can ask for. PQC
-scheme, signing, and key agreement capability entries are tagged
-`experimental` in the response.
+scheme and signing capability entries are tagged `experimental` in the
+response. ML-KEM key specs and key agreement capabilities are not advertised;
+`SupportsEncapsulate` and `SupportsDecapsulate` are both `false`.
 
 ## Dependencies
 

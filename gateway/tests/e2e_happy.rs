@@ -4,8 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod common;
 
 use gateway::proto::services::kms::{
-    CreateKeyResponse, DecryptResponse, EncryptResponse, GenerateDataKeyResponse,
-    RotateKeyResponse, SignResponse,
+    CancelKeyDeletionResponse, CreateKeyResponse, DecryptResponse, DisableKeyResponse,
+    EnableKeyResponse, EncryptResponse, GenerateDataKeyResponse, KeyMetadata, ListKeysResponse,
+    RotateKeyResponse, ScheduleKeyDeletionResponse, SignResponse,
 };
 
 fn unique_alias(prefix: &str) -> String {
@@ -14,6 +15,37 @@ fn unique_alias(prefix: &str) -> String {
         .expect("the system clock is earlier than UNIX_EPOCH")
         .as_nanos();
     format!("{prefix}-{now}")
+}
+
+fn rpc(req_id: u64, method: &str, params: serde_json::Value) -> serde_json::Value {
+    serde_json::json!({"jsonrpc": "2.0", "id": req_id, "method": method, "params": params})
+}
+
+fn require_metadata(
+    method: &str,
+    metadata: Option<KeyMetadata>,
+) -> Result<KeyMetadata, common::E2EError> {
+    metadata.ok_or_else(|| {
+        common::E2EError::AssertionFailed(format!("{method} did not return KeyMetadata"))
+    })
+}
+
+// expects an execution error (-32001) with the given reason
+async fn assert_rpc_refused(
+    base_url: &str,
+    access_token: &str,
+    req_id: u64,
+    payload: serde_json::Value,
+    reason: &str,
+) -> Result<(), common::E2EError> {
+    let error = common::rpc_error_result(base_url, access_token, req_id, payload).await?;
+    assert_eq!(error.get("code").and_then(|v| v.as_i64()), Some(-32001));
+    assert_eq!(
+        error.pointer("/data/reason").and_then(|v| v.as_str()),
+        Some(reason),
+        "unexpected error: {error}"
+    );
+    Ok(())
 }
 
 /// Test e2e happy path.
@@ -451,6 +483,167 @@ async fn test_e2e_happy_kms_transit_create_encrypt_decrypt_generate_data_key_and
         tracing::info!(
             "KMS Transit CreateKey + Encrypt + Decrypt + GenerateDataKey + RotateKey completed successfully"
         );
+        Ok::<(), common::E2EError>(())
+    }
+    .await;
+
+    #[cfg(feature = "localtest")]
+    if let Err(e) = common::post_test(started).await {
+        tracing::error!("Failed to clean up test environment: {:?}", e);
+    }
+
+    if let Err(e) = result {
+        panic!("Test failed: {:?}", e);
+    }
+
+    tracing::info!("Test completed successfully");
+}
+
+#[tokio::test]
+async fn test_e2e_happy_kms_transit_key_lifecycle() {
+    _ = tracing_subscriber::fmt::try_init();
+
+    let access_token = env::var("OPTEST_TOKEN").unwrap_or("test_access_token".to_string());
+    let base_url = env::var("OPTEST_URL").unwrap_or("http://localhost:8080".to_string());
+
+    tracing::info!("Starting e2e KMS Transit lifecycle test with base_url: {base_url}");
+
+    #[cfg(feature = "localtest")]
+    let started = common::pre_test("happy").await.unwrap();
+
+    let result = async {
+        let (url, token) = (base_url.as_str(), access_token.as_str());
+        let alias = unique_alias("e2e-lifecycle");
+        let key = serde_json::json!({"KeyId": &alias});
+        let encrypt = serde_json::json!({
+            "KeyId": &alias,
+            "Plaintext": "SGVsbG8gT3JiaXRwb3J0",
+            "EncryptionAlgorithm": "AES_256_GCM96"
+        });
+
+        let created: CreateKeyResponse = common::rpc_success_result(
+            url,
+            token,
+            91,
+            rpc(
+                91,
+                "kms.CreateKey",
+                serde_json::json!({
+                    "Description": "gateway e2e lifecycle key",
+                    "Scheme": "TRANSIT",
+                    "KeySpec": "AES_256_GCM96",
+                    "KeyUsage": "ENCRYPT_DECRYPT",
+                    "Alias": &alias,
+                    "Tags": []
+                }),
+            ),
+        )
+        .await?;
+        let created = require_metadata("kms.CreateKey", created.key_metadata)?;
+        assert_eq!(created.key_state.as_deref(), Some("ENABLED"));
+        assert!(created.deletion_date.is_none());
+
+        // disable blocks crypto, enable restores it
+        let disabled: DisableKeyResponse =
+            common::rpc_success_result(url, token, 92, rpc(92, "kms.DisableKey", key.clone()))
+                .await?;
+        let disabled = require_metadata("kms.DisableKey", disabled.key_metadata)?;
+        assert!(!disabled.enabled);
+        assert_eq!(disabled.key_state.as_deref(), Some("DISABLED"));
+        assert_rpc_refused(
+            url,
+            token,
+            93,
+            rpc(93, "kms.Encrypt", encrypt.clone()),
+            "failed_precondition",
+        )
+        .await?;
+
+        let enabled: EnableKeyResponse =
+            common::rpc_success_result(url, token, 94, rpc(94, "kms.EnableKey", key.clone()))
+                .await?;
+        let enabled = require_metadata("kms.EnableKey", enabled.key_metadata)?;
+        assert!(enabled.enabled);
+        assert_eq!(enabled.key_state.as_deref(), Some("ENABLED"));
+        let _: EncryptResponse =
+            common::rpc_success_result(url, token, 95, rpc(95, "kms.Encrypt", encrypt.clone()))
+                .await?;
+
+        // schedule disables the key and blocks enable until cancelled
+        let scheduled: ScheduleKeyDeletionResponse = common::rpc_success_result(
+            url,
+            token,
+            96,
+            rpc(
+                96,
+                "kms.ScheduleKeyDeletion",
+                serde_json::json!({"KeyId": &alias, "PendingWindowInDays": 7}),
+            ),
+        )
+        .await?;
+        assert_eq!(scheduled.pending_window_in_days, 7);
+        let pending = require_metadata("kms.ScheduleKeyDeletion", scheduled.key_metadata)?;
+        assert!(!pending.enabled);
+        assert_eq!(pending.key_state.as_deref(), Some("PENDING_DELETION"));
+        assert!(pending.deletion_date.is_some());
+        assert_rpc_refused(
+            url,
+            token,
+            97,
+            rpc(97, "kms.Encrypt", encrypt.clone()),
+            "failed_precondition",
+        )
+        .await?;
+        assert_rpc_refused(
+            url,
+            token,
+            98,
+            rpc(98, "kms.EnableKey", key.clone()),
+            "failed_precondition",
+        )
+        .await?;
+
+        let cancelled: CancelKeyDeletionResponse = common::rpc_success_result(
+            url,
+            token,
+            99,
+            rpc(99, "kms.CancelKeyDeletion", key.clone()),
+        )
+        .await?;
+        let cancelled = require_metadata("kms.CancelKeyDeletion", cancelled.key_metadata)?;
+        assert!(!cancelled.enabled);
+        assert_eq!(cancelled.key_state.as_deref(), Some("DISABLED"));
+        assert!(cancelled.deletion_date.is_none());
+
+        // the key shows up in the tenant listing
+        let mut next_token: Option<String> = None;
+        let mut found = false;
+        for page in 0..100u64 {
+            let req_id = 100 + page;
+            let mut params = serde_json::json!({"Limit": 1000});
+            if let Some(cursor) = &next_token {
+                params["NextToken"] = serde_json::json!(cursor);
+            }
+            let listed: ListKeysResponse =
+                common::rpc_success_result(url, token, req_id, rpc(req_id, "kms.ListKeys", params))
+                    .await?;
+            found |= listed.key_ids.contains(&created.key_id);
+            next_token = listed.next_token;
+            if found || next_token.is_none() {
+                break;
+            }
+        }
+        assert!(found, "ListKeys did not return {}", created.key_id);
+
+        let restored: EnableKeyResponse =
+            common::rpc_success_result(url, token, 200, rpc(200, "kms.EnableKey", key.clone()))
+                .await?;
+        let restored = require_metadata("kms.EnableKey", restored.key_metadata)?;
+        assert_eq!(restored.key_state.as_deref(), Some("ENABLED"));
+        let _: EncryptResponse =
+            common::rpc_success_result(url, token, 201, rpc(201, "kms.Encrypt", encrypt)).await?;
+
+        tracing::info!("KMS Transit lifecycle round trip completed successfully");
         Ok::<(), common::E2EError>(())
     }
     .await;
